@@ -1,0 +1,839 @@
+basePath: /
+definitions:
+  e.Error:
+    properties:
+      code:
+        type: integer
+      data:
+        type: object
+      msg:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Gin swagger 示例项目
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: Gin swagger
+  version: "1.0"
+paths:
+  /api/v1/basic/decorationType:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 装修类型
+      tags:
+      - 基础数据
+  /api/v1/basic/furnitureType:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 房屋设施
+      tags:
+      - 基础数据
+  /api/v1/basic/houseState:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 房源状态
+      tags:
+      - 基础数据
+  /api/v1/basic/houseType:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 房源类型
+      tags:
+      - 基础数据
+  /api/v1/basic/orientationType:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 朝向
+      tags:
+      - 基础数据
+  /api/v1/basic/rentInclude:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 租金包含
+      tags:
+      - 基础数据
+  /api/v1/basic/rentPayType:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 付款方式
+      tags:
+      - 基础数据
+  /api/v1/basic/rentState:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 出租状态
+      tags:
+      - 基础数据
+  /api/v1/basic/rentType:
+    get:
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 出租类型
+      tags:
+      - 基础数据
+  /api/v1/home/info:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 当前用户
+      tags:
+      - 登录注册
+  /api/v1/home/login:
+    post:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: json参数
+        in: body
+        name: para
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 获取token
+      tags:
+      - 登录注册
+  /api/v1/home/logout:
+    post:
+      consumes:
+      - application/x-json-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 退出
+      tags:
+      - 登录注册
+  /api/v1/home/register:
+    post:
+      parameters:
+      - description: 如：{'nickname':'jack','username':'aj@qq.com','accountType':1,'password':'1','rePassword';'1'}
+        in: body
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 用户注册
+      tags:
+      - 登录注册
+  /api/v1/house/del/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 删除
+      tags:
+      - 房源
+  /api/v1/house/info/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 业务id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 单条数据
+      tags:
+      - 房源
+  /api/v1/house/page:
+    get:
+      parameters:
+      - example: 市
+        in: query
+        name: city
+        type: string
+      - example: 县
+        in: query
+        name: county
+        type: string
+      - example: 1
+        in: query
+        name: current
+        type: integer
+      - example: 名称
+        in: query
+        name: name
+        type: string
+      - in: query
+        name: orderAsc
+        type: string
+      - in: query
+        name: orderDesc
+        type: string
+      - description: Ccid uint64 `json:"ccid" form:"ccid" desc:"记录总数" example:"100"`
+        example: 省
+        in: query
+        name: province
+        type: string
+      - example: 10
+        in: query
+        name: size
+        type: integer
+      - example: 100
+        in: query
+        name: total
+        type: integer
+      - example: 镇
+        in: query
+        name: town
+        type: string
+      - example: false
+        in: query
+        name: unPage
+        type: boolean
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 分页列表
+      tags:
+      - 房源
+  /api/v1/house/save:
+    post:
+      parameters:
+      - description: 如：{'name':'jii','id':8}
+        in: body
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 保存
+      tags:
+      - 房源
+  /api/v1/menu/del/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 用户id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 删除
+      tags:
+      - 菜单
+  /api/v1/menu/listPerms:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 获取菜单及用户权限
+      tags:
+      - 菜单
+  /api/v1/menu/one/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 用户id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 单条数据
+      tags:
+      - 菜单
+  /api/v1/menu/page:
+    get:
+      parameters:
+      - example: 1
+        in: query
+        name: current
+        type: integer
+      - example: 名称
+        in: query
+        name: name
+        type: string
+      - in: query
+        name: orderAsc
+        type: string
+      - in: query
+        name: orderDesc
+        type: string
+      - example: 10
+        in: query
+        name: size
+        type: integer
+      - example: 100
+        in: query
+        name: total
+        type: integer
+      - example:
+        - 0
+        in: query
+        items:
+          type: integer
+        name: type
+        type: array
+      - example: false
+        in: query
+        name: unPage
+        type: boolean
+      - example: 0
+        in: query
+        name: userId
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 分页列表
+      tags:
+      - 菜单
+  /api/v1/menu/save:
+    post:
+      parameters:
+      - description: 如：{'name':'jii','id':8}
+        in: body
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 保存
+      tags:
+      - 菜单
+  /api/v1/role/del/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 删除
+      tags:
+      - 角色
+  /api/v1/role/one/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 用户id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 单条数据
+      tags:
+      - 角色
+  /api/v1/role/page:
+    get:
+      parameters:
+      - example: 市
+        in: query
+        name: city
+        type: string
+      - example: 县
+        in: query
+        name: county
+        type: string
+      - example: 1
+        in: query
+        name: current
+        type: integer
+      - example: 名称
+        in: query
+        name: name
+        type: string
+      - in: query
+        name: orderAsc
+        type: string
+      - in: query
+        name: orderDesc
+        type: string
+      - description: Ccid uint64 `json:"ccid" form:"ccid" desc:"记录总数" example:"100"`
+        example: 省
+        in: query
+        name: province
+        type: string
+      - example: 10
+        in: query
+        name: size
+        type: integer
+      - example: 100
+        in: query
+        name: total
+        type: integer
+      - example: 镇
+        in: query
+        name: town
+        type: string
+      - example: false
+        in: query
+        name: unPage
+        type: boolean
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 分页列表
+      tags:
+      - 角色
+  /api/v1/role/save:
+    post:
+      parameters:
+      - description: 如：{'name':'jii','id':8}
+        in: body
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 保存
+      tags:
+      - 角色
+  /api/v1/user/del/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 用户id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 删除
+      tags:
+      - 货品
+  /api/v1/user/info/{id}:
+    get:
+      consumes:
+      - application/x-json-stream
+      parameters:
+      - description: 用户id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 测试token
+        in: query
+        name: Authorization
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 单条数据
+      tags:
+      - 用户
+  /api/v1/user/page:
+    get:
+      parameters:
+      - example: 市
+        in: query
+        name: city
+        type: string
+      - example: 县
+        in: query
+        name: county
+        type: string
+      - example: 1
+        in: query
+        name: current
+        type: integer
+      - in: query
+        name: orderAsc
+        type: string
+      - in: query
+        name: orderDesc
+        type: string
+      - description: Ccid uint64 `json:"ccid" form:"ccid" desc:"记录总数" example:"100"`
+        example: 省
+        in: query
+        name: province
+        type: string
+      - example: 10
+        in: query
+        name: size
+        type: integer
+      - example: 100
+        in: query
+        name: total
+        type: integer
+      - example: 镇
+        in: query
+        name: town
+        type: string
+      - example: false
+        in: query
+        name: unPage
+        type: boolean
+      - example: 用户名
+        in: query
+        name: username
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 分页列表
+      tags:
+      - 用户
+  /api/v1/user/save:
+    post:
+      parameters:
+      - description: 如：{'name':'jii','id':8}
+        in: body
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/e.Error'
+      security:
+      - ApiKeyAuth: []
+      summary: 保存
+      tags:
+      - 用户
+securityDefinitions:
+  ApiKeyAuth:
+    in: headerl
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

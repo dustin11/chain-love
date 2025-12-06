@@ -1,0 +1,36 @@
+app:
+  pagesize: 10
+  jwtsecret: 233
+  prefixurl: http://127.0.0.1:8000
+  runtimerootpath: runtime/
+  imageSavePath: /usr/local/appdata/spider/
+  # MB
+  imageMaxSize: 20024000
+  imageExts: [.jpg,.jpeg,.png]
+  exportSavePath: export/
+  qrCodeSavePath: qrcode/
+  fontSavePath: fonts/
+  logSavePath: runtime/logs/
+  logSaveName: log
+  logFileExt: log
+  timeFormat: 20060102
+server:
+  runmode: debug
+  port: 9010
+  readtimeout: 60
+  writetimeout: 60
+database:
+  type: mysql
+  user: root
+  password: 123456
+  host: ${s90}:3306
+  name: spider
+redis:
+  host: ${s90}:6379
+  password:
+  maxIdle: 30
+  maxActive: 30
+  idleTimeout: 200
+
+#s90: 172.16.2.245
+s90: localhost

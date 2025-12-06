@@ -1,0 +1,17 @@
+{
+    // Use goimports to format and organize imports on save
+    "go.formatTool": "goimports",
+    "editor.formatOnSave": true,
+    "editor.codeLens": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    // If you prefer gofumpt (stricter formatting), change the tool to "gofumpt"
+    // "go.formatTool": "gofumpt",
+    // Optional: configure gopls formatting preferences
+    "gopls": {
+        "formatting": {
+            "gofumpt": true
+        }
+    }
+}

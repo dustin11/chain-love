@@ -1,0 +1,70 @@
+package test
+
+import (
+	"bytes"
+	"chain-love/asset"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func bindataRead(data []byte, name string) ([]byte, error) {
+	gz, err := gzip.NewReader(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("Read %q: %v", name, err)
+	}
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, gz)
+	clErr := gz.Close()
+
+	if err != nil {
+		return nil, fmt.Errorf("Read %q: %v", name, err)
+	}
+	if clErr != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+var _sourceLangZhToml = []byte("\x1f\x8b\x08\x00\x00\x09\x6e\x88\x00\xff\x52\x56\xc8\x4b\x2c\xcb\x4c\x4f\x2c\xc9\xcc\xcf\xe3\xe5\x8a\xce\x4b\x2c\x8b\xe5\xe5\xca\xc8\xcf\x4d\x55\xb0\x55\x50\x7a\x36\xad\xfd\xf9\xea\x05\x4a\xbc\x5c\x89\x45\xc9\x19\x99\x65\x60\xb1\xa7\x7b\x27\x3d\x5b\xb8\x18\x24\x96\x94\x5f\x5a\x02\x16\x69\xdd\xfc\x64\x57\x9f\x12\x2f\x57\x71\x7e\x69\x51\x32\x58\xd1\x93\xdd\x8b\x9f\x2f\x68\x54\xe2\xe5\xe2\xe5\x52\x56\x80\x28\x2c\xc8\x2f\x2e\xe1\xe5\x8a\x06\x51\xb1\xbc\x5c\x39\x99\xc5\x60\xbd\xcf\x3a\x1b\x9e\xcd\xe9\xc4\x6b\x4f\x49\x62\x3a\x58\xe5\x82\xf6\xe7\x6b\xf7\x29\xf1\x72\x15\xa5\x26\xa6\xe4\xe6\x17\x81\x15\x3d\xdf\xbd\xfc\xf9\xee\xb5\x2f\x67\xb4\xbe\x58\xbf\x1b\xd5\xb6\xc4\xf4\xcc\x3c\x98\xa7\x0a\x12\xd3\x53\x8b\x62\x79\xb9\x0a\x8a\x52\xcb\xc0\x46\xcd\xde\xf2\x6c\xda\x86\xe7\xb3\x5a\x94\x78\xb9\xf2\x52\x2b\x4a\x20\x2e\x5e\xfa\xb4\xb3\x17\x24\x06\x08\x00\x00\xff\xff\x5d\xe6\xe1\xda\x12\x01\x00\x00")
+
+func sourceLangZhTomlBytes() ([]byte, error) {
+	return bindataRead(
+		_sourceLangZhToml,
+		"source/lang/zh.toml",
+	)
+}
+
+func TestByteLen(t *testing.T) {
+	bytes, _ := sourceLangZhTomlBytes()
+	i := len(bytes)
+	assert.Equal(t, i, 274)
+}
+
+func TestAssertInfo(t *testing.T) {
+	asset.AssetInfo("conf/dev.yml")
+	assert.Equal(t, 0, 0)
+}
+
+func TestRestore(t *testing.T) {
+	//go-bindata -o=asset/asset.go -pkg=asset conf/... docs/... statics/...
+	dirs := []string{"conf", "docs", "statics"} // 设置需要释放的目录
+	isSuccess := true
+	for _, dir := range dirs {
+		// 解压dir目录到当前目录
+		if err := asset.RestoreAssets("./", dir); err != nil {
+			isSuccess = false
+			break
+		}
+	}
+	if !isSuccess {
+		//for _, dir := range dirs {
+		//	os.RemoveAll(filepath.Join("./", dir))
+		//}
+	}
+}

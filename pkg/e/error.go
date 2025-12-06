@@ -1,0 +1,86 @@
+package e
+
+import (
+	"chain-love/pkg/logging"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+type Error struct {
+	StatusCode int         `json:"-"`
+	Code       int         `json:"code"`
+	Msg        string      `json:"msg"`
+	Data       interface{} `json:"data" `
+	//异常抛出位置，为排除通用抛出方法栈，直接定位到业务抛出点 通用异常处理时需要设置 如：error.go 非通用为空
+	Locate string `json:"-"`
+}
+
+var (
+	Success     = NewError(http.StatusOK, 0, "success")
+	ServerError = NewError(http.StatusInternalServerError, 200500, "系统异常，请稍后重试!")
+	NotFound    = NewError(http.StatusNotFound, 200404, http.StatusText(http.StatusNotFound))
+	AccessLimit = NewError(http.StatusUnauthorized, 200401, "please login first")
+)
+
+func ParameterError(message string) *Error {
+	return NewError(http.StatusBadRequest, 200400, message)
+}
+
+func OtherError(message string) *Error {
+	return NewError(http.StatusForbidden, 100403, message)
+}
+
+func otherErrorLocate(message, locate string) *Error {
+	return &Error{http.StatusForbidden, 100403, message, nil, locate}
+}
+
+func SuccessData(data interface{}) *Error {
+	return &Error{StatusCode: http.StatusOK, Code: 0, Data: data}
+}
+
+func (e *Error) Error() string {
+	return e.Msg
+}
+
+func NewError(statusCode, Code int, msg string) *Error {
+	return &Error{
+		StatusCode: statusCode,
+		Code:       Code,
+		Msg:        msg,
+	}
+}
+
+// 404处理
+func HandleNotFound(c *gin.Context) {
+	err := NotFound
+	c.JSON(err.StatusCode, err)
+	return
+}
+
+func PanicIfErr(err error) {
+	if err != nil {
+		e := otherErrorLocate(err.Error(), logging.PROC_ERROR)
+		panic(e)
+	}
+}
+
+func PanicIfErrThenMsg(err error, msg string) {
+	if err != nil {
+		logging.Error(err.Error())
+		e := otherErrorLocate(msg, logging.PROC_ERROR)
+		panic(e)
+	}
+}
+
+func PanicIf(b bool, msg string) {
+	if b {
+		e := otherErrorLocate(msg, logging.PROC_ERROR)
+		panic(e)
+	}
+}
+
+func PanicMsg(msg string) {
+	e := otherErrorLocate(msg, logging.PROC_ERROR)
+	panic(e)
+}
