@@ -3,6 +3,6 @@ package page
 import "chain-love/pkg/app"
 
 type UserPage struct {
-	Username string `json:"username" form:"username" example:"用户名"`
+	Nickname string `json:"nickname" form:"nickname" example:"昵称"`
 	app.AreaPagination
 }

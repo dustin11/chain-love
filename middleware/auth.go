@@ -6,17 +6,21 @@ import (
 	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/util"
 	"context"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Auth() gin.HandlerFunc {
-	passed := []string{"/api/v1/home/register", "/api/v1/home/login", "/api/v1/home/logout", "/api/v1/basic/houseType"}
+	passed := []string{"/api/v1/home/register", "/api/v1/home/login",
+		"/api/v1/home/logout", "/api/v1/user/addr/"}
 
 	return func(ctx *gin.Context) {
-		if ok, _ := util.Contain(ctx.Request.URL.Path, passed); ok {
-			ctx.Next()
-			return
+		for _, p := range passed {
+			if ctx.Request.URL.Path == p || strings.HasPrefix(ctx.Request.URL.Path, p+"/") || strings.HasPrefix(ctx.Request.URL.Path, p) {
+				ctx.Next()
+				return
+			}
 		}
 		if ChkCookie(ctx) {
 			ctx.Next()

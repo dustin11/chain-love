@@ -12,14 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary 分页列表
-// @Tags 用户
-// @version 1.0
-// @Param page query page.UserPage true "角色"
-// @Success 200 object e.Error
-// @Failure 500 {object} e.Error
-// @Security ApiKeyAuth
-// @Router /api/v1/user/page [get]
+// @Summary	分页列表
+// @Tags		用户
+// @version	1.0
+// @Param		page	query		page.UserPage	true	"角色"
+// @Success	200		object		e.Error
+// @Failure	500		{object}	e.Error
+// @Security	ApiKeyAuth
+// @Router		/api/v1/user/page [get]
 func UserGetPage(ctx *gin.Context) {
 	var page page2.UserPage
 	var entity sys.User
@@ -29,16 +29,16 @@ func UserGetPage(ctx *gin.Context) {
 	app.Response(ctx, e.SuccessData(page))
 }
 
-// @Summary 单条数据
-// @Tags 用户
-// @version 1.0
-// @Accept application/x-json-stream
-// @Param id path int true "用户id"
-// @Param Authorization query string false "测试token"
-// @Success 200 object e.Error
-// @Failure 500 {object} e.Error
-// @Router /api/v1/user/info/{id} [get]
-func UserGetInfo(ctx *gin.Context) {
+// @Summary	单条数据
+// @Tags		用户
+// @version	1.0
+// @Accept		application/x-json-stream
+// @Param		id				path		int		true	"用户id"
+// @Param		Authorization	query		string	false	"测试token"
+// @Success	200				object		e.Error
+// @Failure	500				{object}	e.Error
+// @Router		/api/v1/user/info/{id} [get]
+func UserGetById(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	e.PanicIfErr(err)
 	m := sys.User{Id: id}.QueryById()
@@ -47,14 +47,30 @@ func UserGetInfo(ctx *gin.Context) {
 	app.Response(ctx, e.SuccessData(m))
 }
 
-// @Summary 保存
-// @Tags 用户
-// @version 1.0
-// @Param name body string true "如：{'name':'jii','id':8}"
-// @Success 200 object e.Error
-// @Failure 500 {object} e.Error
-// @Security ApiKeyAuth
-// @Router /api/v1/user/save [post]
+// @Summary	单条数据
+// @Tags		用户
+// @version	1.0
+// @Accept		application/x-json-stream
+// @Param		addr			path		string	true	"用户addr"
+// @Param		Authorization	query		string	false	"测试token"
+// @Success	200				object		e.Error
+// @Failure	500				{object}	e.Error
+// @Router		/api/v1/user/addr/{addr} [get]
+func UserGetByAddr(ctx *gin.Context) {
+	addr := ctx.Param("addr")
+	e.PanicIf(addr == "", "addr不能为空！")
+	m := sys.User{Addr: addr}.GetByAddr()
+	app.Response(ctx, e.SuccessData(m))
+}
+
+// @Summary	保存
+// @Tags		用户
+// @version	1.0
+// @Param		name	body		string	true	"如：{'name':'jii','id':8}"
+// @Success	200		object		e.Error
+// @Failure	500		{object}	e.Error
+// @Security	ApiKeyAuth
+// @Router		/api/v1/user/save [post]
 func UserSave(ctx *context.AppContext) {
 	var model sys.User
 	err := ctx.Gin.ShouldBind(&model)
@@ -64,15 +80,15 @@ func UserSave(ctx *context.AppContext) {
 	ctx.Response(e.SuccessData(model))
 }
 
-// @Summary 删除
-// @Tags 货品
-// @version 1.0
-// @Accept application/x-json-stream
-// @Param id path int true "用户id"
-// @Param Authorization query string false "测试token"
-// @Success 200 object e.Error
-// @Failure 500 {object} e.Error
-// @Router /api/v1/user/del/{id} [get]
+// @Summary	删除
+// @Tags		货品
+// @version	1.0
+// @Accept		application/x-json-stream
+// @Param		id				path		int		true	"用户id"
+// @Param		Authorization	query		string	false	"测试token"
+// @Success	200				object		e.Error
+// @Failure	500				{object}	e.Error
+// @Router		/api/v1/user/del/{id} [get]
 func UserDel(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
 	e.PanicIfErr(err)

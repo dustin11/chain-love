@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func Logger() gin.HandlerFunc {

@@ -7,7 +7,7 @@ import (
 )
 
 type Role struct {
-	Id     uint64 `gorm:"primary_key;AUTO_INCREMENT" json:"id" form:"id"`
+	Id     uint64 `gorm:"primaryKey;autoIncrement" json:"id" form:"id"`
 	Name   string `json:"name" form:"name" example:"名称"`
 	Remark string `json:"remark" form:"remark" example:"注备"`
 	domain.Model

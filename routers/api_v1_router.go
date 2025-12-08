@@ -22,24 +22,10 @@ func SetupApiV1Router(router *gin.Engine) {
 	userRouter := apiRouter.Group("/user")
 	{
 		userRouter.GET("/page", sys_api.UserGetPage)
-		userRouter.GET("/info/:id", sys_api.UserGetInfo)
+		userRouter.GET("/info/:id", sys_api.UserGetById)
+		userRouter.GET("/addr/:addr", sys_api.UserGetByAddr)
 		userRouter.POST("/save", context.WithAppContext(sys_api.UserSave))
 		userRouter.POST("/del/:id", sys_api.UserDel)
-	}
-	menuRouter := apiRouter.Group("/menu")
-	{
-		menuRouter.GET("/one/:id", sys_api.GetMenuInfo)
-		menuRouter.GET("/page", context.WithAppContext(sys_api.GetPage))
-		menuRouter.GET("/listPerms", context.WithAppContext(sys_api.GetListWithPerms))
-		menuRouter.POST("/save", sys_api.SaveMenu)
-		menuRouter.POST("/del/:id", sys_api.DeleteMenu)
-	}
-	roleRouter := apiRouter.Group("/role")
-	{
-		roleRouter.GET("/info/:id", sys_api.GetRoleInfo)
-		roleRouter.GET("/page", sys_api.GetRolePage)
-		roleRouter.POST("/save", context.WithAppContext(sys_api.SaveRole))
-		roleRouter.POST("/del/:id", sys_api.DeleteRole)
 	}
 
 	//基础数据
@@ -48,19 +34,6 @@ func SetupApiV1Router(router *gin.Engine) {
 		basicRouter.GET("/decorationType", ds_api.GetDecorationType)
 		basicRouter.GET("/furnitureType", ds_api.GetFurnitureType)
 		basicRouter.GET("/houseType", ds_api.GetHouseType)
-		basicRouter.GET("/orientationType", ds_api.GetOrientationType)
-		basicRouter.GET("/rentInclude", ds_api.GetRentInclude)
-		basicRouter.GET("/rentPayType", ds_api.GetRentPayType)
-		basicRouter.GET("/rentState", ds_api.GetRentState)
-		basicRouter.GET("/rentType", ds_api.GetRentType)
-	}
-	//房源
-	houseRouter := apiRouter.Group("/house")
-	{
-		houseRouter.GET("/info/:id", ds_api.GetHouseInfo)
-		houseRouter.GET("/page", ds_api.GetHousePage)
-		houseRouter.POST("/save", context.WithAppContext(ds_api.SaveHouse))
-		houseRouter.POST("/del/:id", ds_api.DeleteHouse)
 	}
 
 }

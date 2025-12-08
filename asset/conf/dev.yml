@@ -1,4 +1,5 @@
 app:
+  name: chainlove
   pagesize: 10
   jwtsecret: 233
   prefixurl: http://127.0.0.1:8000
@@ -24,7 +25,7 @@ database:
   user: root
   password: 123456
   host: ${s90}:3306
-  name: spider
+  name: chainlove
 redis:
   host: ${s90}:6379
   password:

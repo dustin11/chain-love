@@ -23,8 +23,8 @@ type Pagination struct {
 	UnPage    bool        `json:"unPage" form:"unPage" desc:"不分页" example:"false"`
 	OrderAsc  string      `json:"orderAsc" form:"orderAsc" desc:"升序" example:""`
 	OrderDesc string      `json:"orderDesc" form:"orderDesc" desc:"降序" example:""`
-	Records   interface{} `json:"records" `
-	Model     interface{} `json:"-" `
+	Records   interface{} `json:"records" swaggertype:"string"`
+	Model     interface{} `json:"-" swaggertype:"string"`
 }
 
 func (page *Pagination) SetModel(model interface{}) *Pagination {

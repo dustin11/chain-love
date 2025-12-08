@@ -33,16 +33,16 @@ func init() {
 	util.Setup()
 }
 
-// @title Gin swagger
-// @version 1.0
-// @description Gin swagger 示例项目
-// @securityDefinitions.apikey ApiKeyAuth
-// @in headerl
-// @name Authorization
-// @BasePath /
+//	@title						Gin swagger
+//	@version					1.0
+//	@description				Gin swagger 示例项目
+//	@securityDefinitions.apikey	ApiKeyAuth
+//	@in							headerl
+//	@name						Authorization
+//	@BasePath					/
 
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+// @license.name	Apache 2.0
+// @license.url	http://www.apache.org/licenses/LICENSE-2.0.html
 func main() {
 	router := routers.SetupRouter()
 	_ = router.Run(":" + setting.Config.Server.Port)

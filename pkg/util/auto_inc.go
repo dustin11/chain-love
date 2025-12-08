@@ -1,8 +1,9 @@
 package util
 
 import (
-	"github.com/bwmarrin/snowflake"
 	"os"
+
+	"github.com/bwmarrin/snowflake"
 )
 
 type AutoInc struct {

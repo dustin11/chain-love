@@ -21,6 +21,7 @@ type Configuration struct {
 var Config = &Configuration{}
 
 type App struct {
+	Name      string
 	JwtSecret string
 	PageSize  int
 	PrefixUrl string
