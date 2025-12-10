@@ -2,7 +2,8 @@ package d_util
 
 import (
 	"chain-love/domain/ds"
-	"chain-love/domain/rent"
+	// "chain-love/domain/rent"
+	"chain-love/domain/auth"
 	"chain-love/domain/sys"
 	"chain-love/pkg/setting"
 	"database/sql"
@@ -17,9 +18,11 @@ var tables = []interface{}{
 	&sys.User{},
 	&ds.House{},
 	&ds.Room{},
-	&rent.Publish{},
-	&rent.Rent{},
-	&rent.RentHistory{},
+	// &rent.Publish{},
+	// &rent.Rent{},
+	// &rent.RentHistory{},
+	&auth.AuthNonce{},
+	&auth.RefreshToken{},
 }
 
 func InitTable(db *gorm.DB) {

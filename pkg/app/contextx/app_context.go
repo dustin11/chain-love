@@ -2,6 +2,7 @@ package contextx
 
 import (
 	"chain-love/pkg/app"
+	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
 	"chain-love/pkg/util"
 	"log"
@@ -10,14 +11,13 @@ import (
 )
 
 type AppContext struct {
-	//context.Context
 	Gin  *gin.Context
-	User *app.JwtUser
+	User *security.JwtUser
 }
 
 func (c *AppContext) setUp() {
 	token := util.GetToken(c.Gin)
-	if user, err := app.ParseToken(token); err == nil {
+	if user, err := security.ParseToken(token); err == nil {
 		c.User = &user
 	} else {
 		log.Printf("ParseToken, fail to parseToken: %v", err)

@@ -27,6 +27,10 @@ func ParameterError(message string) *Error {
 	return NewError(http.StatusBadRequest, 200400, message)
 }
 
+func serverError(message string) *Error {
+	return &Error{http.StatusInternalServerError, 200500, message, nil, logging.PROC_ERROR}
+}
+
 func OtherError(message string) *Error {
 	return NewError(http.StatusForbidden, 100403, message)
 }
@@ -65,10 +69,10 @@ func PanicIfErr(err error) {
 	}
 }
 
-func PanicIfErrThenMsg(err error, msg string) {
+func PanicIfErrTipMsg(err error, tip string) {
 	if err != nil {
-		logging.Error(err.Error())
-		e := otherErrorLocate(msg, logging.PROC_ERROR)
+		logging.ErrorLocate(http.StatusForbidden, err.Error(), logging.PROC_ERROR)
+		e := otherErrorLocate(tip, logging.PROC_ERROR)
 		panic(e)
 	}
 }
@@ -83,4 +87,26 @@ func PanicIf(b bool, msg string) {
 func PanicMsg(msg string) {
 	e := otherErrorLocate(msg, logging.PROC_ERROR)
 	panic(e)
+}
+
+// 参数校验，失败则抛出 400 参数错误
+func PanicIfParameterError(b bool, msg string) {
+	if b {
+		panic(ParameterError(msg))
+	}
+}
+
+// 当发生内部/服务器错误时抛出 500 错误
+func PanicIfServerErrLogMsg(err error, logMsg string) {
+	if err != nil {
+		logging.Error(logMsg + " - " + err.Error())
+		panic(serverError("系统异常，请稍后重试!"))
+	}
+}
+
+func PanicIfServerErrTipMsg(err error, msg string) {
+	if err != nil {
+		logging.ErrorLocate(http.StatusInternalServerError, err.Error(), logging.PROC_ERROR)
+		panic(serverError(msg))
+	}
 }

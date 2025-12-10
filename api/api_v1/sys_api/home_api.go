@@ -1,17 +1,15 @@
 package sys_api
 
 import (
-	"chain-love/domain/sys"
 	"chain-love/pkg/app"
 	context "chain-love/pkg/app/contextx"
 	"chain-love/pkg/e"
-	"chain-love/pkg/logging"
-	"chain-love/pkg/setting/consts"
-	"chain-love/service/sys_service"
-	"chain-love/service/user_service"
-	"encoding/json"
-	"io"
-	"strconv"
+
+	// "chain-love/pkg/logging"
+	// "chain-love/pkg/setting/consts"
+	// "encoding/json"
+	// "io"
+	// "strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,12 +21,12 @@ import (
 // @Failure	500		{object}	e.Error
 // @Security	ApiKeyAuth
 // @Router		/api/v1/home/register [post]
-func Register(ctx *gin.Context) {
-	var m sys.User
-	e.PanicIfErrThenMsg(ctx.ShouldBind(&m), "输入的数据不合法")
-	sys_service.UserAdd(&m)
-	app.Response(ctx, e.Success)
-}
+// func Register(ctx *gin.Context) {
+// 	var m sys.User
+// 	e.PanicIfErrTipMsg(ctx.ShouldBind(&m), "输入的数据不合法")
+// 	sys_service.UserAdd(&m)
+// 	app.Response(ctx, e.Success)
+// }
 
 // @Summary	获取token
 // @Tags		登录注册
@@ -39,20 +37,20 @@ func Register(ctx *gin.Context) {
 // @Failure	500		{object}	e.Error
 // @Router		/api/v1/home/login [post]
 func Login(ctx *gin.Context) {
-	logging.Info("get token start ....")
-	str, _ := io.ReadAll(ctx.Request.Body)
-	var para map[string]interface{}
-	json.Unmarshal(str, &para)
-	username := para["username"].(string)
-	password := para["password"].(string)
-	token, err := user_service.Login(username, password)
-	e.PanicIfErr(err)
-	logging.Info(token)
-	res := map[string]string{"token": consts.TOKEN_PREFIX + token,
-		"expire":   strconv.Itoa(3600 * 12 * 1000), //12小时后过期
-		"username": username,
-	}
-	app.Response(ctx, e.SuccessData(res))
+	// logging.Info("get token start ....")
+	// str, _ := io.ReadAll(ctx.Request.Body)
+	// var para map[string]interface{}
+	// json.Unmarshal(str, &para)
+	// username := para["username"].(string)
+	// password := para["password"].(string)
+	// token, err := user_service.Login(username, password)
+	// e.PanicIfErr(err)
+	// logging.Info(token)
+	// res := map[string]string{"token": consts.TOKEN_PREFIX + token,
+	// 	"expire":   strconv.Itoa(3600 * 12 * 1000), //12小时后过期
+	// 	"username": username,
+	// }
+	// app.Response(ctx, e.SuccessData(res))
 }
 
 // @Summary	退出

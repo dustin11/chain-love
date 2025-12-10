@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"chain-love/domain"
-	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
+	"chain-love/pkg/app/security"
 	"chain-love/pkg/util"
 	"context"
 	"strings"
@@ -55,7 +55,7 @@ func ChkCookie(ctx *gin.Context) bool {
 	}
 }
 
-func ChkToken(c *gin.Context) (bool, *app.JwtUser) {
+func ChkToken(c *gin.Context) (bool, *security.JwtUser) {
 	user := util.GetTokenUser(c)
 	return true, &user
 }

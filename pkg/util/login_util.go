@@ -1,7 +1,7 @@
 package util
 
 import (
-	"chain-love/pkg/app"
+	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
 	"chain-love/pkg/setting/consts"
 	"net/url"
@@ -30,9 +30,9 @@ func GetToken(c *gin.Context) string {
 	return strings.Fields(token)[1]
 }
 
-func GetTokenUser(c *gin.Context) app.JwtUser {
+func GetTokenUser(c *gin.Context) security.JwtUser {
 	token := GetToken(c)
-	user, err := app.ParseToken(token)
+	user, err := security.ParseToken(token)
 	e.PanicIfErr(err)
 
 	return user

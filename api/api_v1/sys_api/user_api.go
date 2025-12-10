@@ -24,7 +24,7 @@ func UserGetPage(ctx *gin.Context) {
 	var page page2.UserPage
 	var entity sys.User
 	err := ctx.ShouldBind(&page)
-	e.PanicIfErrThenMsg(err, "输入的数据不合法")
+	e.PanicIfErrTipMsg(err, "输入的数据不合法")
 	entity.GetPage(&page)
 	app.Response(ctx, e.SuccessData(page))
 }
@@ -74,7 +74,7 @@ func UserGetByAddr(ctx *gin.Context) {
 func UserSave(ctx *context.AppContext) {
 	var model sys.User
 	err := ctx.Gin.ShouldBind(&model)
-	e.PanicIfErrThenMsg(err, "输入的数据不合法")
+	e.PanicIfErrTipMsg(err, "输入的数据不合法")
 
 	sys_service.UserSave(&model)
 	ctx.Response(e.SuccessData(model))

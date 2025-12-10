@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"chain-love/api/api_v1/auth_api"
 	"chain-love/api/api_v1/ds_api"
 	"chain-love/api/api_v1/sys_api"
 	"chain-love/middleware"
@@ -11,12 +12,20 @@ import (
 
 func SetupApiV1Router(router *gin.Engine) {
 	apiRouter := router.Group("/api/v1", middleware.Auth())
-	//apiRouter := router.Group("/api/v1")
+	// 认证相关路由 (公开)
+	authRouter := router.Group("/api/v1/auth")
+	{
+		authRouter.GET("/nonce", auth_api.GetNonce)
+		authRouter.POST("/login", auth_api.Login)
+		authRouter.POST("/refresh", auth_api.Refresh)
+		authRouter.POST("/logout", auth_api.Logout)
+	}
 	homeRouter := apiRouter.Group("/home")
 	{
-		homeRouter.POST("/register", sys_api.Register)
+		// homeRouter.POST("/register", sys_api.Register)
 		homeRouter.POST("/login", sys_api.Login)
 		homeRouter.POST("/logout", sys_api.Logout)
+
 		homeRouter.GET("/info", context.WithAppContext(sys_api.UserInfo))
 	}
 	userRouter := apiRouter.Group("/user")

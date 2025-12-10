@@ -3,7 +3,7 @@ package sys
 import (
 	"chain-love/domain"
 	page2 "chain-love/domain/sys/page"
-	"chain-love/pkg/app"
+	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
 	"chain-love/pkg/setting"
 	"chain-love/pkg/util"
@@ -23,7 +23,7 @@ type User struct {
 	// Salt     sql.NullString `json:"-" example:"盐值当头像"`
 	Avatar string `json:"avatar" form:"avatar" example:"头像"`
 	domain.AreaModel
-	AccountPart byte `json:"AccountPart" gorm:"not null" ` //帐号完整度
+	AccountPart byte `json:"accountPart" gorm:"not null" ` //帐号完整度
 	domain.Model
 }
 
@@ -31,12 +31,10 @@ func (user User) TableName() string {
 	return "sys_user"
 }
 
-func (user User) ToJwtUser() app.JwtUser {
-	return app.JwtUser{
-		Id: user.Id,
-		// Ccid: user.Ccid,
-		// Username:    user.Username,
-		// Password:    user.Password,
+func (user User) ToJwtUser() security.JwtUser {
+	return security.JwtUser{
+		Id:          user.Id,
+		Addr:        user.Addr,
 		Application: setting.Config.App.Name,
 	}
 }
@@ -74,18 +72,18 @@ func (m User) SaveAccountPart() User {
 	return m
 }
 
-func (m User) Init() User {
-
-	if m.Id == 0 {
-		m.Id = uint64(util.IdWorker.Generate().Int64())
-		// m.Password = util.MD5(m.Password)
-	}
+func (m *User) Init(addr string) *User {
+	m.Id = uint64(util.IdWorker.Generate().Int64())
+	m.Addr = addr
+	// m.State = 1
+	m.Nickname = "User_" + addr[0:6]
 	return m
 }
 
-func (m User) Add() bool {
-	create := domain.Db.Create(&m)
-	return create.Error != nil
+func (m *User) Add() bool {
+	create := domain.Db.Create(m)
+	e.PanicIfServerErrTipMsg(create.Error, "添加用户失败")
+	return true
 }
 
 func (m *User) Update() error {
@@ -111,10 +109,7 @@ func (entity User) GetPage(page *page2.UserPage) {
 
 func (user User) GetByAddr() *User {
 	var u User
-	/*r := */ domain.Db.Where("addr = ?", user.Addr).Find(&u)
-	// if r.RowsAffected == 0 {
-	// 	return nil
-	// }
+	domain.Db.Where("addr = ?", user.Addr).Find(&u)
 	return &u
 }
 

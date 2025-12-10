@@ -1,4 +1,4 @@
-package app
+package security
 
 import (
 	"chain-love/pkg/e"
@@ -14,10 +14,8 @@ import (
 var jwtSecret = []byte(setting.Config.App.JwtSecret)
 
 type JwtUser struct {
-	Id       uint64
-	Ccid     int64
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Id   uint64
+	Addr string
 	//应用
 	Application string
 	//*jwt.StandardClaims

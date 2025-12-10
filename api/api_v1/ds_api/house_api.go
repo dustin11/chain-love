@@ -41,7 +41,7 @@ func GetHousePage(ctx *gin.Context) {
 	var page page.HousePage
 	var m ds.House
 	err := ctx.ShouldBind(&page)
-	e.PanicIfErrThenMsg(err, "输入的数据不合法")
+	e.PanicIfErrTipMsg(err, "输入的数据不合法")
 	m.GetPage(&page)
 	app.Response(ctx, e.SuccessData(page))
 }
@@ -57,7 +57,7 @@ func GetHousePage(ctx *gin.Context) {
 func SaveHouse(ctx *context.AppContext) {
 	var m ds.House
 	err := ctx.Gin.ShouldBind(&m)
-	e.PanicIfErrThenMsg(err, "输入的数据不合法")
+	e.PanicIfErrTipMsg(err, "输入的数据不合法")
 
 	imgs := ds_service.UploadHouseImg(ctx)
 	m.Imgs = imgs

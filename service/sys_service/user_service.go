@@ -6,20 +6,8 @@ import (
 )
 
 func UserSave(m *sys.User) {
-	if m.Id == 0 {
-		UserAdd(m)
-	} else {
-		userUpdate(m)
-	}
-}
-
-func UserAdd(m *sys.User) {
-	//添加用户
-	m.Valid().Init().Add()
-	//添加角色
-	// if len(m.RoleIds) > 0 {
-	// 	sys.UserRole{UserId: m.Id}.Add(m.RoleIds)
-	// }
+	e.PanicIf(m.Id == 0, "用户不存在！")
+	userUpdate(m)
 }
 
 func userUpdate(m *sys.User) {
