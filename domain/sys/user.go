@@ -33,8 +33,16 @@ func (user User) TableName() string {
 
 func (user User) ToJwtUser() security.JwtUser {
 	return security.JwtUser{
-		Id:          user.Id,
-		Addr:        user.Addr,
+		Id: user.Id,
+		// Addr:        user.Addr,
+		Nickname:    user.Nickname,
+		Avatar:      user.Avatar,
+		State:       user.State,
+		AccountPart: user.AccountPart,
+		// AreaModel:   user.AreaModel,
+		Country: user.AreaModel.Country,
+		// Province:    user.AreaModel.Province,
+		City:        user.AreaModel.City,
 		Application: setting.Config.App.Name,
 	}
 }

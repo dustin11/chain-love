@@ -110,7 +110,7 @@ func Warn(v ...interface{}) {
 }
 
 func Error(v ...interface{}) {
-	setPrefix(ERROR, "")
+	setPrefix(ERROR, PROC_ERROR)
 	log.Println(v)
 	logger.Println(v)
 }

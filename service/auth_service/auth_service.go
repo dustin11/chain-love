@@ -5,15 +5,9 @@ import (
 	"chain-love/domain/sys"
 	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
-	"time"
 
 	"github.com/spruceid/siwe-go"
 	"gorm.io/gorm"
-)
-
-const (
-	NonceDuration        = 5 * time.Minute
-	RefreshTokenDuration = 30 * 24 * time.Hour // 30天
 )
 
 // GenerateNonce 生成并保存 Nonce 到 MySQL
@@ -23,7 +17,7 @@ func GenerateNonce(address string) string {
 }
 
 // VerifyAndLogin 验证 SIWE 签名并登录/注册
-func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, string) {
+func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, string, *sys.User) {
 	// 1. 解析消息
 	msg, err := siwe.ParseMessage(messageStr)
 	e.PanicIfParameterError(err != nil, "无效的消息格式")
@@ -55,11 +49,11 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, 
 	// 7. 生成 Refresh Token (Opaque Token) 并存入 MySQL
 	refreshTokenRaw := createRefreshToken(address, clientIp, userAgent)
 
-	return accessToken, refreshTokenRaw
+	return accessToken, refreshTokenRaw, user
 }
 
-// RefreshSession 刷新 Access Token (Token Rotation)
-func RefreshSession(refreshTokenRaw, clientIp string) (string, string) {
+// RefreshToken 刷新 Access Token (Token Rotation)
+func RefreshToken(refreshTokenRaw, clientIp string) (string, string) {
 	hash := security.SHA256(refreshTokenRaw)
 
 	// 通过 model 查找
@@ -78,9 +72,7 @@ func RefreshSession(refreshTokenRaw, clientIp string) (string, string) {
 
 	// 获取用户信息
 	user := sys.User{Addr: record.Address}.GetByAddr()
-	if user.Id == 0 {
-		e.PanicIf(true, "用户不存在")
-	}
+	e.PanicIf(user.Id == 0, "用户不存在")
 
 	// 颁发新 Access Token
 	newAccess, err := security.GenerateToken(user.ToJwtUser())
@@ -93,18 +85,16 @@ func RefreshSession(refreshTokenRaw, clientIp string) (string, string) {
 }
 
 // Logout 登出 (撤销 Refresh Token)
-func Logout(refreshTokenRaw string) {
+func Logout(refreshTokenRaw string) error {
 	if refreshTokenRaw == "" {
-		return
+		return e.ParameterError("缺少刷新令牌")
 	}
 	hash := security.SHA256(refreshTokenRaw)
-	if err := auth.RevokeRefreshByHash(hash); err != nil {
-		e.PanicIfServerErrLogMsg(err, "撤销刷新令牌失败")
-	}
+	return auth.RevokeRefreshByHash(hash)
 }
 
 // 创建并存储 Refresh Token
 func createRefreshToken(address, ip, ua string) string {
 	m := auth.RefreshToken{}.New(address, ip, ua).Add()
-	return m.TokenHash
+	return m.TokenRaw
 }

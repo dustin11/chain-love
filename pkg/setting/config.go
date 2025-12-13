@@ -21,10 +21,11 @@ type Configuration struct {
 var Config = &Configuration{}
 
 type App struct {
-	Name      string
-	JwtSecret string
-	PageSize  int
-	PrefixUrl string
+	Name               string
+	AllowedCORSOrigins []string `yaml:"allowedCORSOrigins"`
+	JwtSecret          string
+	PageSize           int
+	PrefixUrl          string
 
 	RuntimeRootPath string
 

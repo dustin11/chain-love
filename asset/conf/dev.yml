@@ -1,5 +1,6 @@
 app:
   name: chainlove
+  allowedCORSOrigins: [http://localhost:3000]
   pagesize: 10
   jwtsecret: 233
   prefixurl: http://127.0.0.1:8000

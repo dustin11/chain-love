@@ -11,6 +11,90 @@
         "version": "1.0"
     },
     "paths": {
+        "/api/v1/auth/logout": {
+            "post": {
+                "tags": [
+                    "认证"
+                ],
+                "summary": "登出",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/e.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/nonce/{addr}": {
+            "get": {
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取登录 Nonce",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户addr",
+                        "name": "addr",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/e.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "tags": [
+                    "认证"
+                ],
+                "summary": "刷新 Token",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/e.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/verify": {
+            "post": {
+                "tags": [
+                    "认证"
+                ],
+                "summary": "SIWE 登录",
+                "parameters": [
+                    {
+                        "description": "登录数据",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth_api.LoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/e.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/basic/decorationType": {
             "get": {
                 "consumes": [
@@ -335,44 +419,6 @@
                     "登录注册"
                 ],
                 "summary": "退出",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/e.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/e.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/home/register": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "tags": [
-                    "登录注册"
-                ],
-                "summary": "用户注册",
-                "parameters": [
-                    {
-                        "description": "如：{'nickname':'jack','username':'aj@qq.com','accountType':1,'password':'1','rePassword':'1'}",
-                        "name": "name",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -869,6 +915,21 @@
         }
     },
     "definitions": {
+        "auth_api.LoginReq": {
+            "type": "object",
+            "required": [
+                "message",
+                "signature"
+            ],
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
         "e.Error": {
             "type": "object",
             "properties": {

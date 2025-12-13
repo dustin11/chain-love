@@ -4,8 +4,9 @@ import (
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
-	"chain-love/pkg/util"
-	"log"
+	"chain-love/pkg/logging"
+
+	// "chain-love/pkg/util"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,13 +17,26 @@ type AppContext struct {
 }
 
 func (c *AppContext) setUp() {
-	token := util.GetToken(c.Gin)
-	if user, err := security.ParseToken(token); err == nil {
-		c.User = &user
-	} else {
-		log.Printf("ParseToken, fail to parseToken: %v", err)
-		panic(err)
+	// 优先使用 middleware 已经注入的 user（避免重复解析）
+	if u, ok := c.Gin.Get("user"); ok {
+		if ju, ok := u.(*security.JwtUser); ok {
+			c.User = ju
+			return
+		}
 	}
+	// 若 middleware 未注入（例如某些公开路由）
+	logging.Warn("AppContext setup no user found")
+	// // 回退：若 middleware 未注入（例如某些公开路由），再尝试从 Header 解析
+	// token := util.GetBearerTokenFromHeader(c.Gin)
+	// if token == "" {
+	// 	return
+	// }
+	// if user, err := security.ParseToken(token); err == nil {
+	// 	c.User = &user
+	// } else {
+	// 	// 不在这里 panic，避免影响请求流程；middleware 应负责统一鉴权/错误转换
+	// 	log.Printf("ParseToken, fail to parseToken: %v", err)
+	// }
 }
 
 func (c *AppContext) Response(e *e.Error) {

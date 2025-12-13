@@ -1,4 +1,14 @@
 definitions:
+  auth_api.LoginReq:
+    properties:
+      message:
+        type: string
+      signature:
+        type: string
+    required:
+    - message
+    - signature
+    type: object
   e.Error:
     properties:
       code:
@@ -16,6 +26,59 @@ info:
   title: Gin swagger
   version: "1.0"
 paths:
+  /api/v1/auth/logout:
+    post:
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 登出
+      tags:
+      - 认证
+  /api/v1/auth/nonce/{addr}:
+    get:
+      parameters:
+      - description: 用户addr
+        in: path
+        name: addr
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 获取登录 Nonce
+      tags:
+      - 认证
+  /api/v1/auth/refresh:
+    post:
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: 刷新 Token
+      tags:
+      - 认证
+  /api/v1/auth/verify:
+    post:
+      parameters:
+      - description: 登录数据
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/auth_api.LoginReq'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/e.Error'
+      summary: SIWE 登录
+      tags:
+      - 认证
   /api/v1/basic/decorationType:
     get:
       consumes:
@@ -230,29 +293,6 @@ paths:
           schema:
             $ref: '#/definitions/e.Error'
       summary: 退出
-      tags:
-      - 登录注册
-  /api/v1/home/register:
-    post:
-      parameters:
-      - description: 如：{'nickname':'jack','username':'aj@qq.com','accountType':1,'password':'1','rePassword':'1'}
-        in: body
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/e.Error'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/e.Error'
-      security:
-      - ApiKeyAuth: []
-      summary: 用户注册
       tags:
       - 登录注册
   /api/v1/house/del/{id}:

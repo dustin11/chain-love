@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetToken(c *gin.Context) string {
+func GetBearerTokenFromHeader(c *gin.Context) string {
 	token := c.Query(consts.AUTHORIZATION)
 	if token == "" {
 		token = c.Request.Header.Get(consts.AUTHORIZATION)
@@ -31,7 +31,7 @@ func GetToken(c *gin.Context) string {
 }
 
 func GetTokenUser(c *gin.Context) security.JwtUser {
-	token := GetToken(c)
+	token := GetBearerTokenFromHeader(c)
 	user, err := security.ParseToken(token)
 	e.PanicIfErr(err)
 

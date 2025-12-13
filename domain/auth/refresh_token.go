@@ -15,6 +15,7 @@ const RefreshTokenDuration = 30 * 24 * time.Hour // 30天
 // RefreshToken 存储刷新令牌，用于换取新的 Access Token
 type RefreshToken struct {
 	Id         uint      `json:"id" gorm:"primary_key"`
+	TokenRaw   string    `json:"-" gorm:"-"`
 	TokenHash  string    `json:"token_hash" gorm:"size:128;index"`
 	Address    string    `json:"address" gorm:"size:64"`
 	ExpiresAt  time.Time `json:"expires_at"`
@@ -32,7 +33,7 @@ func (RefreshToken) TableName() string {
 func (m RefreshToken) New(address, clientIp, userAgent string) *RefreshToken {
 	rawToken := uuid.NewString() + "." + security.MD5(util.RandomString(32)) // 简单生成随机串
 	hash := security.SHA256(rawToken)
-
+	m.TokenRaw = rawToken
 	m.TokenHash = hash
 	m.Address = address
 	m.ExpiresAt = time.Now().Add(RefreshTokenDuration)

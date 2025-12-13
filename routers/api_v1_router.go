@@ -15,8 +15,8 @@ func SetupApiV1Router(router *gin.Engine) {
 	// 认证相关路由 (公开)
 	authRouter := router.Group("/api/v1/auth")
 	{
-		authRouter.GET("/nonce", auth_api.GetNonce)
-		authRouter.POST("/login", auth_api.Login)
+		authRouter.GET("/nonce/:addr", auth_api.GetNonce)
+		authRouter.POST("/verify", auth_api.Verify)
 		authRouter.POST("/refresh", auth_api.Refresh)
 		authRouter.POST("/logout", auth_api.Logout)
 	}
@@ -30,11 +30,12 @@ func SetupApiV1Router(router *gin.Engine) {
 	}
 	userRouter := apiRouter.Group("/user")
 	{
-		userRouter.GET("/page", sys_api.UserGetPage)
-		userRouter.GET("/info/:id", sys_api.UserGetById)
-		userRouter.GET("/addr/:addr", sys_api.UserGetByAddr)
-		userRouter.POST("/save", context.WithAppContext(sys_api.UserSave))
-		userRouter.POST("/del/:id", sys_api.UserDel)
+		userRouter.GET("/me", context.WithAppContext(ds_api.Me))
+		userRouter.GET("/page", ds_api.UserGetPage)
+		userRouter.GET("/info/:id", ds_api.UserGetById)
+		userRouter.GET("/addr/:addr", ds_api.UserGetByAddr)
+		userRouter.POST("/save", context.WithAppContext(ds_api.UserSave))
+		userRouter.POST("/del/:id", ds_api.UserDel)
 	}
 
 	//基础数据

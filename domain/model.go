@@ -1,12 +1,11 @@
 package domain
 
 import (
-	"fmt"
-	"time"
-
-	appctx "chain-love/pkg/app/contextx"
+	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/logging"
 	"chain-love/pkg/setting"
+	"fmt"
+	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -47,7 +46,7 @@ func Setup() {
 
 // GORM v2 hooks: 从 tx.Statement.Context 读取 user_id 自动填充 CreatedBy/ModifiedBy
 func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
-	if v := tx.Statement.Context.Value(appctx.CtxUserID); v != nil {
+	if v := tx.Statement.Context.Value(contextx.CtxUserID); v != nil {
 		if id, ok := v.(uint64); ok {
 			m.CreatedBy = id
 		}
@@ -56,7 +55,7 @@ func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 func (m *Model) BeforeUpdate(tx *gorm.DB) (err error) {
-	if v := tx.Statement.Context.Value(appctx.CtxUserID); v != nil {
+	if v := tx.Statement.Context.Value(contextx.CtxUserID); v != nil {
 		if id, ok := v.(uint64); ok {
 			m.ModifiedBy = id
 		}

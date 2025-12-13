@@ -4,23 +4,46 @@ import (
 	"chain-love/asset"
 	"chain-love/middleware"
 	"chain-love/pkg/e"
+	"chain-love/pkg/setting"
 	"chain-love/pkg/util"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/template"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
+	"github.com/gin-contrib/cors"
 )
 
 func SetupRouter() *gin.Engine {
-	//router := gin.Default()
 	router := gin.New()
-	//router.Use(middleware.Context(), middleware.Logger(), gin.Recovery(), middleware.ErrHandler(), middleware.Cors())
-	router.Use(middleware.Logger(), gin.Recovery(), middleware.ErrHandler(), middleware.Cors())
+
+	// 明确列出受信任的代理地址或 CIDR（不要用 "*" 或 nil 去信任所有代理）
+	// 开发环境常用 localhost；生产环境请填写你的负载均衡/反向代理的 IP 或网段
+	if err := router.SetTrustedProxies([]string{
+		"127.0.0.1",        // localhost (dev)
+		"10.0.0.0/8",       // 示例：内部网段或云内网段
+		// "203.0.113.5",    // 或具体代理 IP
+	}); err != nil {
+		log.Println("SetTrustedProxies failed:", err)
+	}
+
+	// 使用显式的 CORS 配置：允许凭证且必须指定具体 origin（不能用 "*"）
+	corsCfg := cors.Config{
+		AllowOrigins:     setting.Config.App.AllowedCORSOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,           // 必须启用，浏览器才能发送/接收带凭证的跨域 Cookie
+		MaxAge:           12 * time.Hour, // 预检请求的缓存时间
+	}
+
+	router.Use(middleware.Logger(), gin.Recovery(), middleware.ErrHandler(), cors.New(corsCfg)) //middleware.Cors()
 	router.NoMethod(e.HandleNotFound)
 	router.NoRoute(e.HandleNotFound)
 
@@ -34,29 +57,6 @@ func SetupRouter() *gin.Engine {
 	router.StaticFS("/avatar", http.Dir(util.RootPath()+"avatar/"))
 	//swagger
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	//url := ginSwagger.URL("http://localhost:9000/swagger/doc.json")
-	//router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
-
-	//index := router.Group("/")
-	//{
-	//	// 添加 Get 请求路由
-	//	index.GET("/", handler.Index)
-	//
-	//	index.POST("/", helloGinAndMethod)
-	//
-	//	index.PUT("/", helloGinAndMethod)
-	//
-	//	index.DELETE("/", helloGinAndMethod)
-	//
-	//}
-	//
-	//userRouter := router.Group("/user", middleware.Auth())
-	//{
-	//	userRouter.POST("/register", user.Register)
-	//	userRouter.POST("/login", user.Login)
-	//	userRouter.GET("/profile", user.Profile)
-	//	userRouter.POST("/update", user.UpdateProfile)
-	//}
 
 	SetupApiV1Router(router)
 

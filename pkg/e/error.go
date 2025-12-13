@@ -17,7 +17,7 @@ type Error struct {
 }
 
 var (
-	Success     = NewError(http.StatusOK, 0, "success")
+	Success     = NewError(http.StatusOK, 0, "")
 	ServerError = NewError(http.StatusInternalServerError, 200500, "系统异常，请稍后重试!")
 	NotFound    = NewError(http.StatusNotFound, 200404, http.StatusText(http.StatusNotFound))
 	AccessLimit = NewError(http.StatusUnauthorized, 200401, "please login first")
@@ -27,16 +27,20 @@ func ParameterError(message string) *Error {
 	return NewError(http.StatusBadRequest, 200400, message)
 }
 
+func UnauthorizedError(message string) *Error {
+	return NewError(http.StatusUnauthorized, 200401, message)
+}
+
 func serverError(message string) *Error {
-	return &Error{http.StatusInternalServerError, 200500, message, nil, logging.PROC_ERROR}
+	return NewError(http.StatusInternalServerError, 200500, message)
 }
 
 func OtherError(message string) *Error {
 	return NewError(http.StatusForbidden, 100403, message)
 }
 
-func otherErrorLocate(message, locate string) *Error {
-	return &Error{http.StatusForbidden, 100403, message, nil, locate}
+func otherErrorLocate(message string) *Error {
+	return &Error{http.StatusForbidden, 100403, message, nil, logging.PROC_ERROR}
 }
 
 func SuccessData(data interface{}) *Error {
@@ -62,30 +66,37 @@ func HandleNotFound(c *gin.Context) {
 	return
 }
 
+func PanicIfUnauthorizedErr(b bool, msg string) {
+	if b {
+		e := UnauthorizedError(msg)
+		panic(e)
+	}
+}
+
 func PanicIfErr(err error) {
 	if err != nil {
-		e := otherErrorLocate(err.Error(), logging.PROC_ERROR)
+		e := OtherError(err.Error())
 		panic(e)
 	}
 }
 
 func PanicIfErrTipMsg(err error, tip string) {
 	if err != nil {
-		logging.ErrorLocate(http.StatusForbidden, err.Error(), logging.PROC_ERROR)
-		e := otherErrorLocate(tip, logging.PROC_ERROR)
+		logging.Error(tip, err.Error())
+		e := OtherError(tip)
 		panic(e)
 	}
 }
 
 func PanicIf(b bool, msg string) {
 	if b {
-		e := otherErrorLocate(msg, logging.PROC_ERROR)
+		e := OtherError(msg)
 		panic(e)
 	}
 }
 
 func PanicMsg(msg string) {
-	e := otherErrorLocate(msg, logging.PROC_ERROR)
+	e := OtherError(msg)
 	panic(e)
 }
 
@@ -106,7 +117,7 @@ func PanicIfServerErrLogMsg(err error, logMsg string) {
 
 func PanicIfServerErrTipMsg(err error, msg string) {
 	if err != nil {
-		logging.ErrorLocate(http.StatusInternalServerError, err.Error(), logging.PROC_ERROR)
+		logging.Error(msg, err.Error())
 		panic(serverError(msg))
 	}
 }
