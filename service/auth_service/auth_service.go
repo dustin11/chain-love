@@ -5,6 +5,7 @@ import (
 	"chain-love/domain/sys"
 	"chain-love/pkg/app/security"
 	"chain-love/pkg/e"
+	"chain-love/pkg/i18n"
 
 	"github.com/spruceid/siwe-go"
 	"gorm.io/gorm"
@@ -17,10 +18,10 @@ func GenerateNonce(address string) string {
 }
 
 // VerifyAndLogin 验证 SIWE 签名并登录/注册
-func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, string, *sys.User) {
+func VerifyAndLogin(messageStr, signature, clientIp, userAgent, lang string) (string, string, *sys.User) {
 	// 1. 解析消息
 	msg, err := siwe.ParseMessage(messageStr)
-	e.PanicIfParameterError(err != nil, "无效的消息格式")
+	e.PanicIfParameterError(err != nil, i18n.Tr(lang, "auth.invalid_message_format"))
 	address := msg.GetAddress().String()
 	nonce := msg.GetNonce()
 
@@ -29,7 +30,7 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, 
 
 	// 3. 验证签名
 	_, err = msg.Verify(signature, nil, &nonce, nil)
-	e.PanicIfServerErrTipMsg(err, "签名验证失败")
+	e.PanicIfServerErrTipMsg(err, i18n.Tr(lang, "auth.signature_verification_failed"))
 
 	// 4. 标记 Nonce 为已使用
 	nonceRecord.MarkUsed()
@@ -44,7 +45,7 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, 
 
 	// 6. 生成 Access Token (JWT)
 	accessToken, err := security.GenerateToken(user.ToJwtUser())
-	e.PanicIfServerErrLogMsg(err, "生成访问令牌失败")
+	e.PanicIfServerErrLogMsg(err, i18n.Tr(lang, "auth.generate_access_token_failed"))
 
 	// 7. 生成 Refresh Token (Opaque Token) 并存入 MySQL
 	refreshTokenRaw := createRefreshToken(address, clientIp, userAgent)
@@ -53,30 +54,30 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent string) (string, 
 }
 
 // RefreshToken 刷新 Access Token (Token Rotation)
-func RefreshToken(refreshTokenRaw, clientIp string) (string, string) {
+func RefreshToken(refreshTokenRaw, clientIp, lang string) (string, string) {
 	hash := security.SHA256(refreshTokenRaw)
 
 	// 通过 model 查找
 	record, err := auth.FindValidRefreshByHash(hash)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			e.PanicIfParameterError(true, "无效或过期的刷新令牌")
+			e.PanicIfParameterError(true, i18n.Tr(lang, "auth.invalid_or_expired_refresh_token"))
 		}
-		e.PanicIfServerErrLogMsg(err, "查询刷新令牌失败")
+		e.PanicIfServerErrLogMsg(err, i18n.Tr(lang, "auth.query_refresh_token_failed"))
 	}
 
 	// 令牌轮换：撤销旧令牌
 	if err := record.Revoke(); err != nil {
-		e.PanicIfServerErrLogMsg(err, "撤销刷新令牌失败")
+		e.PanicIfServerErrLogMsg(err, i18n.Tr(lang, "auth.revoke_refresh_token_failed"))
 	}
 
 	// 获取用户信息
 	user := sys.User{Addr: record.Address}.GetByAddr()
-	e.PanicIf(user.Id == 0, "用户不存在")
+	e.PanicIf(user.Id == 0, i18n.Tr(lang, "auth.user_not_found"))
 
 	// 颁发新 Access Token
 	newAccess, err := security.GenerateToken(user.ToJwtUser())
-	e.PanicIfServerErrLogMsg(err, "生成访问令牌失败")
+	e.PanicIfServerErrLogMsg(err, i18n.Tr(lang, "auth.generate_access_token_failed"))
 
 	// 颁发新 Refresh Token
 	newRefresh := createRefreshToken(record.Address, clientIp, record.UserAgent)
@@ -85,9 +86,9 @@ func RefreshToken(refreshTokenRaw, clientIp string) (string, string) {
 }
 
 // Logout 登出 (撤销 Refresh Token)
-func Logout(refreshTokenRaw string) error {
+func Logout(refreshTokenRaw, lang string) error {
 	if refreshTokenRaw == "" {
-		return e.ParameterError("缺少刷新令牌")
+		return e.ParameterError(i18n.Tr(lang, "auth.missing_refresh_token"))
 	}
 	hash := security.SHA256(refreshTokenRaw)
 	return auth.RevokeRefreshByHash(hash)

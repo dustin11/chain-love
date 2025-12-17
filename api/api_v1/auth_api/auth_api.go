@@ -3,6 +3,7 @@ package auth_api
 import (
 	"chain-love/pkg/app"
 	"chain-love/pkg/e"
+	"chain-love/pkg/i18n"
 	"chain-love/pkg/logging"
 	"chain-love/pkg/setting/consts"
 	"chain-love/service/auth_service"
@@ -44,20 +45,21 @@ func Verify(c *gin.Context) {
 		e.PanicIfParameterError(err != nil, "参数错误")
 	}
 
+	lang := i18n.GetLang(c)
+
 	// auth_service 在内部遇到问题会直接 panic
 	accessToken, refreshToken, user := auth_service.VerifyAndLogin(
 		req.Message,
 		req.Signature,
 		c.ClientIP(),
 		c.Request.UserAgent(),
+		lang,
 	)
 
 	// 设置 Cookie
 	setAuthCookies(c, accessToken, refreshToken)
 
 	app.Response(c, e.SuccessData(map[string]interface{}{
-		// "access_token":  accessToken,
-		// "refresh_token": refreshToken,
 		"user": user.ToJwtUser(),
 	}))
 }
@@ -70,8 +72,10 @@ func Refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie(consts.REFRESH_TOKEN)
 	e.PanicIfParameterError(err != nil || refreshToken == "", "缺少刷新令牌")
 
+	lang := i18n.GetLang(c)
+
 	// auth_service 内部会在失败时 panic
-	newAccess, newRefresh := auth_service.RefreshToken(refreshToken, c.ClientIP())
+	newAccess, newRefresh := auth_service.RefreshToken(refreshToken, c.ClientIP(), lang)
 
 	setAuthCookies(c, newAccess, newRefresh)
 	app.Response(c, e.Success)
@@ -83,9 +87,10 @@ func Refresh(c *gin.Context) {
 // @Router /api/v1/auth/logout [post]
 func Logout(c *gin.Context) {
 	refreshToken, _ := c.Cookie(consts.REFRESH_TOKEN)
+	lang := i18n.GetLang(c)
 	if refreshToken != "" {
 		// 错误不中断登出流程
-		if err := auth_service.Logout(refreshToken); err != nil {
+		if err := auth_service.Logout(refreshToken, lang); err != nil {
 			logging.Error("Logout error:", err)
 		}
 	}

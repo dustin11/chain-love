@@ -5,6 +5,7 @@ import (
 	_ "chain-love/docs"
 	"chain-love/domain"
 	"chain-love/domain/d_util"
+	"chain-love/pkg/i18n"
 	"chain-love/pkg/logging"
 	"chain-love/pkg/setting"
 	"chain-love/pkg/setting/consts"
@@ -23,6 +24,7 @@ func init() {
 	}
 	setting.Setup()
 	logging.Setup()
+	i18n.Setup() // 初始化多语言
 	// ensure database exists before opening connection (requires CREATE DATABASE privilege)
 	if err := d_util.EnsureDatabaseExists(setting.Config.Database.Name); err != nil {
 		logging.Error("ensure database exists error:", err)
