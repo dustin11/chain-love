@@ -18,8 +18,8 @@ var tables = []interface{}{
 	&sys.User{},
 	&ds.House{},
 	&ds.Room{},
+	&ds.Book{}, // <-- add Book to migration list
 	// &rent.Publish{},
-	// &rent.Rent{},
 	// &rent.RentHistory{},
 	&auth.AuthNonce{},
 	&auth.RefreshToken{},
@@ -36,6 +36,35 @@ func InitTable(db *gorm.DB) {
 			log.Printf("create table %v success.", table)
 		}
 	}
+
+	// ensure ds_book auto_increment starts at 10000 (MySQL). Safe no-op if DB/dialect differs.
+	if err := EnsureTableAutoIncrement(db, "ds_book", 10000); err != nil {
+		log.Printf("ensure auto_increment ds_book failed: %v", err)
+	}
+}
+
+// EnsureTableAutoIncrement ensures the AUTO_INCREMENT for a MySQL table is at least start.
+// It's a no-op on DBs that don't support information_schema AUTO_INCREMENT.
+func EnsureTableAutoIncrement(db *gorm.DB, table string, start int64) error {
+	var ai sql.NullInt64
+	row := db.Raw(`
+        SELECT AUTO_INCREMENT
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+    `, table).Row()
+
+	if err := row.Scan(&ai); err != nil {
+		return fmt.Errorf("read auto_increment failed: %w", err)
+	}
+
+	if !ai.Valid || ai.Int64 < start {
+		// 有些 MySQL 语句不能使用占位符，这里直接把数字拼进去（表名用反引号转义）
+		sqlStr := fmt.Sprintf("ALTER TABLE `%s` AUTO_INCREMENT = %d", table, start)
+		if err := db.Exec(sqlStr).Error; err != nil {
+			return fmt.Errorf("set auto_increment failed: %w", err)
+		}
+	}
+	return nil
 }
 
 // EnsureDatabaseExists connects to MySQL without selecting a database and

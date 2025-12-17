@@ -38,6 +38,14 @@ func SetupApiV1Router(router *gin.Engine) {
 		userRouter.POST("/del/:id", ds_api.UserDel)
 	}
 
+	bookRouter := apiRouter.Group("/book")
+	{
+		bookRouter.GET("/page", ds_api.BookGetPage)
+		bookRouter.GET("/info/:id", ds_api.BookGetById)
+		bookRouter.POST("/save", context.WithAppContext(ds_api.BookSave))
+		bookRouter.POST("/del/:id", ds_api.BookDel)
+	}
+
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
 	{
