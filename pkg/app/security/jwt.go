@@ -16,7 +16,7 @@ var jwtSecret = []byte(setting.Config.App.JwtSecret)
 
 type JwtUser struct { // todo 增加字段
 	Id          uint64 `json:"id"`
-	Addr        string
+	Addr        string `json:"addr"`
 	Nickname    string `json:"nickname,omitempty"`
 	Avatar      string `json:"avatar,omitempty"`
 	State       byte   `json:"state"`

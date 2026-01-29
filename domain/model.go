@@ -14,11 +14,14 @@ import (
 
 var Db *gorm.DB
 
-type Model struct {
-	CreatedOn  time.Time `json:"createdOn" gorm:"autoCreateTime"`
-	CreatedBy  uint64    `json:"createdBy"`
-	UpdatedOn  time.Time `json:"updatedOn" gorm:"autoUpdateTime"`
-	ModifiedBy uint64    `json:"modifiedBy"`
+type CreatInfo struct {
+	CreatedOn time.Time `json:"createdOn" gorm:"autoCreateTime"`
+	CreatedBy uint64    `json:"createdBy"`
+}
+
+type UpdateInfo struct {
+	UpdatedOn time.Time `json:"updatedOn" gorm:"autoUpdateTime"`
+	UpdatedBy uint64    `json:"UpdatedBy"`
 }
 
 func Setup() {
@@ -44,8 +47,9 @@ func Setup() {
 	}
 }
 
+// 需要从api 传入ctx.Gin.Request.Context() 太麻烦，不用
 // GORM v2 hooks: 从 tx.Statement.Context 读取 user_id 自动填充 CreatedBy/ModifiedBy
-func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
+func (m *CreatInfo) BeforeCreate(tx *gorm.DB) (err error) {
 	if v := tx.Statement.Context.Value(contextx.CtxUserID); v != nil {
 		if id, ok := v.(uint64); ok {
 			m.CreatedBy = id
@@ -54,10 +58,10 @@ func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
 	return nil
 }
 
-func (m *Model) BeforeUpdate(tx *gorm.DB) (err error) {
+func (m *UpdateInfo) BeforeUpdate(tx *gorm.DB) (err error) {
 	if v := tx.Statement.Context.Value(contextx.CtxUserID); v != nil {
 		if id, ok := v.(uint64); ok {
-			m.ModifiedBy = id
+			m.UpdatedBy = id
 		}
 	}
 	return nil

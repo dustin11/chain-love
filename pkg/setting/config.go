@@ -20,6 +20,11 @@ type Configuration struct {
 
 var Config = &Configuration{}
 
+type FilePath struct {
+	Book string `yaml:"book"`
+	Font string `yaml:"font"`
+}
+
 type App struct {
 	Name               string
 	AllowedCORSOrigins []string `yaml:"allowedCORSOrigins"`
@@ -33,9 +38,7 @@ type App struct {
 	ImageMaxSize  int64    `yaml:"imageMaxSize"`
 	ImageExts     []string `yaml:"imageExts"`
 
-	ExportSavePath string
-	QrCodeSavePath string
-	FontSavePath   string
+	FilePath FilePath `yaml:"filePath"`
 
 	LogSavePath string `yaml:"logSavePath"`
 	LogSaveName string `yaml:"logSaveName"`

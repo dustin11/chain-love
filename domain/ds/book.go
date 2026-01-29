@@ -1,25 +1,32 @@
 package ds
 
 import (
+	"errors"
+	"log"
+
 	"chain-love/domain"
 	"chain-love/domain/ds/page"
 	"chain-love/pkg/app/security"
-	"log"
 )
 
 type Book struct {
-	Id          int    `json:"id" gorm:"primaryKey;autoIncrement" form:"id"`
-	Title       string `json:"title" form:"title" gorm:"type:varchar(255);not null;comment:标题"`
-	Author      string `json:"author" form:"author" gorm:"type:varchar(100);comment:作者"`
-	Translator  string `json:"translator" form:"translator" gorm:"type:varchar(100);comment:译者"`
-	Language    string `json:"language" form:"language" gorm:"type:varchar(50);comment:语言"`
-	CateId      int    `json:"cateId" form:"cateId" gorm:"type:int;comment:分类ID"`
-	Addr        string `json:"addr" form:"addr" gorm:"type:varchar(64);comment:书籍合约地址"`
-	Creator     string `json:"creator" form:"creator" gorm:"type:varchar(64);comment:创建者钱包地址"`
-	Owner       string `json:"owner" form:"owner" gorm:"type:varchar(64);comment:拥有者钱包地址"`
-	CoverImgUrl string `json:"coverImgUrl" form:"coverImgUrl" gorm:"type:varchar(255);comment:封面图片"`
+	Id         int    `json:"id" gorm:"primaryKey;autoIncrement" form:"id"`
+	Name       string `json:"name" form:"name" gorm:"type:varchar(255);not null;comment:名称"`
+	Author     string `json:"author" form:"author" gorm:"type:varchar(100);comment:作者"`
+	Translator string `json:"trans" form:"trans" gorm:"type:varchar(100);comment:译者"`
+	Language   string `json:"lang" form:"lang" gorm:"type:varchar(50);comment:语言"`
+	CateId     int    `json:"cate,omitempty" form:"cate" gorm:"type:int;comment:分类ID"`
+	Addr       string `json:"addr,omitempty" form:"addr" gorm:"type:varchar(64);comment:书籍合约地址"`
+	Creator    string `json:"creator,omitempty" form:"creator" gorm:"type:varchar(64);comment:创建者钱包地址"`
+	Owner      string `json:"owner,omitempty" form:"owner" gorm:"type:varchar(64);comment:拥有者钱包地址"`
+	Cover      string `json:"cover,omitempty" form:"cover" gorm:"type:varchar(255);comment:封面图片"`
 
-	domain.Model
+	FontStyle  FontStyle `json:"fontStyle,omitempty" gorm:"type:json;comment:字体样式"`
+	AutoIndent bool      `json:"autoIndent,omitempty" form:"autoIndent" gorm:"comment:自动首行缩进"`
+	Type       string    `json:"type" gorm:"type:varchar(50);comment:书籍类型"`
+	PageCnt    int       `json:"pageCnt" form:"pageCnt" gorm:"type:int;comment:页数"`
+	domain.CreatInfo
+	// domain.UpdateInfo
 }
 
 func (Book) TableName() string {
@@ -29,6 +36,7 @@ func (Book) TableName() string {
 func (m *Book) Init(user *security.JwtUser) *Book {
 	m.Creator = user.Addr
 	m.Owner = user.Addr
+	m.CreatedBy = user.Id
 	return m
 }
 
@@ -36,12 +44,22 @@ func (m *Book) Add() error {
 	return domain.Db.Create(m).Error
 }
 
-func (m *Book) Update() error {
-	err := domain.Db.Model(m).Updates(m).Error
-	if err != nil {
-		log.Println("Book Update Error", err)
+// Update 修改：接收 userId 用于权限校验
+func (m *Book) Update(userId uint64) error {
+	// 增加 Where 条件：确保 ID 匹配且创建人是当前用户
+	result := domain.Db.Where("id = ? AND created_by = ?", m.Id, userId).Updates(m)
+
+	if result.Error != nil {
+		log.Println("Book Update Error", result.Error)
+		return result.Error
 	}
-	return err
+
+	// 如果受影响行数为 0，说明记录不存在或无权修改（CreatedBy 不匹配）
+	if result.RowsAffected == 0 {
+		return errors.New("无权修改或记录不存在")
+	}
+
+	return nil
 }
 
 func (m Book) Delete() {
@@ -58,7 +76,7 @@ func (m Book) GetPage(page *page.BookPage) {
 	var list []*Book
 	db := domain.Db
 	if page.Title != "" {
-		db = db.Where("title like ?", "%"+page.Title+"%")
+		db = db.Where("name like ?", "%"+page.Title+"%")
 	}
 	if page.Author != "" {
 		db = db.Where("author like ?", "%"+page.Author+"%")

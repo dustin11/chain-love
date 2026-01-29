@@ -10,7 +10,7 @@ type Role struct {
 	Id     uint64 `gorm:"primaryKey;autoIncrement" json:"id" form:"id"`
 	Name   string `json:"name" form:"name" example:"名称"`
 	Remark string `json:"remark" form:"remark" example:"注备"`
-	domain.Model
+	domain.CreatInfo
 
 	MenuIds []int64 `json:"menuIds" gorm:"-"`
 }

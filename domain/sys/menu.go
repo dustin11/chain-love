@@ -15,7 +15,7 @@ type Menu struct {
 	Type     byte   `gorm:"force" json:"type" form:"type" example:"0"`
 	Icon     string `json:"icon" form:"icon" example:"图标"`
 	OrderNum int    `json:"orderNum" form:"orderNum" desc:"序号" example:"0"`
-	domain.Model
+	domain.CreatInfo
 
 	Children []*Menu `json:"children" gorm:"-"`
 }

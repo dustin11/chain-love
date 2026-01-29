@@ -5,17 +5,17 @@ app:
   jwtsecret: 233
   prefixurl: http://127.0.0.1:8000
   runtimerootpath: runtime/
-  imageSavePath: /usr/local/appdata/spider/
   # MB
   imageMaxSize: 20024000
   imageExts: [.jpg,.jpeg,.png]
-  exportSavePath: export/
-  qrCodeSavePath: qrcode/
-  fontSavePath: fonts/
   logSavePath: runtime/logs/
   logSaveName: log
   logFileExt: log
   timeFormat: 20060102
+
+  filePath:
+    book: F:\project\chain-love\runtime\books\
+    font: F:\project\chain-love\runtime\fonts\
 server:
   runmode: debug
   port: 9010

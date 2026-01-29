@@ -24,7 +24,8 @@ type User struct {
 	Avatar string `json:"avatar" form:"avatar" example:"头像"`
 	domain.AreaModel
 	AccountPart byte `json:"accountPart" gorm:"not null" ` //帐号完整度
-	domain.Model
+	domain.CreatInfo
+	domain.UpdateInfo
 }
 
 func (user User) TableName() string {
@@ -33,8 +34,8 @@ func (user User) TableName() string {
 
 func (user User) ToJwtUser() security.JwtUser {
 	return security.JwtUser{
-		Id: user.Id,
-		// Addr:        user.Addr,
+		Id:          user.Id,
+		Addr:        user.Addr,
 		Nickname:    user.Nickname,
 		Avatar:      user.Avatar,
 		State:       user.State,

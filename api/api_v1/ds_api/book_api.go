@@ -6,6 +6,8 @@ import (
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/e"
+	"chain-love/service/ds_service"
+	"chain-love/service/models"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -39,22 +41,39 @@ func BookGetById(ctx *gin.Context) {
 
 // @Summary	保存
 // @Tags		书籍
-// @Param		data	body		ds.Book	true	"书籍信息"
+// @Param		data	body		object	true	"书籍信息与分页"
 // @Success	200		object		e.Error
 // @Security	ApiKeyAuth
 // @Router		/api/v1/book/save [post]
 func BookSave(ctx *contextx.AppContext) {
-	var model ds.Book
-	err := ctx.Gin.ShouldBind(&model)
-	e.PanicIfErrTipMsg(err, "参数错误")
+	var payload struct {
+		Book  ds.Book           `json:"book"`
+		Pages []models.PageData `json:"pages"`
+	}
 
+	if err := ctx.Gin.ShouldBindJSON(&payload); err != nil {
+		e.PanicIfErrTipMsg(err, "参数错误")
+	}
+
+	model := &payload.Book
+
+	var err error
 	if model.Id > 0 {
-		err = model.Update()
+		// 传入当前用户 ID 进行校验
+		err = model.Update(ctx.User.Id)
 	} else {
-		err = model.Init(ctx.User).Add()
+		// ensure init with user then add
+		model = model.Init(ctx.User)
+		err = model.Add()
 	}
 	e.PanicIfErr(err)
-	ctx.Response(e.SuccessData(model))
+
+	// 保存到文件系统
+	err = ds_service.SaveBookFile(model, payload.Pages)
+	e.PanicIfServerErrLogMsg(err, "保存书籍文件失败")
+
+	// 仅返回新建/更新后的 id
+	app.Response(ctx.Gin, e.SuccessData(map[string]int{"id": model.Id}))
 }
 
 // @Summary	删除
