@@ -7,7 +7,7 @@ app:
   runtimerootpath: runtime/
   # MB
   imageMaxSize: 20024000
-  imageExts: [.jpg,.jpeg,.png]
+  imageExts: [jpg,jpeg,png,gif]
   logSavePath: runtime/logs/
   logSaveName: log
   logFileExt: log
@@ -16,6 +16,7 @@ app:
   filePath:
     book: F:\project\chain-love\runtime\books\
     font: F:\project\chain-love\runtime\fonts\
+    image: F:\project\chain-love\runtime\images\
 server:
   runmode: debug
   port: 9010

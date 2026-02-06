@@ -21,8 +21,9 @@ type Configuration struct {
 var Config = &Configuration{}
 
 type FilePath struct {
-	Book string `yaml:"book"`
-	Font string `yaml:"font"`
+	Book  string `yaml:"book"`
+	Font  string `yaml:"font"`
+	Image string `yaml:"image"`
 }
 
 type App struct {

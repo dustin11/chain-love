@@ -26,3 +26,13 @@ func CreateDirIfNotExits(path string) bool {
 	}
 	return false
 }
+
+// RemoveIfExists 删除文件，如果文件不存在返回 nil，其他错误向上返回
+func RemoveIfExists(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return os.Remove(path)
+}

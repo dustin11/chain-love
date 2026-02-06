@@ -16,13 +16,11 @@ import (
 
 var tables = []interface{}{
 	&sys.User{},
-	&ds.House{},
-	&ds.Room{},
-	&ds.Book{}, // <-- add Book to migration list
-	// &rent.Publish{},
-	// &rent.RentHistory{},
 	&auth.AuthNonce{},
 	&auth.RefreshToken{},
+
+	&ds.Book{},
+	&ds.Image{},
 }
 
 func InitTable(db *gorm.DB) {
@@ -40,6 +38,9 @@ func InitTable(db *gorm.DB) {
 	// ensure ds_book auto_increment starts at 10000 (MySQL). Safe no-op if DB/dialect differs.
 	if err := EnsureTableAutoIncrement(db, "ds_book", 10000); err != nil {
 		log.Printf("ensure auto_increment ds_book failed: %v", err)
+	}
+	if err := EnsureTableAutoIncrement(db, "ds_image", 1000); err != nil {
+		log.Printf("ensure auto_increment ds_image failed: %v", err)
 	}
 }
 

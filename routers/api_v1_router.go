@@ -11,8 +11,8 @@ import (
 )
 
 func SetupApiV1Router(router *gin.Engine) {
-	apiRouter := router.Group("/api/v1", middleware.Auth())
-	// 认证相关路由 (公开)
+	// 公开访问的路由
+	// 认证相关
 	authRouter := router.Group("/api/v1/auth")
 	{
 		authRouter.GET("/nonce/:addr", auth_api.GetNonce)
@@ -20,6 +20,10 @@ func SetupApiV1Router(router *gin.Engine) {
 		authRouter.POST("/refresh", auth_api.Refresh)
 		authRouter.POST("/logout", auth_api.Logout)
 	}
+
+	// 需要认证的 API 路由
+	apiRouter := router.Group("/api/v1", middleware.Auth())
+
 	homeRouter := apiRouter.Group("/home")
 	{
 		// homeRouter.POST("/register", sys_api.Register)
@@ -45,7 +49,10 @@ func SetupApiV1Router(router *gin.Engine) {
 		bookRouter.POST("/save", context.WithAppContext(ds_api.BookSave))
 		bookRouter.POST("/del/:id", ds_api.BookDel)
 	}
-
+	imageRouter := apiRouter.Group("/image")
+	{
+		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
+	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
 	{

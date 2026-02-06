@@ -22,12 +22,10 @@ func Auth() gin.HandlerFunc {
 				return
 			}
 		}
-		if ChkCookie(ctx) {
-			if ok, user := ChkToken(ctx); ok {
-				applyUserToContext(ctx, user)
-				ctx.Next()
-				return
-			}
+		if ok, user := ChkToken(ctx); ok {
+			applyUserToContext(ctx, user)
+			ctx.Next()
+			return
 		}
 		// 未授权
 		ctx.AbortWithStatus(401)
