@@ -62,9 +62,9 @@ func UpdateStyle(id uint64, userId uint64, style string) error {
 		log.Println("Image UpdateStyle Error", result.Error)
 		return result.Error
 	}
-	if result.RowsAffected == 0 {
-		return errors.New("无权修改或记录不存在")
-	}
+	// if result.RowsAffected == 0 { // 记录相同，不修改
+	// 	return errors.New("无权修改或记录不存在")
+	// }
 	return nil
 }
 

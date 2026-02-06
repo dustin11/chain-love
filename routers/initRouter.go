@@ -26,8 +26,8 @@ func SetupRouter() *gin.Engine {
 	// 明确列出受信任的代理地址或 CIDR（不要用 "*" 或 nil 去信任所有代理）
 	// 开发环境常用 localhost；生产环境请填写你的负载均衡/反向代理的 IP 或网段
 	if err := router.SetTrustedProxies([]string{
-		"127.0.0.1",        // localhost (dev)
-		"10.0.0.0/8",       // 示例：内部网段或云内网段
+		"127.0.0.1",  // localhost (dev)
+		"10.0.0.0/8", // 示例：内部网段或云内网段
 		// "203.0.113.5",    // 或具体代理 IP
 	}); err != nil {
 		log.Println("SetTrustedProxies failed:", err)
@@ -55,6 +55,8 @@ func SetupRouter() *gin.Engine {
 	router.Static("asset/statics", ".assert/statics")
 	router.StaticFile("/favicon.ico", "./favicon.ico")
 	router.StaticFS("/avatar", http.Dir(util.RootPath()+"avatar/"))
+	// 将磁盘目录挂到 /static/images 下（请求示例 /static/images/1001/xxx.jpg）
+	router.StaticFS("/static/images", gin.Dir(setting.Config.App.FilePath.Image, false))
 	//swagger
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 

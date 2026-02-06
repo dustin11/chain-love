@@ -26,15 +26,17 @@ func UploadFormFiles(ctx *context.AppContext) map[string]string {
 	form, err := ctx.Gin.MultipartForm()
 	e.PanicIfErr(err)
 
+	filesMap := make(map[string]string)
 	// 总文件数限制
 	total := 0
 	for _, files := range form.File {
 		total += len(files)
 	}
-	e.PanicIf(total == 0, "上传文件为空！")
+	if total == 0 {
+		return filesMap
+	}
 	e.PanicIf(total > 35, "最多上传35张图片")
 
-	filesMap := make(map[string]string)
 	for field, files := range form.File {
 		// 只取第一个文件（前端每个 field 只会传一个）
 		if len(files) == 0 {
