@@ -143,3 +143,32 @@ func ImageDel(ctx *gin.Context) {
 	ds.Image{Id: id}.Delete()
 	app.Response(ctx, e.Success)
 }
+
+// @Summary	用户图片列表（仅当前用户）
+// @Tags		图片
+// @Param		bizType	query		int		true	"业务类型"
+// @Param		bizSubType	query		int		true	"业务子类型"
+// @Security	ApiKeyAuth
+// @Router		/api/v1/image/list [get]
+func ImageList(ctx *contextx.AppContext) {
+	// bizType 必填，且不能为 0
+	s1 := ctx.Gin.Query("bizType")
+	e.PanicIf(s1 == "", "参数异常：bizType")
+	v1, err := strconv.ParseUint(s1, 10, 8)
+	e.PanicIfErr(err)
+	bizType := uint8(v1)
+	e.PanicIf(bizType == 0, "参数异常：bizType")
+	// bizSubType 可选，默认为 0
+	v2, err := strconv.ParseUint(ctx.Gin.Query("bizSubType"), 10, 8)
+	if (err) != nil {
+		v2 = 0
+	}
+	bizSubType := uint8(v2)
+
+	// addr 必填
+	addr := ctx.Gin.Query("addr")
+	e.PanicIf(addr == "", "addr 不能为空")
+
+	items := ds.Image{}.GetList(bizType, bizSubType, addr)
+	app.Response(ctx.Gin, e.SuccessData(items))
+}

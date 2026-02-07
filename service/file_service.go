@@ -83,7 +83,7 @@ func UploadFormFiles(ctx *context.AppContext) map[string]string {
 			upImg = imaging.Resize(upImg, 1000, 0, imaging.CatmullRom)
 		}
 		// 若原为 png 且无透明则转为 jpeg（节省空间）
-		if format == "png" && !hasAlpha(upImg) {
+		if (format == "png" && !hasAlpha(upImg)) || format == "jpeg" {
 			format = "jpg"
 		}
 		fileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), "."+format)

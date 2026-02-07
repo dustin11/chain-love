@@ -52,6 +52,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	imageRouter := apiRouter.Group("/image")
 	{
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
+		imageRouter.GET("/list", context.WithAppContext(ds_api.ImageList))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")

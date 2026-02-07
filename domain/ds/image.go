@@ -6,6 +6,7 @@ import (
 
 	"chain-love/domain"
 	"chain-love/domain/ds/page"
+	"chain-love/domain/ds/vo"
 	"chain-love/pkg/app/security"
 )
 
@@ -20,6 +21,7 @@ type Image struct {
 	domain.CreatInfo
 }
 
+// 清空表不要用截断，否则自增无法从1000开始，导致更新变成添加
 func (Image) TableName() string {
 	return "ds_image"
 }
@@ -102,4 +104,23 @@ func (m Image) GetPage(page *page.ImagePage) {
 	page.SetModel(&Image{}).
 		SetRecords(&list).
 		QueryPage(db)
+}
+
+// GetList 返回当前用户在指定业务类型下的图片列表
+// addr bizType 必传
+func (m Image) GetList(bizType uint8, bizSubType uint8, addr string) []vo.ImageVO {
+	var list []Image
+	// 直接按 Creator 与 biz_type 精确查询（bizType 必须由调用方保证非 0）
+	db := domain.Db.Where("creator = ? AND biz_type = ? AND biz_sub_type = ?", addr, bizType, bizSubType)
+	db.Find(&list)
+
+	res := make([]vo.ImageVO, 0, len(list))
+	for _, it := range list {
+		res = append(res, vo.ImageVO{
+			Id:    it.Id,
+			Url:   it.Url,
+			Style: it.Style,
+		})
+	}
+	return res
 }
