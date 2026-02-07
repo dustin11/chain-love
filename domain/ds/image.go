@@ -70,8 +70,8 @@ func UpdateStyle(id uint64, userId uint64, style string) error {
 	return nil
 }
 
-func (m Image) Delete() {
-	domain.Db.Where("id = ?", m.Id).Delete(&Image{})
+func (m Image) Delete(userId uint64) {
+	domain.Db.Where("id = ? AND created_by = ?", m.Id, userId).Delete(&Image{})
 }
 
 func (m Image) GetById() Image {

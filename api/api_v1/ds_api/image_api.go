@@ -6,12 +6,10 @@ import (
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
 	"chain-love/service"
 	"encoding/json"
 	"path"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -126,22 +124,15 @@ func ImageGetById(ctx *gin.Context) {
 // @Param		id		path		int		true	"ID"
 // @Security	ApiKeyAuth
 // @Router		/api/v1/image/del/{id} [post]
-func ImageDel(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+func ImageDel(ctx *contextx.AppContext) {
+	id, err := strconv.ParseUint(ctx.Gin.Param("id"), 10, 64)
 	e.PanicIfErr(err)
-
+	curUserId := ctx.User.Id
 	img := ds.Image{Id: id}.GetById()
-	// 删除文件（从 url 中解析 userId 和文件名）
-	prefix := strings.TrimRight(setting.Config.App.FilePath.Image, "/") + "/"
-	rel := strings.TrimPrefix(img.Url, prefix)
-	parts := strings.SplitN(rel, "/", 2)
-	if len(parts) == 2 {
-		uid := parts[0]
-		filename := parts[1]
-		service.DeleteImageFile(uid, filename)
-	}
-	ds.Image{Id: id}.Delete()
-	app.Response(ctx, e.Success)
+	e.PanicIf(img.Id == 0 || img.CreatedBy != curUserId, "无法删除")
+	service.DeleteImageFile(img.Url)
+	ds.Image{Id: id}.Delete(curUserId)
+	app.Response(ctx.Gin, e.Success)
 }
 
 // @Summary	用户图片列表（仅当前用户）

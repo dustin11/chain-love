@@ -111,9 +111,9 @@ func UploadFormFiles(ctx *context.AppContext) map[string]string {
 	return filesMap
 }
 
-// DeleteImageFile 删除磁盘上的图片文件（uid 是上传用户 id，img 是文件名）
-func DeleteImageFile(uid string, img string) {
-	imgPath := fmt.Sprintf("%s%s/%s", setting.Config.App.FilePath.Image, uid, img)
+// DeleteImageFile 删除磁盘上的图片文件
+func DeleteImageFile(url string) {
+	imgPath := fmt.Sprintf("%s/%s", setting.Config.App.FilePath.Image, url)
 	err := util.RemoveIfExists(imgPath)
 	e.PanicIfErr(err)
 }

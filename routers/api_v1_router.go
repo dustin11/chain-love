@@ -53,6 +53,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
 		imageRouter.GET("/list", context.WithAppContext(ds_api.ImageList))
+		imageRouter.DELETE("/del/:id", context.WithAppContext(ds_api.ImageDel))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
