@@ -20,6 +20,10 @@ func SetupApiV1Router(router *gin.Engine) {
 		authRouter.POST("/refresh", auth_api.Refresh)
 		authRouter.POST("/logout", auth_api.Logout)
 	}
+	imgRouter := router.Group("/api/v1/image")
+	{
+		imgRouter.GET("/list", ds_api.ImageList)
+	}
 
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
@@ -52,7 +56,6 @@ func SetupApiV1Router(router *gin.Engine) {
 	imageRouter := apiRouter.Group("/image")
 	{
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
-		imageRouter.GET("/list", context.WithAppContext(ds_api.ImageList))
 		imageRouter.DELETE("/del/:id", context.WithAppContext(ds_api.ImageDel))
 	}
 	//基础数据
