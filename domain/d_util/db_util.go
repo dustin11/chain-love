@@ -1,9 +1,9 @@
 package d_util
 
 import (
-	"chain-love/domain/ds"
-	// "chain-love/domain/rent"
+	"chain-love/domain/active"
 	"chain-love/domain/auth"
+	"chain-love/domain/ds"
 	"chain-love/domain/sys"
 	"chain-love/pkg/setting"
 	"database/sql"
@@ -21,6 +21,8 @@ var tables = []interface{}{
 
 	&ds.Book{},
 	&ds.Image{},
+
+	&active.Like{},
 }
 
 func InitTable(db *gorm.DB) {

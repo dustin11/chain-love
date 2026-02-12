@@ -35,6 +35,11 @@ func serverError(message string) *Error {
 	return NewError(http.StatusInternalServerError, 200500, message)
 }
 
+// 业务错误，跳过前端拦截器，方法内部自行处理
+func BizError(message string, code int) *Error {
+	return NewError(http.StatusOK, code, message)
+}
+
 func OtherError(message string) *Error {
 	return NewError(http.StatusForbidden, 100403, message)
 }
@@ -63,7 +68,6 @@ func NewError(statusCode, Code int, msg string) *Error {
 func HandleNotFound(c *gin.Context) {
 	err := NotFound
 	c.JSON(err.StatusCode, err)
-	return
 }
 
 func PanicIfUnauthorizedErr(b bool, msg string) {
@@ -119,5 +123,11 @@ func PanicIfServerErrTipMsg(err error, msg string) {
 	if err != nil {
 		logging.Error(msg, err.Error())
 		panic(serverError(msg))
+	}
+}
+
+func PanicIfBizErr(b bool, msg string, code int) {
+	if b {
+		panic(BizError(msg, code))
 	}
 }

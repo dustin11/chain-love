@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"chain-love/api/api_v1/active_api"
 	"chain-love/api/api_v1/auth_api"
 	"chain-love/api/api_v1/ds_api"
 	"chain-love/api/api_v1/sys_api"
@@ -23,6 +24,12 @@ func SetupApiV1Router(router *gin.Engine) {
 	imgRouter := router.Group("/api/v1/image")
 	{
 		imgRouter.GET("/list", ds_api.ImageList)
+	}
+
+	// 互动（部分接口可能不需要鉴权，如查询，这里放在外面或里面均可，根据业务需求，这里查询放外面）
+	activePublicRouter := router.Group("/api/v1/active")
+	{
+		activePublicRouter.POST("/like/info", active_api.LikeGetSummary)
 	}
 
 	// 需要认证的 API 路由
@@ -57,6 +64,12 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
 		imageRouter.DELETE("/del/:id", context.WithAppContext(ds_api.ImageDel))
+	}
+	// 互动-需鉴权
+	activeRouter := apiRouter.Group("/active")
+	{
+		activeRouter.POST("/like/add", context.WithAppContext(active_api.LikeAdd))
+		activeRouter.POST("/like/del", context.WithAppContext(active_api.LikeDel))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
