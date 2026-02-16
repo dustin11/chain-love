@@ -22,10 +22,10 @@ func NoteSave(ctx *contextx.AppContext) {
 			Id    uint64 `json:"id"`
 			Text  string `json:"text"`
 			Style struct {
-				FontSize   interface{} `json:"fontSize"` // 兼容数字或字符串
-				FontFamily string      `json:"fontFamily"`
-				BgColor    string      `json:"bgColor"`
-				Pos        [4]float64  `json:"pos"`
+				FontSize   string     `json:"fontSize"` // 统一字符
+				FontFamily string     `json:"fontFamily"`
+				BgColor    string     `json:"bgColor"`
+				Pos        [4]float64 `json:"pos"`
 			} `json:"style"`
 		} `json:"items"`
 	}
