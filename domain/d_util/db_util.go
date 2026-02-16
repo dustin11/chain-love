@@ -21,6 +21,7 @@ var tables = []interface{}{
 
 	&ds.Book{},
 	&ds.Image{},
+	&ds.Note{},
 
 	&active.Like{},
 }
@@ -43,6 +44,9 @@ func InitTable(db *gorm.DB) {
 	}
 	if err := EnsureTableAutoIncrement(db, "ds_image", 1000); err != nil {
 		log.Printf("ensure auto_increment ds_image failed: %v", err)
+	}
+	if err := EnsureTableAutoIncrement(db, "ds_note", 1000); err != nil {
+		log.Printf("ensure auto_increment ds_note failed: %v", err)
 	}
 }
 

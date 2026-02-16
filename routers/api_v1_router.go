@@ -26,10 +26,16 @@ func SetupApiV1Router(router *gin.Engine) {
 		imgRouter.GET("/list", ds_api.ImageList)
 	}
 
-	// 互动（部分接口可能不需要鉴权，如查询，这里放在外面或里面均可，根据业务需求，这里查询放外面）
+	// 互动
 	activePublicRouter := router.Group("/api/v1/active")
 	{
 		activePublicRouter.POST("/like/info", active_api.LikeGetSummary)
+	}
+
+	// 笔记（公开列表，鉴权保存和删除）
+	noteRouter := router.Group("/api/v1/note")
+	{
+		noteRouter.GET("/list", ds_api.NoteList)
 	}
 
 	// 需要认证的 API 路由
@@ -70,6 +76,12 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		activeRouter.POST("/like/add", context.WithAppContext(active_api.LikeAdd))
 		activeRouter.POST("/like/del", context.WithAppContext(active_api.LikeDel))
+	}
+	// 笔记
+	noteAuthRouter := apiRouter.Group("/note")
+	{
+		noteAuthRouter.POST("/save", context.WithAppContext(ds_api.NoteSave))
+		noteAuthRouter.POST("/del", context.WithAppContext(ds_api.NoteDel))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
