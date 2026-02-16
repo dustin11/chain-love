@@ -132,6 +132,7 @@ func ImageDel(ctx *contextx.AppContext) {
 	e.PanicIf(img.Id == 0 || img.CreatedBy != curUserId, "无法删除")
 	service.DeleteImageFile(img.Url)
 	ds.Image{Id: id}.Delete(curUserId)
+
 	app.Response(ctx.Gin, e.Success)
 }
 

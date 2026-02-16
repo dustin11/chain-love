@@ -66,6 +66,7 @@ func SetupApiV1Router(router *gin.Engine) {
 		bookRouter.POST("/save", context.WithAppContext(ds_api.BookSave))
 		bookRouter.POST("/del/:id", ds_api.BookDel)
 	}
+	// 图片
 	imageRouter := apiRouter.Group("/image")
 	{
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
