@@ -1,7 +1,9 @@
 package ds_api
 
 import (
+	"chain-love/domain/active"
 	"chain-love/domain/ds"
+	"chain-love/domain/ds/enum"
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/e"
@@ -104,6 +106,9 @@ func NoteDel(ctx *contextx.AppContext) {
 
 	n := ds.Note{Id: req.Id}.GetById()
 	e.PanicIf(n.Id == 0 || n.CreatedBy != ctx.User.Id, "无法删除")
+	// 删除便签记录
 	ds.Note{Id: req.Id}.Delete(ctx.User.Id)
+	// 删除关联的 like 数据（按 biz_type + data_id）
+	e.PanicIfErr((&active.Like{Id: req.Id, BizType: uint8(enum.DeskSidingNote)}).DeleteByDataId())
 	app.Response(ctx.Gin, e.Success)
 }

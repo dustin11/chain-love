@@ -52,6 +52,10 @@ func (m *Like) Delete(user *security.JwtUser) error {
 	return domain.Db.Where("data_id = ? AND user_id = ? AND biz_type = ?", m.Id, user.Id, m.BizType).Delete(&Like{}).Error
 }
 
+func (m *Like) DeleteByDataId() error {
+	return domain.Db.Where("data_id = ? AND biz_type = ?", m.Id, m.BizType).Delete(&Like{}).Error
+}
+
 // GetBatchCounts 批量统计点赞数
 func GetBatchCounts(items []Like) ([]LikeCountVO, error) {
 	if len(items) == 0 {

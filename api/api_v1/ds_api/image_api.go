@@ -1,7 +1,9 @@
 package ds_api
 
 import (
+	"chain-love/domain/active"
 	"chain-love/domain/ds"
+	"chain-love/domain/ds/enum"
 	"chain-love/domain/ds/page"
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
@@ -130,8 +132,15 @@ func ImageDel(ctx *contextx.AppContext) {
 	curUserId := ctx.User.Id
 	img := ds.Image{Id: id}.GetById()
 	e.PanicIf(img.Id == 0 || img.CreatedBy != curUserId, "无法删除")
+
+	// 删除磁盘文件
 	service.DeleteImageFile(img.Url)
+
+	// 删除图片记录
 	ds.Image{Id: id}.Delete(curUserId)
+
+	// 删除关联的 like 数据（按 biz_type + data_id）
+	e.PanicIfErr((&active.Like{Id: id, BizType: uint8(enum.DeskSidingAlbum)}).DeleteByDataId())
 
 	app.Response(ctx.Gin, e.Success)
 }
