@@ -4,6 +4,7 @@ import (
 	"chain-love/domain/active"
 	"chain-love/domain/ds"
 	"chain-love/domain/ds/enum"
+	"chain-love/domain/ds/vo" // <-- add this import
 	"chain-love/pkg/app"
 	"chain-love/pkg/app/contextx"
 	"chain-love/pkg/e"
@@ -21,14 +22,9 @@ import (
 func NoteSave(ctx *contextx.AppContext) {
 	var payload struct {
 		Items []struct {
-			Id    uint64 `json:"id"`
-			Text  string `json:"text"`
-			Style struct {
-				FontSize   string     `json:"fontSize"` // 统一字符
-				FontFamily string     `json:"fontFamily"`
-				BgColor    string     `json:"bgColor"`
-				Pos        [4]float64 `json:"pos"`
-			} `json:"style"`
+			Id    uint64         `json:"id"`
+			Text  string         `json:"text"`
+			Style vo.NoteStyleVO `json:"style"` // use the shared VO
 		} `json:"items"`
 	}
 	e.PanicIfErr(ctx.Gin.ShouldBindJSON(&payload))
@@ -48,13 +44,12 @@ func NoteSave(ctx *contextx.AppContext) {
 		}
 		e.PanicIf(utf8.RuneCountInString(txt) >= 800, "便签内容长度越出限制")
 
-		styleB, _ := json.Marshal(it.Style)
-
 		// 统一构造 Note（含 id/text/style），插入时把 id 清零
+		styleBytes, _ := json.Marshal(it.Style)
 		n := ds.Note{
 			Id:    it.Id,
 			Text:  txt,
-			Style: string(styleB),
+			Style: string(styleBytes),
 		}
 		if it.Id <= 10 {
 			// 新建：不要传入 id，让 DB 自增

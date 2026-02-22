@@ -1,10 +1,10 @@
 package vo
 
 type NoteStyleVO struct {
-	FontSize   string     `json:"fontSize"`
-	FontFamily string     `json:"fontFamily"`
-	BgColor    string     `json:"bgColor"`
-	Pos        [4]float64 `json:"pos"`
+	FontSize string     `json:"fontSize"`
+	FontUrl  string     `json:"fontUrl"`
+	BgColor  string     `json:"bgColor"`
+	Pos      [4]float64 `json:"pos"`
 }
 
 type NoteVO struct {
