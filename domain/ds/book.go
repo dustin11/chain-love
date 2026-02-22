@@ -25,6 +25,7 @@ type Book struct {
 	AutoIndent bool      `json:"autoIndent,omitempty" form:"autoIndent" gorm:"comment:自动首行缩进"`
 	Type       string    `json:"type" gorm:"type:varchar(50);comment:书籍类型"`
 	PageCnt    int       `json:"pageCnt" form:"pageCnt" gorm:"type:int;comment:页数"`
+	Version    int       `json:"version" form:"version" gorm:"type:int;default:1;comment:版本号"`
 	domain.CreatInfo
 	// domain.UpdateInfo
 }
@@ -37,6 +38,7 @@ func (m *Book) Init(user *security.JwtUser) *Book {
 	m.Creator = user.Addr
 	m.Owner = user.Addr
 	m.CreatedBy = user.Id
+	m.Version = 1
 	return m
 }
 

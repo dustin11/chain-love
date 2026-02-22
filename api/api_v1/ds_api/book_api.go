@@ -59,6 +59,9 @@ func BookSave(ctx *contextx.AppContext) {
 
 	var err error
 	if model.Id > 0 {
+		// 获取旧版本号并加1
+		oldBook := ds.Book{Id: model.Id}.GetById()
+		model.Version = oldBook.Version + 1
 		// 传入当前用户 ID 进行校验
 		err = model.Update(ctx.User.Id)
 	} else {

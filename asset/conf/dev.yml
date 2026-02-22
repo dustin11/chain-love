@@ -14,9 +14,9 @@ app:
   timeFormat: 20060102
 
   filePath:
-    book: F:\project\chain-love\runtime\books\
-    font: F:\project\chain-love\runtime\fonts\
-    image: F:\project\chain-love\runtime\images\
+    book: F:\project\chain-love\runtime\book\
+    font: F:\project\chain-love\runtime\font\
+    image: F:\project\chain-love\runtime\image\
 server:
   runmode: debug
   port: 9010
