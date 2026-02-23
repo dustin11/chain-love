@@ -14,17 +14,16 @@ import (
 
 var jwtSecret = []byte(setting.Config.App.JwtSecret)
 
-type JwtUser struct { // todo 增加字段
+type JwtUser struct {
 	Id          uint64 `json:"id"`
 	Addr        string `json:"addr"`
 	Nickname    string `json:"nickname,omitempty"`
 	Avatar      string `json:"avatar,omitempty"`
 	State       byte   `json:"state"`
 	AccountPart byte   `json:"accountPart"`
-	// domain.AreaModel
-	Country string `json:"country" `
-	// Province string
-	City string `json:"city"`
+	Country     string `json:"country" `
+	City        string `json:"city"`
+	PlanetId    int    `json:"planetId"`
 	//应用
 	Application string `json:"-" `
 	//*jwt.StandardClaims

@@ -25,6 +25,7 @@ type Book struct {
 	AutoIndent bool      `json:"autoIndent,omitempty" form:"autoIndent" gorm:"comment:自动首行缩进"`
 	Type       string    `json:"type" gorm:"type:varchar(50);comment:书籍类型"`
 	PageCnt    int       `json:"pageCnt" form:"pageCnt" gorm:"type:int;comment:页数"`
+	PlanetId   int       `json:"planetId" form:"planetId" gorm:"type:int;comment:星球ID"`
 	Version    int       `json:"version" form:"version" gorm:"type:int;default:1;comment:版本号"`
 	domain.CreatInfo
 	// domain.UpdateInfo
@@ -35,6 +36,7 @@ func (Book) TableName() string {
 }
 
 func (m *Book) Init(user *security.JwtUser) *Book {
+	m.PlanetId = user.PlanetId
 	m.Creator = user.Addr
 	m.Owner = user.Addr
 	m.CreatedBy = user.Id
@@ -93,4 +95,19 @@ func (m Book) GetPage(page *page.BookPage) {
 	page.SetModel(&Book{}).
 		SetRecords(&list).
 		QueryPage(db)
+}
+
+// GetIdsByPlanetId returns a list of book IDs associated with the given planet.
+// If no books are found the slice will be empty and error will be nil.
+func (m Book) GetIdByPlanetId(planetId int) ([]int, error) {
+	var ids []int
+	var books []Book
+	res := domain.Db.Select("id").Where("planet_id = ?", planetId).Find(&books)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	for _, b := range books {
+		ids = append(ids, b.Id)
+	}
+	return ids, nil
 }

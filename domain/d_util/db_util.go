@@ -36,6 +36,10 @@ func InitTable(db *gorm.DB) {
 			}
 			log.Printf("create table %v success.", table)
 		}
+		// auto‑migrate – 保证结构体中的新字段自动加入已有表
+		if err := db.AutoMigrate(table); err != nil {
+			log.Printf("automigrate %T failed: %v", table, err)
+		}
 	}
 
 	// ensure ds_book auto_increment starts at 10000 (MySQL). Safe no-op if DB/dialect differs.

@@ -15,13 +15,13 @@ import (
 var Db *gorm.DB
 
 type CreatInfo struct {
-	CreatedOn time.Time `json:"createdOn" gorm:"autoCreateTime"`
-	CreatedBy uint64    `json:"createdBy"`
+	CreatedOn time.Time `json:"-" gorm:"autoCreateTime"`
+	CreatedBy uint64    `json:"-"`
 }
 
 type UpdateInfo struct {
-	UpdatedOn time.Time `json:"updatedOn" gorm:"autoUpdateTime"`
-	UpdatedBy uint64    `json:"UpdatedBy"`
+	UpdatedOn time.Time `json:"-" gorm:"autoUpdateTime"`
+	UpdatedBy uint64    `json:"-"`
 }
 
 func Setup() {

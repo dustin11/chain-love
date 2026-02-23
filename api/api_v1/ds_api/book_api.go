@@ -39,6 +39,22 @@ func BookGetById(ctx *gin.Context) {
 	app.Response(ctx, e.SuccessData(m))
 }
 
+// @Summary	根据星球ID返回书ID列表
+// @Tags		书籍
+// @Param		planetId	path	int	true	"星球ID"
+// @Success	200	object	e.Error
+// @Router		/api/v1/book/ids/planet/{planetId} [get]
+func BookGetIdByPlanetId(ctx *gin.Context) {
+	pid, err := strconv.Atoi(ctx.Param("planetId"))
+	e.PanicIfErr(err)
+	ids, err := ds.Book{}.GetIdByPlanetId(pid)
+	if err != nil {
+		// 返回空列表或错误
+		e.PanicIfErr(err)
+	}
+	app.Response(ctx, e.SuccessData(map[string][]int{"ids": ids}))
+}
+
 // @Summary	保存
 // @Tags		书籍
 // @Param		data	body		object	true	"书籍信息与分页"
@@ -62,6 +78,8 @@ func BookSave(ctx *contextx.AppContext) {
 		// 获取旧版本号并加1
 		oldBook := ds.Book{Id: model.Id}.GetById()
 		model.Version = oldBook.Version + 1
+		// 更新星球信息，以 JWT 用户为准
+		model.PlanetId = ctx.User.PlanetId
 		// 传入当前用户 ID 进行校验
 		err = model.Update(ctx.User.Id)
 	} else {

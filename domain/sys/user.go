@@ -21,7 +21,8 @@ type User struct {
 	Mobile   string `json:"mobile" form:"mobile" example:"手机号"`
 	State    byte   `json:"state" example:"0"`
 	// Salt     sql.NullString `json:"-" example:"盐值当头像"`
-	Avatar string `json:"avatar" form:"avatar" example:"头像"`
+	Avatar   string `json:"avatar" form:"avatar" example:"头像"`
+	PlanetId int    `json:"planetId" form:"planetId" gorm:"type:int;comment:星球ID"`
 	domain.AreaModel
 	AccountPart byte `json:"accountPart" gorm:"not null" ` //帐号完整度
 	domain.CreatInfo
@@ -40,10 +41,9 @@ func (user User) ToJwtUser() security.JwtUser {
 		Avatar:      user.Avatar,
 		State:       user.State,
 		AccountPart: user.AccountPart,
-		// AreaModel:   user.AreaModel,
-		Country: user.AreaModel.Country,
-		// Province:    user.AreaModel.Province,
+		Country:     user.AreaModel.Country,
 		City:        user.AreaModel.City,
+		PlanetId:    user.PlanetId,
 		Application: setting.Config.App.Name,
 	}
 }

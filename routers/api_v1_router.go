@@ -38,6 +38,12 @@ func SetupApiV1Router(router *gin.Engine) {
 		noteRouter.GET("/list", ds_api.NoteList)
 	}
 
+	// 通过星球ID查询书籍ID列表（无需鉴权）
+	bookPub := router.Group("/api/v1/book")
+	{
+		bookPub.GET("/ids/planet/:planetId", ds_api.BookGetIdByPlanetId)
+	}
+
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
 
