@@ -3,6 +3,7 @@ package d_util
 import (
 	"chain-love/domain/active"
 	"chain-love/domain/auth"
+	"chain-love/domain/dev"
 	"chain-love/domain/ds"
 	"chain-love/domain/sys"
 	"chain-love/pkg/setting"
@@ -24,6 +25,8 @@ var tables = []interface{}{
 	&ds.Note{},
 
 	&active.Like{},
+
+	&dev.Plugin{},
 }
 
 func InitTable(db *gorm.DB) {

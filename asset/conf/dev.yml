@@ -17,6 +17,7 @@ app:
     book: F:\project\chain-love\runtime\book\
     font: F:\project\chain-love\runtime\font\
     image: F:\project\chain-love\runtime\image\
+    plugin: F:\project\chain-love\runtime\plugin\
 server:
   runmode: debug
   port: 9010

@@ -3,6 +3,7 @@ package routers
 import (
 	"chain-love/api/api_v1/active_api"
 	"chain-love/api/api_v1/auth_api"
+	"chain-love/api/api_v1/dev_api"
 	"chain-love/api/api_v1/ds_api"
 	"chain-love/api/api_v1/sys_api"
 	"chain-love/middleware"
@@ -89,6 +90,17 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		noteAuthRouter.POST("/save", context.WithAppContext(ds_api.NoteSave))
 		noteAuthRouter.POST("/del", context.WithAppContext(ds_api.NoteDel))
+	}
+	// 插件系统 (全都需要鉴权)
+	pluginRouter := apiRouter.Group("/plugin")
+	{
+		pluginRouter.GET("/list", dev_api.GetPluginList)
+		pluginRouter.GET("/tree/:pluginId", dev_api.GetPluginTree)
+		pluginRouter.POST("/file/upload", dev_api.UploadFile)
+		pluginRouter.POST("/folder/add", dev_api.AddFolder)
+		pluginRouter.POST("/rename", dev_api.Rename)
+		pluginRouter.POST("/delete", dev_api.Delete)
+		pluginRouter.POST("/save", context.WithAppContext(dev_api.SavePlugin))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
