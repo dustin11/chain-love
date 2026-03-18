@@ -91,7 +91,7 @@ func (m *User) Init(addr string) *User {
 
 func (m *User) Add() bool {
 	create := domain.Db.Create(m)
-	e.PanicIfServerErrTipMsg(create.Error, "添加用户失败")
+	e.PanicServerErrTipMsg(create.Error, "添加用户失败")
 	return true
 }
 

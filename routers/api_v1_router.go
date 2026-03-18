@@ -100,6 +100,7 @@ func SetupApiV1Router(router *gin.Engine) {
 		pluginRouter.POST("/folder/add", dev_api.AddFolder)
 		pluginRouter.POST("/rename", dev_api.Rename)
 		pluginRouter.POST("/delete", dev_api.Delete)
+		pluginRouter.POST("/deletePlugin", dev_api.DeletePlugin)
 		pluginRouter.POST("/save", context.WithAppContext(dev_api.SavePlugin))
 	}
 	//基础数据

@@ -35,7 +35,7 @@ func (m AuthNonce) New(address string) *AuthNonce {
 
 func (n *AuthNonce) Add() *AuthNonce {
 	er := domain.Db.Create(n).Error
-	e.PanicIfServerErrTipMsg(er, "添加Nonce失败")
+	e.PanicServerErrTipMsg(er, "添加Nonce失败")
 	return n
 }
 
@@ -46,7 +46,7 @@ func GetValidNonce(address, nonce string) *AuthNonce {
 		if err == gorm.ErrRecordNotFound {
 			e.PanicIfParameterError(true, "Nonce无效或已过期")
 		}
-		e.PanicIfServerErrTipMsg(err, "查询Nonce失败")
+		e.PanicServerErrTipMsg(err, "查询Nonce失败")
 	}
 	return &rec
 }

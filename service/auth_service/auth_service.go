@@ -30,7 +30,7 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent, lang string) (st
 
 	// 3. 验证签名
 	_, err = msg.Verify(signature, nil, &nonce, nil)
-	e.PanicIfServerErrTipMsg(err, i18n.Tr(lang, "auth.signature_verification_failed"))
+	e.PanicServerErrTipMsg(err, i18n.Tr(lang, "auth.signature_verification_failed"))
 
 	// 4. 标记 Nonce 为已使用
 	nonceRecord.MarkUsed()

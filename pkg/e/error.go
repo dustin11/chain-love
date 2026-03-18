@@ -112,6 +112,29 @@ func PanicIfParameterError(b bool, msg string) {
 }
 
 // 当发生内部/服务器错误时抛出 500 错误
+func PanicParameterError(err error) {
+	if err != nil {
+		logging.Error(err.Error())
+		panic(ParameterError("参数错误!"))
+	}
+}
+
+func PanicParameterErrorTipMsg(err error, msg string) {
+	if err != nil {
+		logging.Error(msg, err.Error())
+		panic(serverError(msg))
+	}
+}
+
+// 当发生内部/服务器错误时抛出 500 错误
+func PanicServerErr(err error) {
+	if err != nil {
+		logging.Error(err.Error())
+		panic(serverError("系统异常，请稍后重试!"))
+	}
+}
+
+// 当发生内部/服务器错误时抛出 500 错误
 func PanicIfServerErrLogMsg(err error, logMsg string) {
 	if err != nil {
 		logging.Error(logMsg + " - " + err.Error())
@@ -119,7 +142,7 @@ func PanicIfServerErrLogMsg(err error, logMsg string) {
 	}
 }
 
-func PanicIfServerErrTipMsg(err error, msg string) {
+func PanicServerErrTipMsg(err error, msg string) {
 	if err != nil {
 		logging.Error(msg, err.Error())
 		panic(serverError(msg))
