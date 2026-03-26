@@ -8,16 +8,16 @@ app:
   # MB
   imageMaxSize: 20024000
   imageExts: [jpg,jpeg,png,gif]
-  logSavePath: runtime/logs/
+  logSavePath: F:\project\senspace\runtime\logs\
   logSaveName: log
   logFileExt: log
   timeFormat: 20060102
 
   filePath:
-    book: runtime/book/
-    font: runtime/font/
-    image: runtime/image/
-    plugin: runtime/plugin/
+    book: F:\project\senspace\runtime\book\
+    font: F:\project\senspace\runtime\font\
+    image: F:\project\senspace\runtime\image\
+    plugin: F:\project\senspace\runtime\plugin\
 server:
   runmode: debug
   port: 9010

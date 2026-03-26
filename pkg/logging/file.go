@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -23,7 +24,7 @@ func getLogFileFullPath() string {
 	prefixPath := getLogFilePath()
 	suffixPath := fmt.Sprintf("%s%s.%s", setting.Config.App.LogSaveName, time.Now().Format(setting.Config.App.TimeFormat), setting.Config.App.LogFileExt)
 
-	return fmt.Sprintf("%s%s", prefixPath, suffixPath)
+	return filepath.Join(prefixPath, suffixPath)
 }
 
 func openLogFile(filePath string) *os.File {
@@ -44,8 +45,7 @@ func openLogFile(filePath string) *os.File {
 }
 
 func mkDir() {
-	dir, _ := os.Getwd()
-	err := os.MkdirAll(dir+"/"+getLogFilePath(), os.ModePerm)
+	err := os.MkdirAll(filepath.Clean(getLogFilePath()), os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
