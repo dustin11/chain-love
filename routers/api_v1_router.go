@@ -1,13 +1,13 @@
 package routers
 
 import (
-	"chain-love/api/api_v1/active_api"
-	"chain-love/api/api_v1/auth_api"
-	"chain-love/api/api_v1/dev_api"
-	"chain-love/api/api_v1/ds_api"
-	"chain-love/api/api_v1/sys_api"
-	"chain-love/middleware"
-	context "chain-love/pkg/app/contextx"
+	"senspace/api/api_v1/active_api"
+	"senspace/api/api_v1/auth_api"
+	"senspace/api/api_v1/dev_api"
+	"senspace/api/api_v1/ds_api"
+	"senspace/api/api_v1/sys_api"
+	"senspace/middleware"
+	context "senspace/pkg/app/contextx"
 
 	"github.com/gin-gonic/gin"
 )

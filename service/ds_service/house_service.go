@@ -1,10 +1,10 @@
 package ds_service
 
 import (
-	context "chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
-	"chain-love/pkg/util"
+	context "senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 	"fmt"
 	"log"
 	"os"

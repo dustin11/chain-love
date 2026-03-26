@@ -1,4 +1,4 @@
-module chain-love
+module senspace
 
 go 1.25
 

@@ -1,11 +1,11 @@
 package sys_service
 
 import (
-	"chain-love/domain/sys"
-	page2 "chain-love/domain/sys/page"
-	"chain-love/pkg/app"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting/consts"
+	"senspace/domain/sys"
+	page2 "senspace/domain/sys/page"
+	"senspace/pkg/app"
+	"senspace/pkg/e"
+	"senspace/pkg/setting/consts"
 	"strings"
 )
 

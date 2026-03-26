@@ -2,7 +2,7 @@ package test
 
 import (
 	"bytes"
-	"chain-love/routers"
+	"senspace/routers"
 	"net/http"
 	"net/http/httptest"
 	"net/url"

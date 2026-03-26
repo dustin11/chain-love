@@ -1,6 +1,6 @@
 package page
 
-import "chain-love/pkg/app"
+import "senspace/pkg/app"
 
 type BookPage struct {
 	Title    string `json:"title" form:"title"`

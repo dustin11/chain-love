@@ -1,7 +1,7 @@
 package e
 
 import (
-	"chain-love/pkg/logging"
+	"senspace/pkg/logging"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

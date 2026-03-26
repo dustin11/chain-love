@@ -1,9 +1,9 @@
 package middleware
 
 import (
-	"chain-love/pkg/app"
-	"chain-love/pkg/e"
-	"chain-love/pkg/logging"
+	"senspace/pkg/app"
+	"senspace/pkg/e"
+	"senspace/pkg/logging"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,16 +1,16 @@
 package main
 
 import (
-	"chain-love/asset"
-	_ "chain-love/docs"
-	"chain-love/domain"
-	"chain-love/domain/d_util"
-	"chain-love/pkg/i18n"
-	"chain-love/pkg/logging"
-	"chain-love/pkg/setting"
-	"chain-love/pkg/setting/consts"
-	"chain-love/pkg/util"
-	"chain-love/routers"
+	"senspace/asset"
+	_ "senspace/docs"
+	"senspace/domain"
+	"senspace/domain/d_util"
+	"senspace/pkg/i18n"
+	"senspace/pkg/logging"
+	"senspace/pkg/setting"
+	"senspace/pkg/setting/consts"
+	"senspace/pkg/util"
+	"senspace/routers"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -35,9 +35,9 @@ func init() {
 	util.Setup()
 }
 
-//	@title						Gin swagger
+//	@title						Senspace API
 //	@version					1.0
-//	@description				Gin swagger 示例项目
+//	@description				Senspace API service
 //	@securityDefinitions.apikey	ApiKeyAuth
 //	@in							headerl
 //	@name						Authorization

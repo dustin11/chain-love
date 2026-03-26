@@ -1,9 +1,9 @@
 package ds_api
 
 import (
-	"chain-love/domain/ds/enum"
-	"chain-love/pkg/app"
-	"chain-love/pkg/e"
+	"senspace/domain/ds/enum"
+	"senspace/pkg/app"
+	"senspace/pkg/e"
 
 	"github.com/gin-gonic/gin"
 )

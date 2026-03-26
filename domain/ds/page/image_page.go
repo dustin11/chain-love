@@ -1,8 +1,8 @@
 package page
 
 import (
-	"chain-love/domain/ds/enum"
-	"chain-love/pkg/app"
+	"senspace/domain/ds/enum"
+	"senspace/pkg/app"
 )
 
 type ImagePage struct {

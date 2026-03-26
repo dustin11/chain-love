@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"chain-love/domain/ds"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
-	"chain-love/service/models"
+	"senspace/domain/ds"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/service/models"
 )
 
 // SaveBookFile saves book metadata and pages as JSON files under configured folder.

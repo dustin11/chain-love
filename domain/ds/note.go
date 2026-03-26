@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"log"
 
-	"chain-love/domain"
-	"chain-love/domain/ds/vo"
-	"chain-love/pkg/app/security"
+	"senspace/domain"
+	"senspace/domain/ds/vo"
+	"senspace/pkg/app/security"
 )
 
 type Note struct {

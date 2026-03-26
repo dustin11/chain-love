@@ -1,7 +1,7 @@
 package sys_service
 
 import (
-	"chain-love/domain/sys"
+	"senspace/domain/sys"
 )
 
 func SaveRole(m sys.Role) {

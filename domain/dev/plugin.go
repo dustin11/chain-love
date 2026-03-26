@@ -3,9 +3,9 @@ package dev
 import (
 	"errors"
 
-	"chain-love/domain"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/util"
+	"senspace/domain"
+	"senspace/pkg/app/security"
+	"senspace/pkg/util"
 )
 
 type Plugin struct {

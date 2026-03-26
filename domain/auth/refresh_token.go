@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"chain-love/domain"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/e"
-	"chain-love/pkg/util"
+	"senspace/domain"
+	"senspace/pkg/app/security"
+	"senspace/pkg/e"
+	"senspace/pkg/util"
 	"time"
 
 	"github.com/google/uuid"

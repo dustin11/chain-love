@@ -2,8 +2,8 @@ package sys
 
 import (
 	"bytes"
-	"chain-love/domain"
-	"chain-love/pkg/logging"
+	"senspace/domain"
+	"senspace/pkg/logging"
 	"fmt"
 )
 

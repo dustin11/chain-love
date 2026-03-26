@@ -1,14 +1,14 @@
 package ds_api
 
 import (
-	"chain-love/domain/active"
-	"chain-love/domain/ds"
-	"chain-love/domain/ds/enum"
-	"chain-love/domain/ds/page"
-	"chain-love/pkg/app"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
-	"chain-love/service"
+	"senspace/domain/active"
+	"senspace/domain/ds"
+	"senspace/domain/ds/enum"
+	"senspace/domain/ds/page"
+	"senspace/pkg/app"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/service"
 	"encoding/json"
 	"path"
 	"strconv"

@@ -1,11 +1,11 @@
 package auth_service
 
 import (
-	"chain-love/domain/auth"
-	"chain-love/domain/sys"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/e"
-	"chain-love/pkg/i18n"
+	"senspace/domain/auth"
+	"senspace/domain/sys"
+	"senspace/pkg/app/security"
+	"senspace/pkg/e"
+	"senspace/pkg/i18n"
 
 	"github.com/spruceid/siwe-go"
 	"gorm.io/gorm"

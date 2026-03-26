@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS `senspace`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
 
 INSERT INTO sys_user (id, created_on, addr, nickname, email, mobile, state, avatar, country, province, city, account_part, created_by) VALUES
 (1001, NOW(), '0xAbC1234567890abcdef', '管理员', 'admin@example.com', '13800000000', 0, '', 'China', 'Beijing', 'Beijing', 7, 1),

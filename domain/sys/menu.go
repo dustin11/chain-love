@@ -1,9 +1,9 @@
 package sys
 
 import (
-	"chain-love/domain"
-	page2 "chain-love/domain/sys/page"
-	"chain-love/pkg/setting/consts"
+	"senspace/domain"
+	page2 "senspace/domain/sys/page"
+	"senspace/pkg/setting/consts"
 )
 
 type Menu struct {

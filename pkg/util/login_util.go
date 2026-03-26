@@ -1,9 +1,9 @@
 package util
 
 // import (
-// 	"chain-love/pkg/app/security"
-// 	"chain-love/pkg/e"
-// 	"chain-love/pkg/setting/consts"
+// 	"senspace/pkg/app/security"
+// 	"senspace/pkg/e"
+// 	"senspace/pkg/setting/consts"
 // 	"net/url"
 // 	"strings"
 

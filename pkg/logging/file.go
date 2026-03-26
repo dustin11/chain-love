@@ -1,7 +1,7 @@
 package logging
 
 import (
-	"chain-love/pkg/setting"
+	"senspace/pkg/setting"
 	"fmt"
 	"log"
 	"os"

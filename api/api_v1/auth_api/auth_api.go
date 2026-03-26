@@ -1,12 +1,12 @@
 package auth_api
 
 import (
-	"chain-love/pkg/app"
-	"chain-love/pkg/e"
-	"chain-love/pkg/i18n"
-	"chain-love/pkg/logging"
-	"chain-love/pkg/setting/consts"
-	"chain-love/service/auth_service"
+	"senspace/pkg/app"
+	"senspace/pkg/e"
+	"senspace/pkg/i18n"
+	"senspace/pkg/logging"
+	"senspace/pkg/setting/consts"
+	"senspace/service/auth_service"
 	"net/http"
 	"strings"
 

@@ -4,14 +4,14 @@ services:
     build: ./mysql
 #    container_name: v-mysql
     environment:
-      MYSQL_DATABASE: smarterp
+      MYSQL_DATABASE: senspace
       MYSQL_ROOT_PASSWORD: smart@vserp
       MYSQL_ROOT_HOST: '%'
       TZ: Asia/Shanghai
     ports:
       - "3307:3306"
     volumes:
-      - /usr/local/app/smarterp/mysql_data:/var/lib/mysql
+      - /usr/local/app/senspace/mysql_data:/var/lib/mysql
     restart: always
   app:
     restart: always
@@ -20,7 +20,7 @@ services:
     volumes:
       - ./:/app
 #      - ~/.m2:/root/.m2
-      - /usr/local/app/log:/var/log/smarterp
+      - /usr/local/app/log:/var/log/senspace
       # 指定容器时间为宿主机时间
 #      - /etc/localtime:/etc/localtime
     environment:
@@ -29,5 +29,5 @@ services:
       - "9010:9010"
     depends_on:
       - mysql
-    command: ./smarterp
+    command: ./senspace
 #    command: tail -f /dev/null

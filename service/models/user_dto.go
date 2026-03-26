@@ -1,8 +1,8 @@
 package models
 
 import (
-	"chain-love/domain"
-	"chain-love/domain/sys"
+	"senspace/domain"
+	"senspace/domain/sys"
 )
 
 // 前端展示用的 User DTO（只包含需要暴露的字段）

@@ -2,7 +2,7 @@ package test
 
 import (
 	"bytes"
-	"chain-love/asset"
+	"senspace/asset"
 	"compress/gzip"
 	"fmt"
 	"io"

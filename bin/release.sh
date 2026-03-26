@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_NAME="smarterp"
+PROJECT_NAME="senspace"
 PROJECT_PATH="/usr/local/app/$PROJECT_NAME"
 APP_PATH="bin/out/linux/$PROJECT_NAME"
 SHELL_NAME="start.sh"

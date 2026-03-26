@@ -1,9 +1,9 @@
 package domain
 
 import (
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/logging"
-	"chain-love/pkg/setting"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/logging"
+	"senspace/pkg/setting"
 	"fmt"
 	"time"
 

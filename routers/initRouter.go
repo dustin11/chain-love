@@ -1,11 +1,11 @@
 package routers
 
 import (
-	"chain-love/asset"
-	"chain-love/middleware"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
-	"chain-love/pkg/util"
+	"senspace/asset"
+	"senspace/middleware"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 	"log"
 	"net/http"
 	"strings"

@@ -1,10 +1,10 @@
 package active_api
 
 import (
-	"chain-love/domain/active"
-	"chain-love/pkg/app"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
+	"senspace/domain/active"
+	"senspace/pkg/app"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/e"
 
 	"github.com/gin-gonic/gin"
 )

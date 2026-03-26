@@ -1,11 +1,11 @@
 package dev_api
 
 import (
-	"chain-love/domain/dev"
-	"chain-love/pkg/app"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
-	"chain-love/service/dev_service"
+	"senspace/domain/dev"
+	"senspace/pkg/app"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/service/dev_service"
 	"strconv"
 
 	"github.com/gin-gonic/gin"

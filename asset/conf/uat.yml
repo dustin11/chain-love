@@ -1,4 +1,5 @@
 app:
+  name: senspace
   pagesize: 10
   jwtsecret: 233
   prefixurl: http://127.0.0.1:8000
@@ -10,7 +11,7 @@ app:
   exportSavePath: export/
   qrCodeSavePath: qrcode/
   fontSavePath: fonts/
-  logSavePath: var/log/smarterp
+  logSavePath: var/log/senspace
   logSaveName: log
   logFileExt: log
   timeFormat: 20060102
@@ -25,7 +26,7 @@ database:
   password: smart@vserp
   #docker连接地址 端口非导出的端口
   host: mysql:3306
-  name: smarterp
+  name: senspace
 redis:
   host: ${s90}:6379
   password:

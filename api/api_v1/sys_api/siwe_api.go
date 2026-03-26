@@ -1,9 +1,9 @@
 package sys_api
 
 // import (
-// 	"chain-love/pkg/app"
-// 	"chain-love/pkg/e"
-// 	"chain-love/service/user_service"
+// 	"senspace/pkg/app"
+// 	"senspace/pkg/e"
+// 	"senspace/service/user_service"
 
 // 	"github.com/gin-gonic/gin"
 // 	"github.com/spruceid/siwe-go"

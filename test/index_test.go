@@ -1,8 +1,8 @@
 package test
 
 import (
-	"chain-love/domain/ds/enum"
-	r "chain-love/routers"
+	"senspace/domain/ds/enum"
+	r "senspace/routers"
 	"fmt"
 	"net/http"
 	"net/http/httptest"

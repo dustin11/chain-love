@@ -1,8 +1,8 @@
 package sys
 
 import (
-	"chain-love/domain"
-	page2 "chain-love/domain/sys/page"
+	"senspace/domain"
+	page2 "senspace/domain/sys/page"
 	"log"
 )
 

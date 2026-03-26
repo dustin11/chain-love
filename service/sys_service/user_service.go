@@ -1,8 +1,8 @@
 package sys_service
 
 import (
-	"chain-love/domain/sys"
-	"chain-love/pkg/e"
+	"senspace/domain/sys"
+	"senspace/pkg/e"
 )
 
 func UserSave(m *sys.User) {

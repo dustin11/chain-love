@@ -1,6 +1,6 @@
 package page
 
-import "chain-love/pkg/app"
+import "senspace/pkg/app"
 
 type RolePage struct {
 	Name string `json:"name" form:"name" example:"名称"`

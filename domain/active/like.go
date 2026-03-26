@@ -1,9 +1,9 @@
 package active
 
 import (
-	"chain-love/domain"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/e"
+	"senspace/domain"
+	"senspace/pkg/app/security"
+	"senspace/pkg/e"
 	"errors"
 
 	"gorm.io/gorm"

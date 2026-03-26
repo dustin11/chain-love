@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"chain-love/domain"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/setting/consts"
+	"senspace/domain"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/app/security"
+	"senspace/pkg/setting/consts"
 	"context"
 	"strings"
 

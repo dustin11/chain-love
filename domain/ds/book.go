@@ -4,9 +4,9 @@ import (
 	"errors"
 	"log"
 
-	"chain-love/domain"
-	"chain-love/domain/ds/page"
-	"chain-love/pkg/app/security"
+	"senspace/domain"
+	"senspace/domain/ds/page"
+	"senspace/pkg/app/security"
 )
 
 type Book struct {

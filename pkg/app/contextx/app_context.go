@@ -1,12 +1,12 @@
 package contextx
 
 import (
-	"chain-love/pkg/app"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/e"
-	"chain-love/pkg/logging"
+	"senspace/pkg/app"
+	"senspace/pkg/app/security"
+	"senspace/pkg/e"
+	"senspace/pkg/logging"
 
-	// "chain-love/pkg/util"
+	// "senspace/pkg/util"
 
 	"github.com/gin-gonic/gin"
 )

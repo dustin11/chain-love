@@ -4,10 +4,10 @@ import (
 	"errors"
 	"log"
 
-	"chain-love/domain"
-	"chain-love/domain/ds/page"
-	"chain-love/domain/ds/vo"
-	"chain-love/pkg/app/security"
+	"senspace/domain"
+	"senspace/domain/ds/page"
+	"senspace/domain/ds/vo"
+	"senspace/pkg/app/security"
 )
 
 type Image struct {

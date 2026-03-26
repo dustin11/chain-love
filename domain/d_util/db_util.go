@@ -1,12 +1,12 @@
 package d_util
 
 import (
-	"chain-love/domain/active"
-	"chain-love/domain/auth"
-	"chain-love/domain/dev"
-	"chain-love/domain/ds"
-	"chain-love/domain/sys"
-	"chain-love/pkg/setting"
+	"senspace/domain/active"
+	"senspace/domain/auth"
+	"senspace/domain/dev"
+	"senspace/domain/ds"
+	"senspace/domain/sys"
+	"senspace/pkg/setting"
 	"database/sql"
 	"fmt"
 	"log"

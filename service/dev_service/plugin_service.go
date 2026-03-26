@@ -1,4 +1,4 @@
-﻿package dev_service
+package dev_service
 
 import (
 	"encoding/json"
@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	"chain-love/domain/dev"
-	"chain-love/domain/dev/vo"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
+	"senspace/domain/dev"
+	"senspace/domain/dev/vo"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
 )
 
 func getPluginRoot(pluginId string) string {

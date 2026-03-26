@@ -1,13 +1,13 @@
 package ds_api
 
 import (
-	"chain-love/domain/ds"
-	"chain-love/domain/ds/page"
-	"chain-love/pkg/app"
-	"chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
-	"chain-love/service/ds_service"
-	"chain-love/service/models"
+	"senspace/domain/ds"
+	"senspace/domain/ds/page"
+	"senspace/pkg/app"
+	"senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/service/ds_service"
+	"senspace/service/models"
 	"strconv"
 
 	"github.com/gin-gonic/gin"

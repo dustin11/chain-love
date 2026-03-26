@@ -1,12 +1,12 @@
 package sys_api
 
 // import (
-// 	"chain-love/domain/sys"
-// 	page2 "chain-love/domain/sys/page"
-// 	"chain-love/pkg/app"
-// 	context "chain-love/pkg/app/contextx"
-// 	"chain-love/pkg/e"
-// 	"chain-love/service/sys_service"
+// 	"senspace/domain/sys"
+// 	page2 "senspace/domain/sys/page"
+// 	"senspace/pkg/app"
+// 	context "senspace/pkg/app/contextx"
+// 	"senspace/pkg/e"
+// 	"senspace/service/sys_service"
 // 	"strconv"
 
 // 	"github.com/gin-gonic/gin"

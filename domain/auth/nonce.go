@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"chain-love/domain"
-	"chain-love/pkg/e"
+	"senspace/domain"
+	"senspace/pkg/e"
 	"time"
 
 	"github.com/spruceid/siwe-go"

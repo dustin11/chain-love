@@ -1,8 +1,8 @@
 package app
 
 import (
-	"chain-love/pkg/app/http"
-	"chain-love/pkg/e"
+	"senspace/pkg/app/http"
+	"senspace/pkg/e"
 
 	"github.com/gin-gonic/gin"
 )

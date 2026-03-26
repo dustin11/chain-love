@@ -1,5 +1,5 @@
 app:
-  name: chainlove
+  name: senspace
   allowedCORSOrigins: [http://localhost:3000, http://127.0.0.1:3000, http://localhost:8081, http://127.0.0.1:8081]
   pagesize: 10
   jwtsecret: 233
@@ -14,10 +14,10 @@ app:
   timeFormat: 20060102
 
   filePath:
-    book: F:\project\chain-love\runtime\book\
-    font: F:\project\chain-love\runtime\font\
-    image: F:\project\chain-love\runtime\image\
-    plugin: F:\project\chain-love\runtime\plugin\
+    book: runtime/book/
+    font: runtime/font/
+    image: runtime/image/
+    plugin: runtime/plugin/
 server:
   runmode: debug
   port: 9010
@@ -28,7 +28,7 @@ database:
   user: root
   password: 123456
   host: ${s90}:3306
-  name: chainlove
+  name: senspace
 redis:
   host: ${s90}:6379
   password:

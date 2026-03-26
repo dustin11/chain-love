@@ -19,18 +19,18 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Gin swagger 示例项目
+  description: Senspace API service
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  title: Gin swagger
+  title: Senspace API
   version: "1.0"
 paths:
   /api/v1/auth/logout:
     post:
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 登出
@@ -46,7 +46,7 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 获取登录 Nonce
@@ -56,7 +56,7 @@ paths:
     post:
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 刷新 Token
@@ -73,7 +73,7 @@ paths:
           $ref: '#/definitions/auth_api.LoginReq'
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: SIWE 登录
@@ -90,11 +90,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 装修类型
@@ -111,11 +111,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 房屋设施
@@ -130,11 +130,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 房源类型
@@ -149,11 +149,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 朝向
@@ -168,11 +168,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 租金包含
@@ -187,11 +187,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 付款方式
@@ -206,11 +206,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 出租状态
@@ -225,11 +225,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 出租类型
@@ -246,11 +246,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 当前用户
@@ -269,11 +269,11 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 获取token
@@ -285,11 +285,11 @@ paths:
       - application/x-json-stream
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 退出
@@ -311,11 +311,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 删除
@@ -337,11 +337,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 单条数据
@@ -400,11 +400,11 @@ paths:
         type: boolean
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       security:
@@ -423,11 +423,11 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       security:
@@ -451,11 +451,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 单条数据
@@ -477,11 +477,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 删除
@@ -503,11 +503,11 @@ paths:
         type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       summary: 单条数据
@@ -566,11 +566,11 @@ paths:
         type: boolean
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       security:
@@ -589,11 +589,11 @@ paths:
           type: string
       responses:
         "200":
-          description: OK
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
         "500":
-          description: Internal Server Error
+          description: Senspace API service
           schema:
             $ref: '#/definitions/e.Error'
       security:

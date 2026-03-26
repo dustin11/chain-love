@@ -1,7 +1,7 @@
 package setting
 
 import (
-	"chain-love/pkg/setting/consts"
+	"senspace/pkg/setting/consts"
 	"io/ioutil"
 	"log"
 	"strings"

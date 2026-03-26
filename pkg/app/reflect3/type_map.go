@@ -1,8 +1,8 @@
 package reflect3
 
 import (
-	"chain-love/domain/ds/enum"
-	"chain-love/pkg/logging"
+	"senspace/domain/ds/enum"
+	"senspace/pkg/logging"
 	"reflect"
 	"runtime"
 	"strings"

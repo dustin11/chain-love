@@ -1,8 +1,11 @@
-# chain-love
+# Senspace
 
-#启动：
+## Run
+
+```bash
 go run .
-#调试
-vsc
-f5
-或调试菜单 launch package
+```
+
+## Debug
+
+Use VS Code and start the `launch package` configuration.

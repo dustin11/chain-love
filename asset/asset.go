@@ -18,7 +18,7 @@
 // statics/css/bootstrap.min.css
 // statics/css/bootstrap.min.css.map
 // statics/database/import.sql
-// statics/database/smarterp.sql
+// statics/database/senspace.sql
 // statics/database/table.sql
 // statics/js/Popper.js
 // statics/js/bootstrap.bundle.js
@@ -470,7 +470,7 @@ var _staticsDatabaseSmarterpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x
 func staticsDatabaseSmarterpSqlBytes() ([]byte, error) {
 	return bindataRead(
 		_staticsDatabaseSmarterpSql,
-		"statics/database/smarterp.sql",
+		"statics/database/senspace.sql",
 	)
 }
 
@@ -480,7 +480,7 @@ func staticsDatabaseSmarterpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "statics/database/smarterp.sql", size: 20526, mode: os.FileMode(438), modTime: time.Unix(1598786477, 0)}
+	info := bindataFileInfo{name: "statics/database/senspace.sql", size: 20526, mode: os.FileMode(438), modTime: time.Unix(1598786477, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -935,7 +935,7 @@ var _bindata = map[string]func() (*asset, error){
 	"statics/css/bootstrap.min.css":            staticsCssBootstrapMinCss,
 	"statics/css/bootstrap.min.css.map":        staticsCssBootstrapMinCssMap,
 	"statics/database/import.sql":              staticsDatabaseImportSql,
-	"statics/database/smarterp.sql":            staticsDatabaseSmarterpSql,
+	"statics/database/senspace.sql":            staticsDatabaseSmarterpSql,
 	"statics/database/table.sql":               staticsDatabaseTableSql,
 	"statics/js/Popper.js":                     staticsJsPopperJs,
 	"statics/js/bootstrap.bundle.js":           staticsJsBootstrapBundleJs,
@@ -1026,7 +1026,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		}},
 		"database": &bintree{nil, map[string]*bintree{
 			"import.sql":   &bintree{staticsDatabaseImportSql, map[string]*bintree{}},
-			"smarterp.sql": &bintree{staticsDatabaseSmarterpSql, map[string]*bintree{}},
+			"senspace.sql": &bintree{staticsDatabaseSmarterpSql, map[string]*bintree{}},
 			"table.sql":    &bintree{staticsDatabaseTableSql, map[string]*bintree{}},
 		}},
 		"js": &bintree{nil, map[string]*bintree{

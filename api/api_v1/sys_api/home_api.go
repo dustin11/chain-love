@@ -1,12 +1,12 @@
 package sys_api
 
 import (
-	"chain-love/pkg/app"
-	context "chain-love/pkg/app/contextx"
-	"chain-love/pkg/e"
+	"senspace/pkg/app"
+	context "senspace/pkg/app/contextx"
+	"senspace/pkg/e"
 
-	// "chain-love/pkg/logging"
-	// "chain-love/pkg/setting/consts"
+	// "senspace/pkg/logging"
+	// "senspace/pkg/setting/consts"
 	// "encoding/json"
 	// "io"
 	// "strconv"

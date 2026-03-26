@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Gin swagger 示例项目",
-        "title": "Gin swagger",
+        "description": "Senspace API service",
+        "title": "Senspace API",
         "contact": {},
         "license": {
             "name": "Apache 2.0",
@@ -19,7 +19,7 @@
                 "summary": "登出",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -36,7 +36,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "用户addr",
+                        "description": "Senspace API service",
                         "name": "addr",
                         "in": "path",
                         "required": true
@@ -44,7 +44,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -60,7 +60,7 @@
                 "summary": "刷新 Token",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -76,7 +76,7 @@
                 "summary": "SIWE 登录",
                 "parameters": [
                     {
-                        "description": "登录数据",
+                        "description": "Senspace API service",
                         "name": "data",
                         "in": "body",
                         "required": true,
@@ -87,7 +87,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -107,20 +107,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -140,20 +140,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -170,20 +170,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -200,20 +200,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -230,20 +230,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -260,20 +260,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -290,20 +290,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -320,20 +320,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -353,20 +353,20 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -385,7 +385,7 @@
                 "summary": "获取token",
                 "parameters": [
                     {
-                        "description": "{'username':'a1@qq.com','password':'123456'}",
+                        "description": "Senspace API service",
                         "name": "para",
                         "in": "body",
                         "required": true,
@@ -396,13 +396,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -421,13 +421,13 @@
                 "summary": "退出",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -447,27 +447,27 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "id",
+                        "description": "Senspace API service",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -487,27 +487,27 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "业务id",
+                        "description": "Senspace API service",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -566,7 +566,7 @@
                     {
                         "type": "string",
                         "example": "省",
-                        "description": "Ccid uint64 `json:\"ccid\" form:\"ccid\" desc:\"记录总数\" example:\"100\"`",
+                        "description": "Senspace API service",
                         "name": "province",
                         "in": "query"
                     },
@@ -602,13 +602,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -629,7 +629,7 @@
                 "summary": "保存",
                 "parameters": [
                     {
-                        "description": "如：{'name':'jii','id':8}",
+                        "description": "Senspace API service",
                         "name": "name",
                         "in": "body",
                         "required": true,
@@ -640,13 +640,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -666,27 +666,27 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "用户addr",
+                        "description": "Senspace API service",
                         "name": "addr",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -706,27 +706,27 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "用户id",
+                        "description": "Senspace API service",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -746,27 +746,27 @@
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "用户id",
+                        "description": "Senspace API service",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "测试token",
+                        "description": "Senspace API service",
                         "name": "Authorization",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -825,7 +825,7 @@
                     {
                         "type": "string",
                         "example": "省",
-                        "description": "Ccid uint64 `json:\"ccid\" form:\"ccid\" desc:\"记录总数\" example:\"100\"`",
+                        "description": "Senspace API service",
                         "name": "province",
                         "in": "query"
                     },
@@ -861,13 +861,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
@@ -888,7 +888,7 @@
                 "summary": "保存",
                 "parameters": [
                     {
-                        "description": "如：{'name':'jii','id':8}",
+                        "description": "Senspace API service",
                         "name": "name",
                         "in": "body",
                         "required": true,
@@ -899,13 +899,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Senspace API service",
                         "schema": {
                             "$ref": "#/definitions/e.Error"
                         }

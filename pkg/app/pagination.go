@@ -1,7 +1,7 @@
 package app
 
 import (
-	"chain-love/pkg/e"
+	"senspace/pkg/e"
 
 	"gorm.io/gorm"
 )

@@ -1,12 +1,12 @@
 package sys
 
 import (
-	"chain-love/domain"
-	page2 "chain-love/domain/sys/page"
-	"chain-love/pkg/app/security"
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
-	"chain-love/pkg/util"
+	"senspace/domain"
+	page2 "senspace/domain/sys/page"
+	"senspace/pkg/app/security"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 
 	// "database/sql"
 	"log"

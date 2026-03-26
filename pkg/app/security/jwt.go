@@ -1,9 +1,9 @@
 package security
 
 import (
-	"chain-love/pkg/e"
-	"chain-love/pkg/setting"
-	"chain-love/pkg/setting/consts"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/setting/consts"
 	"encoding/json"
 	"log"
 	"strconv"
