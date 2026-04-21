@@ -5,6 +5,7 @@ import (
 	"senspace/domain/auth"
 	"senspace/domain/dev"
 	"senspace/domain/ds"
+	"senspace/domain/factory"
 	"senspace/domain/sys"
 	"senspace/pkg/setting"
 	"database/sql"
@@ -30,7 +31,9 @@ var tables = []interface{}{
 }
 
 func InitTable(db *gorm.DB) {
-	for _, table := range tables {
+	allTables := append([]interface{}{}, tables...)
+	allTables = append(allTables, factory.Tables()...)
+	for _, table := range allTables {
 		if !db.Migrator().HasTable(table) {
 			err := db.Migrator().CreateTable(table)
 			if err != nil {

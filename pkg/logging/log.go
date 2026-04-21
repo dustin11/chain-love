@@ -87,44 +87,60 @@ func Setup() {
 }
 
 func print(v ...interface{}) {
-	log.Println(v)
-	logger.Println(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Println(v...)
+	}
 }
 
 func Debug(v ...interface{}) {
 	setPrefix(DEBUG, "")
-	log.Println(v)
-	logger.Println(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Println(v...)
+	}
 }
 
 func Info(v ...interface{}) {
 	setPrefix(INFO, "")
-	log.Println(v)
-	logger.Println(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Println(v...)
+	}
 }
 
 func Warn(v ...interface{}) {
 	setPrefix(WARNING, "")
-	log.Println(v)
-	logger.Println(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Println(v...)
+	}
 }
 
 func Error(v ...interface{}) {
 	setPrefix(ERROR, PROC_ERROR)
-	log.Println(v)
-	logger.Println(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Println(v...)
+	}
 }
 
 func ErrorLocate(statCode int, msg string, locate string) {
 	setPrefix(ERROR, locate)
 	log.Println(msg)
-	logger.Println(statCode, msg)
+	if logger != nil {
+		logger.Println(statCode, msg)
+	}
 }
 
 func Fatal(v ...interface{}) {
 	setPrefix(FATAL, "")
-	log.Println(v)
-	logger.Fatalln(v)
+	log.Println(v...)
+	if logger != nil {
+		logger.Fatalln(v...)
+		return
+	}
+	log.Fatalln(v...)
 }
 
 func setPrefix(level Level, locate string) {
@@ -143,7 +159,9 @@ func setPrefix(level Level, locate string) {
 	} else {
 		logPrefix = fmt.Sprintf("[%s]", levelFlags[level])
 	}
-	logger.SetPrefix(logPrefix)
+	if logger != nil {
+		logger.SetPrefix(logPrefix)
+	}
 }
 
 ////获取真正异常调用点（跳过通用异常调用）

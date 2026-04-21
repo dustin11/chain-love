@@ -28,6 +28,7 @@ runtime/
 # Go workspace file
 go.work
 go.work.sum
+.gocache
 
 # env file
 .env

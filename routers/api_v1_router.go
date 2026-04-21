@@ -5,6 +5,7 @@ import (
 	"senspace/api/api_v1/auth_api"
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
+	"senspace/api/api_v1/factory_api"
 	"senspace/api/api_v1/sys_api"
 	"senspace/middleware"
 	context "senspace/pkg/app/contextx"
@@ -109,6 +110,18 @@ func SetupApiV1Router(router *gin.Engine) {
 		basicRouter.GET("/decorationType", ds_api.GetDecorationType)
 		basicRouter.GET("/furnitureType", ds_api.GetFurnitureType)
 		basicRouter.GET("/houseType", ds_api.GetHouseType)
+	}
+	factoryRouter := apiRouter.Group("/factory")
+	{
+		factoryRouter.POST("/publish", context.WithAppContext(factory_api.PublishPlugin))
+		factoryRouter.GET("/releases/my", context.WithAppContext(factory_api.GetMyReleases))
+		factoryRouter.GET("/market", context.WithAppContext(factory_api.GetMarketList))
+		factoryRouter.GET("/releases/:id", context.WithAppContext(factory_api.GetReleaseDetail))
+		factoryRouter.PATCH("/releases/:id", context.WithAppContext(factory_api.UpdateRelease))
+		factoryRouter.PATCH("/releases/:id/price", context.WithAppContext(factory_api.UpdateReleasePrice))
+		factoryRouter.PATCH("/releases/:id/status", context.WithAppContext(factory_api.UpdateReleaseStatus))
+		factoryRouter.GET("/ownership/my", context.WithAppContext(factory_api.GetMyOwnerships))
+		factoryRouter.POST("/ownership/:id/upgrade", context.WithAppContext(factory_api.UpgradeOwnership))
 	}
 
 }

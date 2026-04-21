@@ -34,8 +34,13 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 使用显式的 CORS 配置：允许凭证且必须指定具体 origin（不能用 "*"）
+	allowedOrigins := setting.Config.App.AllowedCORSOrigins
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"http://localhost"}
+	}
+
 	corsCfg := cors.Config{
-		AllowOrigins:     setting.Config.App.AllowedCORSOrigins,
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -46,6 +51,14 @@ func SetupRouter() *gin.Engine {
 	router.Use(middleware.Logger(), gin.Recovery(), middleware.ErrHandler(), cors.New(corsCfg)) //middleware.Cors()
 	router.NoMethod(e.HandleNotFound)
 	router.NoRoute(e.HandleNotFound)
+	router.GET("/", helloGinAndMethod)
+	router.POST("/", helloGinAndMethod)
+	router.GET("/user/:name", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "用户"+ctx.Param("name")+"已经保存")
+	})
+	router.POST("/user/register", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "ok")
+	})
 
 	tmpPath := "asset/statics/templates/*"
 	if gin.Mode() == gin.TestMode {
