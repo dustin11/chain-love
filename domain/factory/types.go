@@ -40,6 +40,20 @@ const (
 	ReviewStatusRejected ReviewStatus = "rejected"
 )
 
+// 构建状态。
+type BuildStatus string
+
+const (
+	// 待构建。
+	BuildStatusPending BuildStatus = "pending"
+	// 构建中。
+	BuildStatusBuilding BuildStatus = "building"
+	// 构建成功。
+	BuildStatusReady BuildStatus = "ready"
+	// 构建失败。
+	BuildStatusFailed BuildStatus = "failed"
+)
+
 // 升级策略。
 type ReleaseUpgradePolicy string
 
@@ -86,6 +100,13 @@ type PluginManifestSnapshot struct {
 	Description string `json:"description,omitempty"`
 }
 
+// 作者快照。
+type AuthorSnapshot struct {
+	Id     string `json:"id"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar,omitempty"`
+}
+
 // 转 JSON。
 func (m PluginManifestSnapshot) Value() (driver.Value, error) {
 	if isEmptyJSONStruct(m) {
@@ -101,6 +122,23 @@ func (m PluginManifestSnapshot) Value() (driver.Value, error) {
 // 读数据库值。
 func (m *PluginManifestSnapshot) Scan(value interface{}) error {
 	return scanJSONValue(value, m)
+}
+
+// 转 JSON。
+func (a AuthorSnapshot) Value() (driver.Value, error) {
+	if isEmptyJSONStruct(a) {
+		return "{}", nil
+	}
+	bytes, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	return string(bytes), nil
+}
+
+// 读数据库值。
+func (a *AuthorSnapshot) Scan(value interface{}) error {
+	return scanJSONValue(value, a)
 }
 
 // 字符串列表。

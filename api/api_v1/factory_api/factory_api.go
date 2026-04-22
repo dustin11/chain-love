@@ -21,7 +21,7 @@ func PublishPlugin(ctx *contextx.AppContext) {
 	err := ctx.Gin.ShouldBindJSON(&req)
 	e.PanicParameterError(err)
 
-	record, err := factory_service.PublishPlugin(ctx.User.Id, req)
+	record, err := factory_service.PublishPlugin(*ctx.User, req)
 	panicIfFactoryError(err)
 	app.Response(ctx.Gin, e.SuccessData(record))
 }

@@ -18,6 +18,7 @@ import (
 	"senspace/domain/dev"
 	"senspace/domain/factory"
 	factoryvo "senspace/domain/factory/vo"
+	"senspace/pkg/app/security"
 	"senspace/pkg/setting"
 	"senspace/pkg/util"
 
@@ -432,6 +433,29 @@ func toManifestSnapshot(m PluginManifest) factory.PluginManifestSnapshot {
 	}
 }
 
+// 转为作者快照。
+func toAuthorSnapshot(author security.JwtUser) factory.AuthorSnapshot {
+	return factory.AuthorSnapshot{
+		Id:     strconv.FormatUint(author.Id, 10),
+		Name:   strings.TrimSpace(author.Nickname),
+		Avatar: strings.TrimSpace(author.Avatar),
+	}
+}
+
+// 映射作者信息。
+func mapAuthor(snapshot factory.AuthorSnapshot, authorId uint64) AuthorProfile {
+	id := strings.TrimSpace(snapshot.Id)
+	if id == "" {
+		id = strconv.FormatUint(authorId, 10)
+	}
+
+	return AuthorProfile{
+		Id:     id,
+		Name:   strings.TrimSpace(snapshot.Name),
+		Avatar: strings.TrimSpace(snapshot.Avatar),
+	}
+}
+
 // 映射价格历史。
 func mapPriceHistory(record factory.ReleasePriceHistory) PriceHistoryRecord {
 	return PriceHistoryRecord{
@@ -450,6 +474,7 @@ func mapRelease(record factory.Release) PublishRecord {
 	return PublishRecord{
 		Id:             strconv.FormatInt(record.Id, 10),
 		PluginId:       record.PluginId,
+		Author:         mapAuthor(record.AuthorSnapshot, record.AuthorId),
 		Name:           record.Name,
 		Version:        record.Version,
 		Status:         record.Status,
@@ -464,6 +489,10 @@ func mapRelease(record factory.Release) PublishRecord {
 		CoverUrl:       record.CoverUrl,
 		SourceHash:     record.SourceHash,
 		BundleHash:     record.BundleHash,
+		Integrity:      record.Integrity,
+		BuildStatus:    defaultBuildStatus(record.BuildStatus),
+		BuildError:     record.BuildError,
+		BuiltAt:        formatTime(record.BuiltAt),
 		UpgradePolicy:  defaultUpgradePolicy(record.UpgradePolicy),
 		UpgradePrice:   displayUpgradePrice(record.UpgradePolicy, record.UpgradePrice),
 		PublishedAt:    formatTime(record.PublishedAt),
@@ -569,6 +598,14 @@ func trimDecimal(value string) string {
 		return value
 	}
 	return normalizeDecimal(rat.FloatString(18))
+}
+
+// 补默认构建状态。
+func defaultBuildStatus(status factory.BuildStatus) factory.BuildStatus {
+	if status == "" {
+		return factory.BuildStatusPending
+	}
+	return status
 }
 
 // 补默认升级策略。

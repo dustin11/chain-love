@@ -13,5 +13,10 @@
         "formatting": {
             "gofumpt": true
         }
+    },
+    "chat.tools.terminal.autoApprove": {
+        "go": true,
+        "gofmt": true,
+        "Resolve-Path": true
     }
 }

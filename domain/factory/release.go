@@ -7,6 +7,7 @@ type Release struct {
 	Id               int64                  `json:"id,string" gorm:"primaryKey;autoIncrement:false;comment:发布记录ID"`
 	PluginId         string                 `json:"pluginId" gorm:"type:varchar(128);not null;uniqueIndex:idx_factory_release_plugin_version,priority:1;index:idx_factory_release_plugin_current,priority:1;index:idx_factory_release_author,priority:2;comment:插件业务ID"`
 	AuthorId         uint64                 `json:"authorId,omitempty,string" gorm:"type:bigint unsigned;not null;index:idx_factory_release_author,priority:1;comment:作者ID"`
+	AuthorSnapshot   AuthorSnapshot         `json:"authorSnapshot,omitempty" gorm:"type:json;comment:作者快照"`
 	Name             string                 `json:"name" gorm:"type:varchar(255);not null;comment:插件展示名称"`
 	Version          string                 `json:"version" gorm:"type:varchar(64);not null;uniqueIndex:idx_factory_release_plugin_version,priority:2;comment:版本号"`
 	Status           ReleaseStatus          `json:"status" gorm:"type:varchar(32);not null;index:idx_factory_release_status;comment:发布状态"`
@@ -23,6 +24,10 @@ type Release struct {
 	MintedCount      int64                  `json:"mintedCount" gorm:"not null;default:0;comment:已铸造数量"`
 	SourceHash       string                 `json:"sourceHash,omitempty" gorm:"type:varchar(128);comment:源码哈希"`
 	BundleHash       string                 `json:"bundleHash,omitempty" gorm:"type:varchar(128);comment:构建包哈希"`
+	Integrity        string                 `json:"integrity,omitempty" gorm:"type:varchar(255);comment:运行入口完整性校验值"`
+	BuildStatus      BuildStatus            `json:"buildStatus,omitempty" gorm:"type:varchar(32);not null;default:'pending';comment:构建状态"`
+	BuildError       string                 `json:"buildError,omitempty" gorm:"type:varchar(2000);comment:构建失败原因"`
+	BuiltAt          *time.Time             `json:"builtAt,omitempty" gorm:"comment:最近一次构建完成时间"`
 	UpgradePolicy    ReleaseUpgradePolicy   `json:"upgradePolicy,omitempty" gorm:"type:varchar(32);not null;default:'none';comment:升级策略"`
 	UpgradePrice     string                 `json:"upgradePrice,omitempty" gorm:"type:decimal(36,18);comment:升级价格"`
 	PublishedAt      *time.Time             `json:"publishedAt,omitempty" gorm:"comment:发布时间"`

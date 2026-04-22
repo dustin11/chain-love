@@ -17,6 +17,16 @@ type PluginManifest struct {
 	Description string `json:"description,omitempty"`
 }
 
+// 作者摘要。
+type AuthorProfile struct {
+	// 作者用户 ID。
+	Id string `json:"id"`
+	// 作者展示名。
+	Name string `json:"name"`
+	// 作者头像。
+	Avatar string `json:"avatar,omitempty"`
+}
+
 // 可变市场信息。
 type MutableMarketMetadata struct {
 	// 市场摘要。
@@ -122,6 +132,7 @@ type PriceHistoryRecord struct {
 type PublishRecord struct {
 	Id             string                       `json:"id"`
 	PluginId       string                       `json:"pluginId"`
+	Author         AuthorProfile                `json:"author"`
 	Name           string                       `json:"name"`
 	Version        string                       `json:"version"`
 	Status         factory.ReleaseStatus        `json:"status"`
@@ -136,6 +147,10 @@ type PublishRecord struct {
 	CoverUrl       string                       `json:"coverUrl,omitempty"`
 	SourceHash     string                       `json:"sourceHash,omitempty"`
 	BundleHash     string                       `json:"bundleHash,omitempty"`
+	Integrity      string                       `json:"integrity,omitempty"`
+	BuildStatus    factory.BuildStatus          `json:"buildStatus,omitempty"`
+	BuildError     string                       `json:"buildError,omitempty"`
+	BuiltAt        string                       `json:"builtAt,omitempty"`
 	UpgradePolicy  factory.ReleaseUpgradePolicy `json:"upgradePolicy,omitempty"`
 	UpgradePrice   string                       `json:"upgradePrice,omitempty"`
 	PublishedAt    string                       `json:"publishedAt,omitempty"`

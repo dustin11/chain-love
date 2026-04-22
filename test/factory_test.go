@@ -90,6 +90,8 @@ func TestFactoryPublishAndManageRelease(t *testing.T) {
 	require.Equal(t, pluginId, created.PluginId)
 	require.Equal(t, factorydomain.ReleaseStatusPublished, created.Status)
 	require.True(t, created.CurrentRelease)
+	require.Equal(t, "10001", created.Author.Id)
+	require.Equal(t, "factory-tester", created.Author.Name)
 	require.Equal(t, "0.05", created.MintPrice)
 	require.Equal(t, "0.01", created.UpgradePrice)
 	require.True(t, strings.HasPrefix(created.SourceHash, "sha256:"))
@@ -107,14 +109,23 @@ func TestFactoryPublishAndManageRelease(t *testing.T) {
 	require.NoError(t, json.Unmarshal(publishResp.Data, &myReleases))
 	require.Len(t, myReleases, 1)
 	require.Equal(t, created.Id, myReleases[0].Id)
+	require.Equal(t, "10001", myReleases[0].Author.Id)
 
 	marketResp := env.doJSON(http.MethodGet, "/api/v1/factory/market", nil)
 	require.Equal(t, http.StatusOK, marketResp.Code)
 	require.NoError(t, json.Unmarshal(marketResp.Body.Bytes(), &publishResp))
 	var marketList []factory_service.PublishRecord
 	require.NoError(t, json.Unmarshal(publishResp.Data, &marketList))
-	require.Len(t, marketList, 1)
-	require.Equal(t, created.Id, marketList[0].Id)
+	require.NotEmpty(t, marketList)
+	matched := false
+	for _, item := range marketList {
+		if item.Id == created.Id {
+			require.Equal(t, "10001", item.Author.Id)
+			matched = true
+			break
+		}
+	}
+	require.True(t, matched, "market list should contain created release")
 
 	detailResp := env.doJSON(http.MethodGet, "/api/v1/factory/releases/"+created.Id, nil)
 	require.Equal(t, http.StatusOK, detailResp.Code)

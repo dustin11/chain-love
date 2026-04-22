@@ -8,13 +8,14 @@ import (
 
 	"senspace/domain/factory"
 	factoryvo "senspace/domain/factory/vo"
+	"senspace/pkg/app/security"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 // 创建发布记录。
-func PublishPlugin(authorId uint64, req PublishRequest) (*PublishRecord, error) {
+func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord, error) {
 	req, err := validatePublishRequest(req)
 	if err != nil {
 		return nil, err
@@ -28,7 +29,7 @@ func PublishPlugin(authorId uint64, req PublishRequest) (*PublishRecord, error) 
 	var created factory.Release
 	err = tx.Transaction(func(tx *gorm.DB) error {
 		// 先校验插件归属，再校验当前仓库最新版本和 manifest 快照。
-		if _, err := ensurePluginExists(tx, req.PluginId, authorId); err != nil {
+		if _, err := ensurePluginExists(tx, req.PluginId, author.Id); err != nil {
 			return err
 		}
 
@@ -74,7 +75,8 @@ func PublishPlugin(authorId uint64, req PublishRequest) (*PublishRecord, error) 
 		created = factory.Release{
 			Id:               generateID(),
 			PluginId:         req.PluginId,
-			AuthorId:         authorId,
+			AuthorId:         author.Id,
+			AuthorSnapshot:   toAuthorSnapshot(author),
 			Name:             repoManifest.Name,
 			Version:          repoManifest.Version,
 			Status:           factory.ReleaseStatusPublished,
@@ -91,6 +93,7 @@ func PublishPlugin(authorId uint64, req PublishRequest) (*PublishRecord, error) 
 			MintedCount:      0,
 			SourceHash:       sourceHash,
 			BundleHash:       bundleHash,
+			BuildStatus:      factory.BuildStatusPending,
 			UpgradePolicy:    req.Release.UpgradePolicy,
 			UpgradePrice:     zeroIfEmpty(req.Release.UpgradePrice),
 			PublishedAt:      nowPtr(now),
