@@ -1,0 +1,382 @@
+package factory_service
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"senspace/domain/factory"
+	"senspace/pkg/setting"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+const maxBuildErrorLength = 2000
+
+// PluginBuildRequest 表示插件构建请求。
+type PluginBuildRequest struct {
+	PluginId  string
+	Version   string
+	ReleaseId int64
+	SourceDir string
+	OutputDir string
+	Manifest  PluginManifest
+}
+
+// PluginBuildResult 表示插件构建结果。
+type PluginBuildResult struct {
+	BundleHash string
+	Integrity  string
+	BuiltAt    time.Time
+}
+
+// PluginBuildExecutor 表示插件构建执行器。
+type PluginBuildExecutor interface {
+	Build(ctx context.Context, req PluginBuildRequest) (*PluginBuildResult, error)
+}
+
+type pluginBuildSettings struct {
+	BuilderImage string
+	Timeout      time.Duration
+	CPU          string
+	Memory       string
+	PidsLimit    int
+	Tmpfs        string
+}
+
+type dockerPluginBuildExecutor struct{}
+
+type runtimeManifestFile struct {
+	BundleHash string `json:"bundleHash"`
+	Integrity  string `json:"integrity"`
+}
+
+var pluginBuildExecutor PluginBuildExecutor = dockerPluginBuildExecutor{}
+
+// SetPluginBuildExecutorForTest 设置测试用构建执行器。
+func SetPluginBuildExecutorForTest(executor PluginBuildExecutor) func() {
+	previous := pluginBuildExecutor
+	pluginBuildExecutor = executor
+	return func() {
+		pluginBuildExecutor = previous
+	}
+}
+
+// 执行插件构建，并在成功后提升为当前主推版本。
+func executeReleaseBuild(release factory.Release) (factory.Release, error) {
+	tx, err := db()
+	if err != nil {
+		return release, err
+	}
+
+	if err := tx.Model(&factory.Release{}).
+		Where("id = ?", release.Id).
+		Updates(map[string]interface{}{
+			"build_status": factory.BuildStatusBuilding,
+			"build_error":  "",
+		}).Error; err != nil {
+		return release, err
+	}
+	release.BuildStatus = factory.BuildStatusBuilding
+	release.BuildError = ""
+
+	req := PluginBuildRequest{
+		PluginId:  release.PluginId,
+		Version:   release.Version,
+		ReleaseId: release.Id,
+		SourceDir: getPluginSourceSnapshotRoot(release.PluginId, release.Id),
+		OutputDir: getPluginRuntimeReleaseRoot(release.PluginId, release.Version, release.Id),
+		Manifest: PluginManifest{
+			Name:        release.ManifestSnapshot.Name,
+			Version:     release.ManifestSnapshot.Version,
+			Entry:       release.ManifestSnapshot.Entry,
+			Description: release.ManifestSnapshot.Description,
+		},
+	}
+
+	buildCtx, cancel := context.WithTimeout(context.Background(), pluginBuildSettingsFromConfig().Timeout)
+	defer cancel()
+
+	result, buildErr := pluginBuildExecutor.Build(buildCtx, req)
+	if buildErr != nil {
+		message := truncateBuildError(buildErr.Error())
+		updateErr := tx.Model(&factory.Release{}).
+			Where("id = ?", release.Id).
+			Updates(map[string]interface{}{
+				"build_status": factory.BuildStatusFailed,
+				"build_error":  message,
+			}).Error
+		if updateErr != nil {
+			return release, updateErr
+		}
+		release.BuildStatus = factory.BuildStatusFailed
+		release.BuildError = message
+		return release, buildErr
+	}
+
+	if result == nil {
+		return release, fmt.Errorf("plugin build result is nil")
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		var fresh factory.Release
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&fresh, "id = ?", release.Id).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&factory.Release{}).
+			Where("plugin_id = ? AND current_release = ?", fresh.PluginId, true).
+			Update("current_release", false).Error; err != nil {
+			return err
+		}
+
+		builtAt := result.BuiltAt
+		if builtAt.IsZero() {
+			builtAt = time.Now()
+		}
+
+		fresh.Status = factory.ReleaseStatusPublished
+		fresh.CurrentRelease = true
+		fresh.BundleHash = strings.TrimSpace(result.BundleHash)
+		fresh.Integrity = strings.TrimSpace(result.Integrity)
+		fresh.BuildStatus = factory.BuildStatusReady
+		fresh.BuildError = ""
+		fresh.BuiltAt = nowPtr(builtAt)
+		if fresh.PublishedAt == nil {
+			fresh.PublishedAt = nowPtr(builtAt)
+		}
+
+		if err := tx.Save(&fresh).Error; err != nil {
+			return err
+		}
+		release = fresh
+		return nil
+	})
+	if err != nil {
+		return release, err
+	}
+
+	return release, nil
+}
+
+func (dockerPluginBuildExecutor) Build(ctx context.Context, req PluginBuildRequest) (*PluginBuildResult, error) {
+	settings := pluginBuildSettingsFromConfig()
+	if settings.BuilderImage == "" {
+		return nil, fmt.Errorf("pluginBuilderImage 未配置")
+	}
+	if err := os.MkdirAll(req.OutputDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	args := []string{
+		"run", "--rm",
+		"--network=none",
+		"--read-only",
+		"--tmpfs", settings.Tmpfs,
+		"--cpus", settings.CPU,
+		"--memory", settings.Memory,
+		"--pids-limit", strconv.Itoa(settings.PidsLimit),
+		"--security-opt=no-new-privileges:true",
+		"--cap-drop=ALL",
+		"-u", "1000:1000",
+		"-v", req.SourceDir + ":/work/src:ro",
+		"-v", req.OutputDir + ":/work/out:rw",
+		settings.BuilderImage,
+		"--src", "/work/src",
+		"--out", "/work/out",
+		"--plugin-id", req.PluginId,
+		"--version", req.Version,
+		"--release-id", strconv.FormatInt(req.ReleaseId, 10),
+	}
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if message == "" {
+			message = err.Error()
+		}
+		return nil, fmt.Errorf("插件构建失败: %s", message)
+	}
+
+	result, err := readRuntimeBuildResult(req.OutputDir)
+	if err != nil {
+		return nil, err
+	}
+	if result.BuiltAt.IsZero() {
+		result.BuiltAt = time.Now()
+	}
+	return result, nil
+}
+
+func pluginBuildSettingsFromConfig() pluginBuildSettings {
+	timeout := setting.Config.App.PluginBuildTimeoutSec
+	if timeout <= 0 {
+		timeout = 120
+	}
+	pidsLimit := setting.Config.App.PluginBuildPidsLimit
+	if pidsLimit <= 0 {
+		pidsLimit = 128
+	}
+
+	settings := pluginBuildSettings{
+		BuilderImage: strings.TrimSpace(setting.Config.App.PluginBuilderImage),
+		Timeout:      time.Duration(timeout) * time.Second,
+		CPU:          strings.TrimSpace(setting.Config.App.PluginBuildCPU),
+		Memory:       strings.TrimSpace(setting.Config.App.PluginBuildMemory),
+		PidsLimit:    pidsLimit,
+		Tmpfs:        strings.TrimSpace(setting.Config.App.PluginBuildTmpfs),
+	}
+	if settings.CPU == "" {
+		settings.CPU = "1.5"
+	}
+	if settings.Memory == "" {
+		settings.Memory = "512m"
+	}
+	if settings.Tmpfs == "" {
+		settings.Tmpfs = "/tmp:rw,noexec,nosuid,size=256m"
+	}
+	return settings
+}
+
+// 冻结源码目录并生成 manifest 快照。
+func snapshotPluginSource(versionRoot string, pluginId string, releaseId int64, manifest PluginManifest) (string, error) {
+	sourceHash, _, err := buildHashes(versionRoot, manifest)
+	if err != nil {
+		return "", err
+	}
+
+	snapshotRoot := getPluginSourceSnapshotRoot(pluginId, releaseId)
+	if err := os.RemoveAll(snapshotRoot); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(snapshotRoot, 0o755); err != nil {
+		return "", err
+	}
+
+	if err := copyDirectory(versionRoot, snapshotRoot); err != nil {
+		return "", err
+	}
+
+	manifestBytes, err := json.MarshalIndent(toManifestSnapshot(manifest), "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(snapshotRoot, "manifest.snapshot.json"), manifestBytes, 0o644); err != nil {
+		return "", err
+	}
+	return sourceHash, nil
+}
+
+// 读取运行产物信息。
+func readRuntimeBuildResult(outputDir string) (*PluginBuildResult, error) {
+	entryPath := filepath.Join(outputDir, "runtime", "index.js")
+	entryBytes, err := os.ReadFile(entryPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取运行入口失败: %w", err)
+	}
+
+	result := &PluginBuildResult{
+		BundleHash: "",
+		Integrity:  "",
+		BuiltAt:    time.Now(),
+	}
+	sha256Sum := sha256.Sum256(entryBytes)
+	sha384Sum := sha512.Sum384(entryBytes)
+	result.BundleHash = "sha256:" + hex.EncodeToString(sha256Sum[:])
+	result.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
+
+	manifestPath := filepath.Join(outputDir, "runtime-manifest.json")
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err == nil {
+		var manifest runtimeManifestFile
+		if jsonErr := json.Unmarshal(manifestBytes, &manifest); jsonErr == nil {
+			if strings.TrimSpace(manifest.BundleHash) != "" {
+				result.BundleHash = strings.TrimSpace(manifest.BundleHash)
+			}
+			if strings.TrimSpace(manifest.Integrity) != "" {
+				result.Integrity = strings.TrimSpace(manifest.Integrity)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// 获取插件源码快照目录。
+func getPluginSourceSnapshotRoot(pluginId string, releaseId int64) string {
+	baseRoot := strings.TrimSpace(setting.Config.App.PluginSourceRoot)
+	if baseRoot == "" {
+		baseRoot = filepath.Join(setting.Config.App.RuntimeRootPath, "plugin-source")
+	}
+	return filepath.Join(baseRoot, pluginId, strconv.FormatInt(releaseId, 10))
+}
+
+// 获取插件运行产物目录。
+func getPluginRuntimeReleaseRoot(pluginId string, version string, releaseId int64) string {
+	baseRoot := strings.TrimSpace(setting.Config.App.PluginRuntimeRoot)
+	if baseRoot == "" {
+		baseRoot = filepath.Join(setting.Config.App.RuntimeRootPath, "plugin-runtime")
+	}
+	return filepath.Join(baseRoot, pluginId, "v"+version+"-"+strconv.FormatInt(releaseId, 10))
+}
+
+func copyDirectory(src string, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		return copyFile(path, target, info.Mode())
+	})
+}
+
+func copyFile(src string, dst string, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return nil
+}
+
+func truncateBuildError(message string) string {
+	message = strings.TrimSpace(message)
+	if len(message) <= maxBuildErrorLength {
+		return message
+	}
+	return message[:maxBuildErrorLength]
+}

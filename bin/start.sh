@@ -1,22 +1,24 @@
-#!/bin/bash
+#!/bin/sh
+set -eu
 
-PROJECT_NAME=$1
-PROJECT_PATH=$2
+PROJECT_NAME=${1:-senspace}
+PROJECT_PATH=${2:-$(pwd)}
 
-#PID=$(ps aux | grep $JAR_NAME | grep -v 'grep' | awk '{print $2}')
-#if [ ! -z "$PID" ];then
-#    echo "$PROJECT_NAME 的进程ID是：$PID"
-#        echo "即将关闭$PROJECT_NAME"
-#    kill -9 $PID
-#else
-#    echo "$PROJECT_NAME 没有启动"
-#fi
-echo "即将关闭$PROJECT_NAME"
-docker-compose down
-
-echo "开始启动$PROJECT_NAME"
+echo "开始启动 $PROJECT_NAME"
 echo "path $PROJECT_PATH"
-cd $PROJECT_PATH
-docker-compose up --build
 
-echo "项目发布完成"
+if [ -d "$PROJECT_PATH/deploy" ]; then
+  DEPLOY_DIR="$PROJECT_PATH/deploy"
+elif [ -d "$PROJECT_PATH/../deploy" ]; then
+  DEPLOY_DIR="$PROJECT_PATH/../deploy"
+else
+  echo "未找到 deploy 目录"
+  exit 1
+fi
+
+cd "$DEPLOY_DIR"
+docker compose down
+docker compose --profile builder build plugin-builder
+docker compose up -d --build mysql api nginx
+
+echo "项目启动完成"

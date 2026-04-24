@@ -6,6 +6,8 @@ import (
 	"senspace/pkg/app/security"
 	"senspace/pkg/e"
 	"senspace/pkg/i18n"
+	"senspace/pkg/logging"
+	"strings"
 
 	"github.com/spruceid/siwe-go"
 	"gorm.io/gorm"
@@ -22,15 +24,19 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent, lang string) (st
 	// 1. 解析消息
 	msg, err := siwe.ParseMessage(messageStr)
 	e.PanicIfParameterError(err != nil, i18n.Tr(lang, "auth.invalid_message_format"))
-	address := msg.GetAddress().String()
+	address := strings.ToLower(msg.GetAddress().String())
 	nonce := msg.GetNonce()
+	logging.Info("SIWE verify request address=", address, " domain=", msg.GetDomain(), " nonce=", nonce)
 
 	// 2. 验证 Nonce
 	nonceRecord := auth.GetValidNonce(address, nonce)
 
 	// 3. 验证签名
 	_, err = msg.Verify(signature, nil, &nonce, nil)
-	e.PanicServerErrTipMsg(err, i18n.Tr(lang, "auth.signature_verification_failed"))
+	if err != nil {
+		logging.Error("SIWE signature verification failed address=", address, " domain=", msg.GetDomain(), " nonce=", nonce, " error=", err)
+		e.PanicIfParameterError(true, i18n.Tr(lang, "auth.signature_verification_failed"))
+	}
 
 	// 4. 标记 Nonce 为已使用
 	nonceRecord.MarkUsed()
@@ -39,8 +45,9 @@ func VerifyAndLogin(messageStr, signature, clientIp, userAgent, lang string) (st
 	user := sys.User{Addr: address}.GetByAddr()
 	// 自动注册用户
 	if user.Id == 0 {
-		user := sys.User{}
-		user.Init(address).Add()
+		user = (&sys.User{}).Init(address)
+		user.Add()
+		logging.Info("SIWE auto registered user id=", user.Id, " address=", address)
 	}
 
 	// 6. 生成 Access Token (JWT)

@@ -1,17 +1,34 @@
-#打包过的文件直接copy到镜像里执行
-FROM alpine
+ARG GO_IMAGE=golang:1.26.2-alpine
+ARG DOCKER_CLI_IMAGE=docker:28-cli
+ARG API_RUNTIME_IMAGE=alpine:3.21
 
-#COPY ./build/out/linux/* ./app
-#EXPOSE 9000
-#CMD ./gin_hello
+FROM ${GO_IMAGE} AS builder
 
-#整个项目copy到镜像里编译执行
-#FROM golang:latest
-#WORKDIR /app
-#COPY . /app
-#RUN go build .
-#EXPOSE 9000
-#ENTRYPOINT ["./GinHello"]
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
 
-#docker启动
-#docker build -t gin-hello-alpine . && docker run -p 9000:9000 --name gin-hello-alpine gin-hello-alpine
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/senspace main.go
+
+FROM ${DOCKER_CLI_IMAGE} AS dockercli
+
+FROM ${API_RUNTIME_IMAGE}
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=builder /out/senspace /app/senspace
+COPY --from=builder /src/asset /app/asset
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+
+ENV SPIDER_ENV=uat
+
+EXPOSE 9010
+
+CMD ["/app/senspace"]

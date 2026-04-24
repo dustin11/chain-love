@@ -1,9 +1,9 @@
 package setting
 
 import (
-	"senspace/pkg/setting/consts"
 	"io/ioutil"
 	"log"
+	"senspace/pkg/setting/consts"
 	"strings"
 	"time"
 
@@ -34,11 +34,20 @@ type App struct {
 	PageSize           int
 	PrefixUrl          string
 
-	RuntimeRootPath string
+	RuntimeRootPath string `yaml:"runtimerootpath"`
 
 	ImageSavePath string   `yaml:"imageSavePath"`
 	ImageMaxSize  int64    `yaml:"imageMaxSize"`
 	ImageExts     []string `yaml:"imageExts"`
+
+	PluginSourceRoot      string `yaml:"pluginSourceRoot"`
+	PluginRuntimeRoot     string `yaml:"pluginRuntimeRoot"`
+	PluginBuilderImage    string `yaml:"pluginBuilderImage"`
+	PluginBuildTimeoutSec int    `yaml:"pluginBuildTimeoutSec"`
+	PluginBuildCPU        string `yaml:"pluginBuildCpu"`
+	PluginBuildMemory     string `yaml:"pluginBuildMemory"`
+	PluginBuildPidsLimit  int    `yaml:"pluginBuildPidsLimit"`
+	PluginBuildTmpfs      string `yaml:"pluginBuildTmpfs"`
 
 	FilePath FilePath `yaml:"filePath"`
 

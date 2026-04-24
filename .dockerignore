@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vscode
+.codex
+.ai
+bin/out
+build/out
+build/plugin-builder
+main
+mysql_data
+runtime
+tmp
+*.log

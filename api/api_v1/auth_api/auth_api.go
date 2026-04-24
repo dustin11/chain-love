@@ -1,13 +1,13 @@
 package auth_api
 
 import (
+	"net/http"
 	"senspace/pkg/app"
 	"senspace/pkg/e"
 	"senspace/pkg/i18n"
 	"senspace/pkg/logging"
 	"senspace/pkg/setting/consts"
 	"senspace/service/auth_service"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +40,8 @@ type LoginReq struct {
 // @Success 200 {object} e.Error
 // @Router /api/v1/auth/verify [post]
 func Verify(c *gin.Context) {
+	c.Header("X-Senspace-Auth-Verify", "v2")
+
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		e.PanicIfParameterError(err != nil, "参数错误")
@@ -110,6 +112,9 @@ func setAuthCookies(ctx *gin.Context, access, refresh string) {
 	// 使用 consts 中统一的过期配置，MaxAge 以秒为单位
 	accessMaxAge := int(consts.AccessTokenTTL.Seconds())
 	refreshMaxAge := int(consts.RefreshTokenTTL.Seconds())
+	secure, sameSite := cookieSecurity(ctx)
+	ctx.Header("X-Senspace-Auth-Cookie-Secure", boolHeader(secure))
+	logging.Info("set auth cookies secure=", secure, " sameSite=", sameSite, " forwardedProto=", ctx.GetHeader("X-Forwarded-Proto"), " host=", ctx.Request.Host)
 
 	// Access token cookie
 	http.SetCookie(ctx.Writer, &http.Cookie{
@@ -117,8 +122,8 @@ func setAuthCookies(ctx *gin.Context, access, refresh string) {
 		Value:    access,
 		Path:     "/", // 若需更严格限制，改为 "/api/v1/auth" 或其它路径
 		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 		MaxAge:   accessMaxAge,
 	})
 
@@ -128,10 +133,25 @@ func setAuthCookies(ctx *gin.Context, access, refresh string) {
 		Value:    refresh,
 		Path:     "/api/v1/auth", // 建议限定到刷新相关路径
 		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 		MaxAge:   refreshMaxAge,
 	})
+}
+
+func cookieSecurity(ctx *gin.Context) (bool, http.SameSite) {
+	secure := ctx.Request.TLS != nil || strings.EqualFold(ctx.GetHeader("X-Forwarded-Proto"), "https")
+	if secure {
+		return true, http.SameSiteNoneMode
+	}
+	return false, http.SameSiteLaxMode
+}
+
+func boolHeader(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 // 清除 Cookie

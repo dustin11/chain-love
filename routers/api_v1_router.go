@@ -45,6 +45,10 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		bookPub.GET("/ids/planet/:planetId", ds_api.BookGetIdByPlanetId)
 	}
+	factoryPublicRouter := router.Group("/api/v1/factory")
+	{
+		factoryPublicRouter.GET("/market", factory_api.GetPublicMarketList)
+	}
 
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
@@ -115,7 +119,6 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		factoryRouter.POST("/publish", context.WithAppContext(factory_api.PublishPlugin))
 		factoryRouter.GET("/releases/my", context.WithAppContext(factory_api.GetMyReleases))
-		factoryRouter.GET("/market", context.WithAppContext(factory_api.GetMarketList))
 		factoryRouter.GET("/releases/:id", context.WithAppContext(factory_api.GetReleaseDetail))
 		factoryRouter.PATCH("/releases/:id", context.WithAppContext(factory_api.UpdateRelease))
 		factoryRouter.PATCH("/releases/:id/price", context.WithAppContext(factory_api.UpdateReleasePrice))

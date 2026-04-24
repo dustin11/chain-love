@@ -1,26 +1,32 @@
-#!/bin/bash
+#!/bin/sh
+set -eu
 
 PROJECT_NAME="senspace"
 PROJECT_PATH="/usr/local/app/$PROJECT_NAME"
-APP_PATH="bin/out/linux/$PROJECT_NAME"
-SHELL_NAME="start.sh"
-LOG_PATH="/var/log/$PROJECT_NAME"
 
 BASEDIR=$1
 SERVICE=$2
-ENV=$3
+ENV=${3:-uat}
 
-echo "开始部署$ENV 环境"
-cd $BASEDIR
+echo "开始部署 $ENV 环境"
 
-echo "从git更新代码"
-#git pull
+if [ -d "$BASEDIR/deploy" ]; then
+  WORKSPACE_DIR=$BASEDIR
+elif [ -d "$BASEDIR/../deploy" ]; then
+  WORKSPACE_DIR=$(CDPATH= cd -- "$BASEDIR/.." && pwd)
+else
+  echo "未找到 deploy 目录，请从工作区根目录或后端目录执行"
+  exit 1
+fi
 
-echo "开始编译代码 mac - linux"
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $APP_PATH main.go
+cd "$WORKSPACE_DIR"
 
-echo "开始复制$PROJECT_NAME 到服务器$SERVICE"
-ssh root@$SERVICE "mkdir -p $PROJECT_PATH $LOG_PATH"
-scp -r $APP_PATH mysql Dockerfile docker-compose.yml bin/$SHELL_NAME root@$SERVICE:$PROJECT_PATH
+echo "开始复制项目到服务器 $SERVICE"
+ssh root@"$SERVICE" "mkdir -p $PROJECT_PATH /var/log/$PROJECT_NAME"
+scp -r \
+  deploy \
+  senspace \
+  senspace-web \
+  root@"$SERVICE":"$PROJECT_PATH"
 
-ssh root@$SERVICE "cd $PROJECT_PATH && sh $SHELL_NAME $PROJECT_NAME $PROJECT_PATH $ENV"
+ssh root@"$SERVICE" "cd $PROJECT_PATH/deploy && sh scripts/start.sh"

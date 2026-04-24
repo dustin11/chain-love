@@ -1,8 +1,6 @@
 package reflect3
 
 import (
-	"senspace/domain/ds/enum"
-	"senspace/pkg/logging"
 	"reflect"
 	"runtime"
 	"strings"
@@ -81,22 +79,11 @@ func loadGo15Types() {
 func loadGo17Types() {
 	var obj interface{} = reflect.TypeOf(0)
 	sections, offset := typelinks2()
-	var dd = enum.Decoration_Simple
-	println(dd)
 	for i, offs := range offset {
 		rodata := sections[i]
 		for _, off := range offs {
 			(*emptyInterface)(unsafe.Pointer(&obj)).word = resolveTypeOff(unsafe.Pointer(rodata), off)
 			typ := obj.(reflect.Type)
-			var d enum.DecorationType
-			if typ == reflect.TypeOf(d) {
-				logging.Error(typ.Name() + "------" + typ.Kind().String() + "----------" + typ.String())
-			}
-			//暂时没用上 找到自己想要的类型 ？？ 类型全变成了指针
-			if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Int32 {
-
-				logging.Error(typ.Name() + "------" + typ.Kind().String() + "----------" + typ.String())
-			}
 			if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
 				loadedType := typ.Elem()
 				pkgTypes := packages[loadedType.PkgPath()]

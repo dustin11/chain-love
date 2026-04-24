@@ -9,6 +9,8 @@ import (
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/e"
 	"senspace/service/factory_service"
+
+	"github.com/gin-gonic/gin"
 )
 
 // @Summary 创建插件发布记录
@@ -57,19 +59,14 @@ func GetMyReleases(ctx *contextx.AppContext) {
 // @Param currentOnly query bool false "是否只返回当前主推版本"
 // @Success 200 {object} e.Error
 // @Router /api/v1/factory/market [get]
-func GetMarketList(ctx *contextx.AppContext) {
-	query := factory_service.MarketQuery{
-		PluginId: ctx.Gin.Query("pluginId"),
-		Category: ctx.Gin.Query("category"),
-		Status:   ctx.Gin.Query("status"),
-		Tags:     splitCSV(ctx.Gin.Query("tags")),
-	}
-	if raw := ctx.Gin.Query("currentOnly"); raw != "" {
-		value := raw == "true" || raw == "1"
-		query.CurrentOnly = &value
-	}
+func GetPublicMarketList(ctx *gin.Context) {
+	records, err := factory_service.ListMarketReleases(buildMarketQuery(ctx))
+	panicIfFactoryError(err)
+	app.Response(ctx, e.SuccessData(records))
+}
 
-	records, err := factory_service.ListMarketReleases(query)
+func GetMarketList(ctx *contextx.AppContext) {
+	records, err := factory_service.ListMarketReleases(buildMarketQuery(ctx.Gin))
 	panicIfFactoryError(err)
 	app.Response(ctx.Gin, e.SuccessData(records))
 }
@@ -208,4 +205,18 @@ func splitCSV(raw string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+func buildMarketQuery(ctx *gin.Context) factory_service.MarketQuery {
+	query := factory_service.MarketQuery{
+		PluginId: ctx.Query("pluginId"),
+		Category: ctx.Query("category"),
+		Status:   ctx.Query("status"),
+		Tags:     splitCSV(ctx.Query("tags")),
+	}
+	if raw := ctx.Query("currentOnly"); raw != "" {
+		value := raw == "true" || raw == "1"
+		query.CurrentOnly = &value
+	}
+	return query
 }

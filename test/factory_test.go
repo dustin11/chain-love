@@ -2,6 +2,7 @@ package test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,8 +18,10 @@ import (
 	"senspace/pkg/util"
 	"senspace/routers"
 	"senspace/service/factory_service"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -38,11 +41,52 @@ type testAPIResponse struct {
 }
 
 type factoryTestEnv struct {
-	t          *testing.T
-	router     *gin.Engine
-	db         *gorm.DB
-	pluginRoot string
-	user       security.JwtUser
+	t                 *testing.T
+	router            *gin.Engine
+	db                *gorm.DB
+	pluginRoot        string
+	pluginSourceRoot  string
+	pluginRuntimeRoot string
+	user              security.JwtUser
+}
+
+type fakePluginBuildExecutor struct{}
+
+func (fakePluginBuildExecutor) Build(ctx context.Context, req factory_service.PluginBuildRequest) (*factory_service.PluginBuildResult, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	if err := os.MkdirAll(filepath.Join(req.OutputDir, "runtime"), 0o755); err != nil {
+		return nil, err
+	}
+	entryContent := []byte("export const plugin = 'built';\n")
+	if err := os.WriteFile(filepath.Join(req.OutputDir, "runtime", "index.js"), entryContent, 0o644); err != nil {
+		return nil, err
+	}
+
+	manifest := map[string]any{
+		"pluginId":   req.PluginId,
+		"version":    req.Version,
+		"releaseId":  strconv.FormatInt(req.ReleaseId, 10),
+		"bundleHash": "sha256:test-bundle-" + strconv.FormatInt(req.ReleaseId, 10),
+		"integrity":  "sha384:test-integrity-" + strconv.FormatInt(req.ReleaseId, 10),
+	}
+	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(req.OutputDir, "runtime-manifest.json"), manifestBytes, 0o644); err != nil {
+		return nil, err
+	}
+
+	return &factory_service.PluginBuildResult{
+		BundleHash: manifest["bundleHash"].(string),
+		Integrity:  manifest["integrity"].(string),
+		BuiltAt:    time.Now(),
+	}, nil
 }
 
 // 发布与管理流程。
@@ -90,12 +134,17 @@ func TestFactoryPublishAndManageRelease(t *testing.T) {
 	require.Equal(t, pluginId, created.PluginId)
 	require.Equal(t, factorydomain.ReleaseStatusPublished, created.Status)
 	require.True(t, created.CurrentRelease)
+	require.Equal(t, factorydomain.BuildStatusReady, created.BuildStatus)
 	require.Equal(t, "10001", created.Author.Id)
 	require.Equal(t, "factory-tester", created.Author.Name)
 	require.Equal(t, "0.05", created.MintPrice)
 	require.Equal(t, "0.01", created.UpgradePrice)
 	require.True(t, strings.HasPrefix(created.SourceHash, "sha256:"))
 	require.True(t, strings.HasPrefix(created.BundleHash, "sha256:"))
+	require.True(t, strings.HasPrefix(created.Integrity, "sha384:"))
+	require.NotEmpty(t, created.BuiltAt)
+	require.FileExists(t, filepath.Join(env.pluginSourceRoot, pluginId, created.Id, "manifest.snapshot.json"))
+	require.FileExists(t, filepath.Join(env.pluginRuntimeRoot, pluginId, "v1.0.0-"+created.Id, "runtime", "index.js"))
 
 	dupResp := env.doJSON(http.MethodPost, "/api/v1/factory/publish", publishPayload)
 	require.Equal(t, http.StatusBadRequest, dupResp.Code)
@@ -351,9 +400,14 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 	loadFactoryDevConfig(t)
 
 	pluginRoot := t.TempDir()
+	pluginSourceRoot := t.TempDir()
+	pluginRuntimeRoot := t.TempDir()
 
-	// 数据库使用 dev 配置，插件目录改为临时路径。
+	// 数据库使用 dev 配置，插件和构建目录改为临时路径。
 	setting.Config.App.FilePath.Plugin = pluginRoot
+	setting.Config.App.PluginSourceRoot = pluginSourceRoot
+	setting.Config.App.PluginRuntimeRoot = pluginRuntimeRoot
+	setting.Config.App.PluginBuilderImage = "senspace/plugin-builder:test"
 
 	domain.Setup()
 	require.NotNil(t, domain.Db)
@@ -364,11 +418,15 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 	router.Use(middleware.ErrHandler())
 	routers.SetupApiV1Router(router)
 
+	resetBuildExecutor := factory_service.SetPluginBuildExecutorForTest(fakePluginBuildExecutor{})
+
 	env := &factoryTestEnv{
-		t:          t,
-		router:     router,
-		db:         domain.Db,
-		pluginRoot: pluginRoot,
+		t:                 t,
+		router:            router,
+		db:                domain.Db,
+		pluginRoot:        pluginRoot,
+		pluginSourceRoot:  pluginSourceRoot,
+		pluginRuntimeRoot: pluginRuntimeRoot,
 		user: security.JwtUser{
 			Id:       10001,
 			Addr:     "0x1234567890",
@@ -382,6 +440,7 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 		}
 		domain.Db = originalDB
 		*setting.Config = originalConfig
+		resetBuildExecutor()
 		if originalEnv == "" {
 			_ = os.Unsetenv("SPIDER_ENV")
 		} else {

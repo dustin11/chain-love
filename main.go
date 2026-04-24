@@ -27,10 +27,12 @@ func init() {
 	i18n.Setup() // 初始化多语言
 	// ensure database exists before opening connection (requires CREATE DATABASE privilege)
 	if err := d_util.EnsureDatabaseExists(setting.Config.Database.Name); err != nil {
-		logging.Error("ensure database exists error:", err)
-		return
+		log.Fatalf("ensure database exists error: %v", err)
 	}
 	domain.Setup()
+	if domain.Db == nil {
+		log.Fatal("database setup failed: domain.Db is nil")
+	}
 	d_util.InitTable(domain.Db)
 	util.Setup()
 }

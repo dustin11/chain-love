@@ -25,30 +25,35 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 	if err != nil {
 		return nil, err
 	}
+	if _, err := ensurePluginExists(tx, req.PluginId, author.Id); err != nil {
+		return nil, err
+	}
+
+	repoVersion, versionRoot, err := resolveLatestPluginVersionRoot(req.PluginId)
+	if err != nil {
+		return nil, err
+	}
+	if repoVersion != req.Manifest.Version {
+		return nil, newConflictError("请求版本不是当前插件仓库的最新版本")
+	}
+
+	repoManifest, err := loadManifestFromDir(versionRoot)
+	if err != nil {
+		return nil, err
+	}
+	if err := compareManifest(req.Manifest, repoManifest); err != nil {
+		return nil, err
+	}
+
+	releaseID := generateID()
+	sourceHash, err := snapshotPluginSource(versionRoot, req.PluginId, releaseID, repoManifest)
+	if err != nil {
+		return nil, err
+	}
 
 	var created factory.Release
 	err = tx.Transaction(func(tx *gorm.DB) error {
-		// 先校验插件归属，再校验当前仓库最新版本和 manifest 快照。
-		if _, err := ensurePluginExists(tx, req.PluginId, author.Id); err != nil {
-			return err
-		}
-
-		repoVersion, versionRoot, err := resolveLatestPluginVersionRoot(req.PluginId)
-		if err != nil {
-			return err
-		}
-		if repoVersion != req.Manifest.Version {
-			return newConflictError("请求版本不是当前插件仓库的最新版本")
-		}
-
-		repoManifest, err := loadManifestFromDir(versionRoot)
-		if err != nil {
-			return err
-		}
-		if err := compareManifest(req.Manifest, repoManifest); err != nil {
-			return err
-		}
-
+		// 事务内再次校验版本唯一性，避免并发创建重复记录。
 		var duplicate int64
 		if err := tx.Model(&factory.Release{}).
 			Where("plugin_id = ? AND version = ?", req.PluginId, req.Manifest.Version).
@@ -59,29 +64,16 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 			return newConflictError("此版本已发布！")
 		}
 
-		sourceHash, bundleHash, err := buildHashes(versionRoot, repoManifest)
-		if err != nil {
-			return err
-		}
-
-		now := time.Now()
-		// 同一插件只能有一个当前主推版本，发布新版本前先清空旧标记。
-		if err := tx.Model(&factory.Release{}).
-			Where("plugin_id = ? AND current_release = ?", req.PluginId, true).
-			Update("current_release", false).Error; err != nil {
-			return err
-		}
-
 		created = factory.Release{
-			Id:               generateID(),
+			Id:               releaseID,
 			PluginId:         req.PluginId,
 			AuthorId:         author.Id,
 			AuthorSnapshot:   toAuthorSnapshot(author),
 			Name:             repoManifest.Name,
 			Version:          repoManifest.Version,
-			Status:           factory.ReleaseStatusPublished,
+			Status:           factory.ReleaseStatusDraft,
 			ReviewStatus:     factory.ReviewStatusApproved,
-			CurrentRelease:   true,
+			CurrentRelease:   false,
 			ManifestSnapshot: toManifestSnapshot(repoManifest),
 			Summary:          req.Release.Summary,
 			Category:         req.Release.Category,
@@ -92,16 +84,18 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 			MintPrice:        req.Release.MintPrice,
 			MintedCount:      0,
 			SourceHash:       sourceHash,
-			BundleHash:       bundleHash,
 			BuildStatus:      factory.BuildStatusPending,
 			UpgradePolicy:    req.Release.UpgradePolicy,
 			UpgradePrice:     zeroIfEmpty(req.Release.UpgradePrice),
-			PublishedAt:      nowPtr(now),
-			UpdatedAt:        now,
 		}
 
 		return tx.Create(&created).Error
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	created, err = executeReleaseBuild(created)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +150,7 @@ func ListMarketReleases(query MarketQuery) ([]PublishRecord, error) {
 	if currentOnly {
 		dbq = dbq.Where("current_release = ?", true)
 	}
+	dbq = dbq.Where("build_status = ?", factory.BuildStatusReady)
 	if query.PluginId != "" {
 		dbq = dbq.Where("plugin_id = ?", strings.TrimSpace(query.PluginId))
 	}
@@ -354,6 +349,9 @@ func UpdateReleaseStatus(authorId uint64, req UpdateReleaseStatusRequest) (*Publ
 		if release.Status == factory.ReleaseStatusClosed && req.Status == factory.ReleaseStatusPublished {
 			return newConflictError("已关闭的发布记录不能重新上架")
 		}
+		if req.Status == factory.ReleaseStatusPublished && defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
+			return newConflictError("构建未完成的发布记录不能上架")
+		}
 		if release.Status == req.Status {
 			return nil
 		}
@@ -441,6 +439,9 @@ func RecordMint(req RecordMintRequest) (*factory.MintRecord, error) {
 		}
 		if release.Status != factory.ReleaseStatusPublished {
 			return newConflictError("当前发布记录不可铸造")
+		}
+		if defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
+			return newConflictError("当前发布记录构建未完成")
 		}
 		if req.Quantity > release.MintPer {
 			return newParameterError("铸造数量不能超过单次最大铸造量")
@@ -571,6 +572,9 @@ func UpgradeOwnership(userId uint64, req UpgradeOwnershipRequest) (*UpgradeRecor
 		default:
 			return newConflictError("目标发布记录当前不可升级")
 		}
+		if defaultBuildStatus(targetRelease.BuildStatus) != factory.BuildStatusReady {
+			return newConflictError("目标发布记录构建未完成")
+		}
 
 		upgradeType, paidAmount, allowed := releaseAllowsUpgrade(currentRelease.Version, targetRelease)
 		if !allowed {
@@ -627,7 +631,7 @@ func buildOwnershipView(tx *gorm.DB, ownership factory.UserOwnership) (factoryvo
 // 查询当前主推版本。
 func findCurrentRelease(tx *gorm.DB, pluginId string) (*factory.Release, error) {
 	var release factory.Release
-	err := tx.Where("plugin_id = ? AND current_release = ?", pluginId, true).
+	err := tx.Where("plugin_id = ? AND current_release = ? AND build_status = ?", pluginId, true, factory.BuildStatusReady).
 		Order("published_at desc").
 		First(&release).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -642,7 +646,7 @@ func findCurrentRelease(tx *gorm.DB, pluginId string) (*factory.Release, error) 
 // 回补主推版本。
 func promoteFallbackCurrentRelease(tx *gorm.DB, pluginId string, excludedId int64) error {
 	var candidates []factory.Release
-	if err := tx.Where("plugin_id = ? AND id <> ? AND status IN ?", pluginId, excludedId, []factory.ReleaseStatus{
+	if err := tx.Where("plugin_id = ? AND id <> ? AND build_status = ? AND status IN ?", pluginId, excludedId, factory.BuildStatusReady, []factory.ReleaseStatus{
 		factory.ReleaseStatusPublished,
 		factory.ReleaseStatusPaused,
 		factory.ReleaseStatusSoldOut,

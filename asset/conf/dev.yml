@@ -5,6 +5,14 @@ app:
   jwtsecret: 233
   prefixurl: http://127.0.0.1:8000
   runtimerootpath: runtime/
+  pluginSourceRoot: F:\project\senspace\runtime\plugin-source\
+  pluginRuntimeRoot: F:\project\senspace\runtime\plugin-runtime\
+  pluginBuilderImage: senspace/plugin-builder:latest
+  pluginBuildTimeoutSec: 120
+  pluginBuildCpu: "1.5"
+  pluginBuildMemory: 512m
+  pluginBuildPidsLimit: 128
+  pluginBuildTmpfs: /tmp:rw,noexec,nosuid,size=256m
   # MB
   imageMaxSize: 20024000
   imageExts: [jpg,jpeg,png,gif]
