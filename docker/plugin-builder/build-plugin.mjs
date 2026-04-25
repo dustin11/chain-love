@@ -9,6 +9,131 @@ const externalDependencies = [
   '@senspace/plugin-framework',
 ];
 
+const externalModuleMap = {
+  three: '/plugin-host/three.module.js',
+  '@senspace/plugin-core': '/plugin-host/plugin-core.js',
+  '@senspace/plugin-framework': '/plugin-host/plugin-framework.js',
+};
+
+function toPosixPath(value) {
+  return String(value).split(path.sep).join('/');
+}
+
+function normalizeDependencyName(specifier) {
+  const normalized = String(specifier || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  for (const [dependencyName, externalPath] of Object.entries(externalModuleMap)) {
+    if (normalized === externalPath) {
+      return dependencyName;
+    }
+  }
+  if (normalized.startsWith('@')) {
+    const parts = normalized.split('/');
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : normalized;
+  }
+  return normalized.split('/')[0];
+}
+
+function extractNodeModulesDependency(inputPath) {
+  const normalized = toPosixPath(inputPath);
+  const marker = 'node_modules/';
+  const index = normalized.lastIndexOf(marker);
+  if (index < 0) {
+    return '';
+  }
+  return normalizeDependencyName(normalized.slice(index + marker.length));
+}
+
+function createFactoryWrapper({ entryImportPath, pluginId }) {
+  return `
+import PluginEntry from ${JSON.stringify(entryImportPath)};
+
+const defaultPluginId = ${JSON.stringify(pluginId)};
+
+function normalizeFactory(entry) {
+  const candidate =
+    entry && typeof entry === 'object' && 'default' in entry
+      ? entry.default
+      : entry;
+
+  if (
+    candidate &&
+    typeof candidate === 'object' &&
+    typeof candidate.lazyCreate === 'function'
+  ) {
+    return {
+      pluginId: candidate.pluginId || defaultPluginId,
+      lazyCreate(context, options) {
+        return candidate.lazyCreate(context, options);
+      },
+    };
+  }
+
+  if (typeof candidate === 'function') {
+    if (typeof candidate.lazyCreate === 'function') {
+      return {
+        pluginId: candidate.pluginId || defaultPluginId,
+        lazyCreate(context, options) {
+          return candidate.lazyCreate(context, options);
+        },
+      };
+    }
+
+    return {
+      pluginId: defaultPluginId,
+      async lazyCreate(context, options) {
+        return new candidate(context, options);
+      },
+    };
+  }
+
+  throw new Error(
+    'plugin entry must export a plugin class or plugin factory as its default export'
+  );
+}
+
+const pluginFactory = normalizeFactory(PluginEntry);
+
+export const pluginId = pluginFactory.pluginId;
+export default pluginFactory;
+`;
+}
+
+function collectRuntimeDependencies(metafile) {
+  const externalSet = new Set();
+  const bundledSet = new Set();
+
+  for (const output of Object.values(metafile?.outputs || {})) {
+    for (const dependency of output.imports || []) {
+      if (!dependency.external) {
+        continue;
+      }
+      const normalizedName = normalizeDependencyName(dependency.path);
+      if (normalizedName) {
+        externalSet.add(normalizedName);
+      }
+    }
+  }
+
+  for (const inputPath of Object.keys(metafile?.inputs || {})) {
+    const dependencyName = extractNodeModulesDependency(inputPath);
+    if (dependencyName && !externalSet.has(dependencyName)) {
+      bundledSet.add(dependencyName);
+    }
+  }
+
+  return {
+    externalDependencies: Array.from(externalSet)
+      .sort()
+      .map((name) => ({ name, mode: 'external' })),
+    bundledDependencies: Array.from(bundledSet)
+      .sort()
+      .map((name) => ({ name, mode: 'bundled' })),
+  };
+}
+
 function parseArgs(argv) {
   const result = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -62,6 +187,10 @@ async function main() {
   if (!(await fileExists(entryFile))) {
     throw new Error(`entry file not found: ${entry}`);
   }
+  const entryImportPath = (() => {
+    const relativePath = toPosixPath(path.relative(srcDir, entryFile));
+    return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
+  })();
 
   await fs.mkdir(path.join(outDir, 'runtime'), { recursive: true });
   await fs.copyFile(
@@ -75,8 +204,38 @@ async function main() {
     );
   });
 
-  await build({
-    entryPoints: [entryFile],
+  const buildResult = await build({
+    plugins: [
+      {
+        name: 'senspace-plugin-externals',
+        setup(pluginBuild) {
+          for (const [dependencyName, externalPath] of Object.entries(
+            externalModuleMap
+          )) {
+            pluginBuild.onResolve(
+              {
+                filter: new RegExp(
+                  `^${dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
+                ),
+              },
+              () => ({
+                path: externalPath,
+                external: true,
+              })
+            );
+          }
+        },
+      },
+    ],
+    stdin: {
+      contents: createFactoryWrapper({
+        entryImportPath,
+        pluginId,
+      }),
+      resolveDir: srcDir,
+      sourcefile: '__factory_entry__.ts',
+      loader: 'ts',
+    },
     outdir: path.join(outDir, 'runtime'),
     entryNames: 'index',
     bundle: true,
@@ -88,7 +247,6 @@ async function main() {
     metafile: true,
     chunkNames: 'chunks/[name]-[hash]',
     assetNames: 'assets/[name]-[hash]',
-    external: externalDependencies,
   });
 
   const runtimeEntryPath = path.join(outDir, 'runtime', 'index.js');
@@ -96,17 +254,15 @@ async function main() {
   const bundleHash = `sha256:${crypto.createHash('sha256').update(runtimeEntry).digest('hex')}`;
   const integrity = `sha384-${crypto.createHash('sha384').update(runtimeEntry).digest('base64')}`;
 
+  const runtimeDependencies = collectRuntimeDependencies(buildResult.metafile);
   const runtimeManifest = {
     pluginId,
     version,
     releaseId,
     bundleHash,
     integrity,
-    externalDependencies: externalDependencies.map((name) => ({
-      name,
-      mode: 'external',
-    })),
-    bundledDependencies: [],
+    externalDependencies: runtimeDependencies.externalDependencies,
+    bundledDependencies: runtimeDependencies.bundledDependencies,
   };
   await fs.writeFile(
     path.join(outDir, 'runtime-manifest.json'),

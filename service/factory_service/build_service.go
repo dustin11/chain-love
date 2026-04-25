@@ -37,9 +37,11 @@ type PluginBuildRequest struct {
 
 // PluginBuildResult 表示插件构建结果。
 type PluginBuildResult struct {
-	BundleHash string
-	Integrity  string
-	BuiltAt    time.Time
+	BundleHash           string
+	Integrity            string
+	BuiltAt              time.Time
+	ExternalDependencies []string
+	BundledDependencies  []string
 }
 
 // PluginBuildExecutor 表示插件构建执行器。
@@ -59,8 +61,19 @@ type pluginBuildSettings struct {
 type dockerPluginBuildExecutor struct{}
 
 type runtimeManifestFile struct {
-	BundleHash string `json:"bundleHash"`
-	Integrity  string `json:"integrity"`
+	PluginId             string                      `json:"pluginId"`
+	Version              string                      `json:"version"`
+	ReleaseId            string                      `json:"releaseId"`
+	BundleHash           string                      `json:"bundleHash"`
+	Integrity            string                      `json:"integrity"`
+	ExternalDependencies []runtimeManifestDependency `json:"externalDependencies"`
+	BundledDependencies  []runtimeManifestDependency `json:"bundledDependencies"`
+}
+
+type runtimeManifestDependency struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	Mode    string `json:"mode"`
 }
 
 var pluginBuildExecutor PluginBuildExecutor = dockerPluginBuildExecutor{}
@@ -211,7 +224,7 @@ func (dockerPluginBuildExecutor) Build(ctx context.Context, req PluginBuildReque
 		return nil, fmt.Errorf("插件构建失败: %s", message)
 	}
 
-	result, err := readRuntimeBuildResult(req.OutputDir)
+	result, err := readRuntimeBuildResult(req.OutputDir, req)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +294,7 @@ func snapshotPluginSource(versionRoot string, pluginId string, releaseId int64, 
 }
 
 // 读取运行产物信息。
-func readRuntimeBuildResult(outputDir string) (*PluginBuildResult, error) {
+func readRuntimeBuildResult(outputDir string, req PluginBuildRequest) (*PluginBuildResult, error) {
 	entryPath := filepath.Join(outputDir, "runtime", "index.js")
 	entryBytes, err := os.ReadFile(entryPath)
 	if err != nil {
@@ -289,30 +302,108 @@ func readRuntimeBuildResult(outputDir string) (*PluginBuildResult, error) {
 	}
 
 	result := &PluginBuildResult{
-		BundleHash: "",
-		Integrity:  "",
-		BuiltAt:    time.Now(),
+		BundleHash:           "",
+		Integrity:            "",
+		BuiltAt:              time.Now(),
+		ExternalDependencies: nil,
+		BundledDependencies:  nil,
 	}
 	sha256Sum := sha256.Sum256(entryBytes)
 	sha384Sum := sha512.Sum384(entryBytes)
-	result.BundleHash = "sha256:" + hex.EncodeToString(sha256Sum[:])
-	result.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
+	actualBundleHash := "sha256:" + hex.EncodeToString(sha256Sum[:])
+	actualIntegrity := "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
 
 	manifestPath := filepath.Join(outputDir, "runtime-manifest.json")
 	manifestBytes, err := os.ReadFile(manifestPath)
-	if err == nil {
-		var manifest runtimeManifestFile
-		if jsonErr := json.Unmarshal(manifestBytes, &manifest); jsonErr == nil {
-			if strings.TrimSpace(manifest.BundleHash) != "" {
-				result.BundleHash = strings.TrimSpace(manifest.BundleHash)
-			}
-			if strings.TrimSpace(manifest.Integrity) != "" {
-				result.Integrity = strings.TrimSpace(manifest.Integrity)
-			}
-		}
+	if err != nil {
+		return nil, fmt.Errorf("读取运行清单失败: %w", err)
 	}
 
+	var manifest runtimeManifestFile
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return nil, fmt.Errorf("解析运行清单失败: %w", err)
+	}
+	if err := validateRuntimeManifest(manifest, req, actualBundleHash, actualIntegrity); err != nil {
+		return nil, err
+	}
+
+	result.BundleHash = actualBundleHash
+	result.Integrity = actualIntegrity
+	result.ExternalDependencies = dependencyNames(manifest.ExternalDependencies)
+	result.BundledDependencies = dependencyNames(manifest.BundledDependencies)
+
 	return result, nil
+}
+
+func validateRuntimeManifest(
+	manifest runtimeManifestFile,
+	req PluginBuildRequest,
+	actualBundleHash string,
+	actualIntegrity string,
+) error {
+	if strings.TrimSpace(manifest.PluginId) != strings.TrimSpace(req.PluginId) {
+		return fmt.Errorf("运行清单 pluginId 不匹配")
+	}
+	if strings.TrimSpace(manifest.Version) != strings.TrimSpace(req.Version) {
+		return fmt.Errorf("运行清单 version 不匹配")
+	}
+	if strings.TrimSpace(manifest.ReleaseId) != strconv.FormatInt(req.ReleaseId, 10) {
+		return fmt.Errorf("运行清单 releaseId 不匹配")
+	}
+	if strings.TrimSpace(manifest.BundleHash) != actualBundleHash {
+		return fmt.Errorf("运行清单 bundleHash 校验失败")
+	}
+	if strings.TrimSpace(manifest.Integrity) != actualIntegrity {
+		return fmt.Errorf("运行清单 integrity 校验失败")
+	}
+
+	if err := validateRuntimeDependencyList(manifest.ExternalDependencies, "external"); err != nil {
+		return err
+	}
+	if err := validateRuntimeDependencyList(manifest.BundledDependencies, "bundled"); err != nil {
+		return err
+	}
+
+	seen := make(map[string]string, len(manifest.ExternalDependencies)+len(manifest.BundledDependencies))
+	for _, dependency := range manifest.ExternalDependencies {
+		seen[strings.TrimSpace(dependency.Name)] = "external"
+	}
+	for _, dependency := range manifest.BundledDependencies {
+		name := strings.TrimSpace(dependency.Name)
+		if previousMode, ok := seen[name]; ok {
+			return fmt.Errorf("运行清单依赖重复: %s (%s/%s)", name, previousMode, "bundled")
+		}
+	}
+	return nil
+}
+
+func validateRuntimeDependencyList(
+	dependencies []runtimeManifestDependency,
+	expectedMode string,
+) error {
+	for _, dependency := range dependencies {
+		if strings.TrimSpace(dependency.Name) == "" {
+			return fmt.Errorf("运行清单依赖名称不能为空")
+		}
+		if strings.TrimSpace(dependency.Mode) != expectedMode {
+			return fmt.Errorf("运行清单依赖 %s 模式非法", strings.TrimSpace(dependency.Name))
+		}
+	}
+	return nil
+}
+
+func dependencyNames(dependencies []runtimeManifestDependency) []string {
+	if len(dependencies) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(dependencies))
+	for _, dependency := range dependencies {
+		name := strings.TrimSpace(dependency.Name)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // 获取插件源码快照目录。
