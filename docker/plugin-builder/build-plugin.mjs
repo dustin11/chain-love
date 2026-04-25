@@ -15,6 +15,8 @@ const externalModuleMap = {
   '@senspace/plugin-framework': '/plugin-host/plugin-framework.js',
 };
 
+const sandboxEntry = 'runtime/sandbox-entry.js';
+
 function toPosixPath(value) {
   return String(value).split(path.sep).join('/');
 }
@@ -134,6 +136,52 @@ function collectRuntimeDependencies(metafile) {
   };
 }
 
+// 创建浏览器直载产物的 external 映射，保留旧入口过渡兼容。
+function createDirectRuntimeExternalPlugin() {
+  return {
+    name: 'senspace-plugin-direct-externals',
+    setup(pluginBuild) {
+      for (const [dependencyName, externalPath] of Object.entries(
+        externalModuleMap
+      )) {
+        pluginBuild.onResolve(
+          {
+            filter: new RegExp(
+              `^${dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
+            ),
+          },
+          () => ({
+            path: externalPath,
+            external: true,
+          })
+        );
+      }
+    },
+  };
+}
+
+// 创建沙箱产物的 external 映射，让 Worker 内的受控 require 接管平台模块。
+function createSandboxRuntimeExternalPlugin() {
+  return {
+    name: 'senspace-plugin-sandbox-externals',
+    setup(pluginBuild) {
+      for (const dependencyName of externalDependencies) {
+        pluginBuild.onResolve(
+          {
+            filter: new RegExp(
+              `^${dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
+            ),
+          },
+          () => ({
+            path: dependencyName,
+            external: true,
+          })
+        );
+      }
+    },
+  };
+}
+
 function parseArgs(argv) {
   const result = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -204,29 +252,8 @@ async function main() {
     );
   });
 
-  const buildResult = await build({
-    plugins: [
-      {
-        name: 'senspace-plugin-externals',
-        setup(pluginBuild) {
-          for (const [dependencyName, externalPath] of Object.entries(
-            externalModuleMap
-          )) {
-            pluginBuild.onResolve(
-              {
-                filter: new RegExp(
-                  `^${dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
-                ),
-              },
-              () => ({
-                path: externalPath,
-                external: true,
-              })
-            );
-          }
-        },
-      },
-    ],
+  await build({
+    plugins: [createDirectRuntimeExternalPlugin()],
     stdin: {
       contents: createFactoryWrapper({
         entryImportPath,
@@ -249,18 +276,41 @@ async function main() {
     assetNames: 'assets/[name]-[hash]',
   });
 
-  const runtimeEntryPath = path.join(outDir, 'runtime', 'index.js');
+  const sandboxBuildResult = await build({
+    plugins: [createSandboxRuntimeExternalPlugin()],
+    stdin: {
+      contents: createFactoryWrapper({
+        entryImportPath,
+        pluginId,
+      }),
+      resolveDir: srcDir,
+      sourcefile: '__sandbox_entry__.ts',
+      loader: 'ts',
+    },
+    outfile: path.join(outDir, sandboxEntry),
+    bundle: true,
+    format: 'cjs',
+    platform: 'browser',
+    target: ['es2022'],
+    sourcemap: false,
+    splitting: false,
+    metafile: true,
+    assetNames: 'assets/[name]-[hash]',
+  });
+
+  const runtimeEntryPath = path.join(outDir, sandboxEntry);
   const runtimeEntry = await fs.readFile(runtimeEntryPath);
   const bundleHash = `sha256:${crypto.createHash('sha256').update(runtimeEntry).digest('hex')}`;
   const integrity = `sha384-${crypto.createHash('sha384').update(runtimeEntry).digest('base64')}`;
 
-  const runtimeDependencies = collectRuntimeDependencies(buildResult.metafile);
+  const runtimeDependencies = collectRuntimeDependencies(sandboxBuildResult.metafile);
   const runtimeManifest = {
     pluginId,
     version,
     releaseId,
     bundleHash,
     integrity,
+    sandboxEntry,
     externalDependencies: runtimeDependencies.externalDependencies,
     bundledDependencies: runtimeDependencies.bundledDependencies,
   };

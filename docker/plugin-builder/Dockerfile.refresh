@@ -1,0 +1,6 @@
+FROM senspace/plugin-builder:latest
+
+USER root
+COPY build-plugin.mjs /builder/build-plugin.mjs
+RUN chmod 0644 /builder/build-plugin.mjs
+USER app

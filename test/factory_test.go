@@ -3,6 +3,10 @@ package test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -63,16 +67,21 @@ func (fakePluginBuildExecutor) Build(ctx context.Context, req factory_service.Pl
 		return nil, err
 	}
 	entryContent := []byte("export const plugin = 'built';\n")
-	if err := os.WriteFile(filepath.Join(req.OutputDir, "runtime", "index.js"), entryContent, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(req.OutputDir, "runtime", "sandbox-entry.js"), entryContent, 0o644); err != nil {
 		return nil, err
 	}
+	sha256Sum := sha256.Sum256(entryContent)
+	sha384Sum := sha512.Sum384(entryContent)
+	bundleHash := "sha256:" + hex.EncodeToString(sha256Sum[:])
+	integrity := "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
 
 	manifest := map[string]any{
-		"pluginId":   req.PluginId,
-		"version":    req.Version,
-		"releaseId":  strconv.FormatInt(req.ReleaseId, 10),
-		"bundleHash": "sha256:test-bundle-" + strconv.FormatInt(req.ReleaseId, 10),
-		"integrity":  "sha384:test-integrity-" + strconv.FormatInt(req.ReleaseId, 10),
+		"pluginId":     req.PluginId,
+		"version":      req.Version,
+		"releaseId":    strconv.FormatInt(req.ReleaseId, 10),
+		"bundleHash":   bundleHash,
+		"integrity":    integrity,
+		"sandboxEntry": "runtime/sandbox-entry.js",
 	}
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -83,8 +92,8 @@ func (fakePluginBuildExecutor) Build(ctx context.Context, req factory_service.Pl
 	}
 
 	return &factory_service.PluginBuildResult{
-		BundleHash: manifest["bundleHash"].(string),
-		Integrity:  manifest["integrity"].(string),
+		BundleHash: bundleHash,
+		Integrity:  integrity,
 		BuiltAt:    time.Now(),
 	}, nil
 }
@@ -141,10 +150,10 @@ func TestFactoryPublishAndManageRelease(t *testing.T) {
 	require.Equal(t, "0.01", created.UpgradePrice)
 	require.True(t, strings.HasPrefix(created.SourceHash, "sha256:"))
 	require.True(t, strings.HasPrefix(created.BundleHash, "sha256:"))
-	require.True(t, strings.HasPrefix(created.Integrity, "sha384:"))
+	require.True(t, strings.HasPrefix(created.Integrity, "sha384-"))
 	require.NotEmpty(t, created.BuiltAt)
 	require.FileExists(t, filepath.Join(env.pluginSourceRoot, pluginId, created.Id, "manifest.snapshot.json"))
-	require.FileExists(t, filepath.Join(env.pluginRuntimeRoot, pluginId, "v1.0.0-"+created.Id, "runtime", "index.js"))
+	require.FileExists(t, filepath.Join(env.pluginRuntimeRoot, pluginId, "v1.0.0-"+created.Id, "runtime", "sandbox-entry.js"))
 
 	dupResp := env.doJSON(http.MethodPost, "/api/v1/factory/publish", publishPayload)
 	require.Equal(t, http.StatusBadRequest, dupResp.Code)

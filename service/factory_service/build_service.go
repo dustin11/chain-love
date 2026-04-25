@@ -66,6 +66,7 @@ type runtimeManifestFile struct {
 	ReleaseId            string                      `json:"releaseId"`
 	BundleHash           string                      `json:"bundleHash"`
 	Integrity            string                      `json:"integrity"`
+	SandboxEntry         string                      `json:"sandboxEntry"`
 	ExternalDependencies []runtimeManifestDependency `json:"externalDependencies"`
 	BundledDependencies  []runtimeManifestDependency `json:"bundledDependencies"`
 }
@@ -295,12 +296,6 @@ func snapshotPluginSource(versionRoot string, pluginId string, releaseId int64, 
 
 // 读取运行产物信息。
 func readRuntimeBuildResult(outputDir string, req PluginBuildRequest) (*PluginBuildResult, error) {
-	entryPath := filepath.Join(outputDir, "runtime", "index.js")
-	entryBytes, err := os.ReadFile(entryPath)
-	if err != nil {
-		return nil, fmt.Errorf("读取运行入口失败: %w", err)
-	}
-
 	result := &PluginBuildResult{
 		BundleHash:           "",
 		Integrity:            "",
@@ -308,11 +303,6 @@ func readRuntimeBuildResult(outputDir string, req PluginBuildRequest) (*PluginBu
 		ExternalDependencies: nil,
 		BundledDependencies:  nil,
 	}
-	sha256Sum := sha256.Sum256(entryBytes)
-	sha384Sum := sha512.Sum384(entryBytes)
-	actualBundleHash := "sha256:" + hex.EncodeToString(sha256Sum[:])
-	actualIntegrity := "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
-
 	manifestPath := filepath.Join(outputDir, "runtime-manifest.json")
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -323,6 +313,21 @@ func readRuntimeBuildResult(outputDir string, req PluginBuildRequest) (*PluginBu
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return nil, fmt.Errorf("解析运行清单失败: %w", err)
 	}
+
+	entryPath, err := resolveRuntimeSandboxEntryPath(outputDir, manifest.SandboxEntry)
+	if err != nil {
+		return nil, err
+	}
+	entryBytes, err := os.ReadFile(entryPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取沙箱运行入口失败: %w", err)
+	}
+
+	sha256Sum := sha256.Sum256(entryBytes)
+	sha384Sum := sha512.Sum384(entryBytes)
+	actualBundleHash := "sha256:" + hex.EncodeToString(sha256Sum[:])
+	actualIntegrity := "sha384-" + base64.StdEncoding.EncodeToString(sha384Sum[:])
+
 	if err := validateRuntimeManifest(manifest, req, actualBundleHash, actualIntegrity); err != nil {
 		return nil, err
 	}
@@ -333,6 +338,18 @@ func readRuntimeBuildResult(outputDir string, req PluginBuildRequest) (*PluginBu
 	result.BundledDependencies = dependencyNames(manifest.BundledDependencies)
 
 	return result, nil
+}
+
+// 解析沙箱运行入口路径，并限制它只能落在当前 release 运行目录内。
+func resolveRuntimeSandboxEntryPath(outputDir string, sandboxEntry string) (string, error) {
+	normalizedEntry := filepath.Clean(filepath.FromSlash(strings.TrimSpace(sandboxEntry)))
+	if normalizedEntry == "." || normalizedEntry == "" {
+		return "", fmt.Errorf("运行清单 sandboxEntry 不能为空")
+	}
+	if filepath.IsAbs(normalizedEntry) || strings.HasPrefix(normalizedEntry, ".."+string(filepath.Separator)) || normalizedEntry == ".." {
+		return "", fmt.Errorf("运行清单 sandboxEntry 非法")
+	}
+	return filepath.Join(outputDir, normalizedEntry), nil
 }
 
 func validateRuntimeManifest(
@@ -349,6 +366,9 @@ func validateRuntimeManifest(
 	}
 	if strings.TrimSpace(manifest.ReleaseId) != strconv.FormatInt(req.ReleaseId, 10) {
 		return fmt.Errorf("运行清单 releaseId 不匹配")
+	}
+	if strings.TrimSpace(manifest.SandboxEntry) == "" {
+		return fmt.Errorf("运行清单 sandboxEntry 不能为空")
 	}
 	if strings.TrimSpace(manifest.BundleHash) != actualBundleHash {
 		return fmt.Errorf("运行清单 bundleHash 校验失败")

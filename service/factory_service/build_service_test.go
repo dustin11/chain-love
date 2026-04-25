@@ -19,7 +19,7 @@ func TestReadRuntimeBuildResultValidatesManifest(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
 
 	entryContent := []byte("export default { pluginId: 'demo-plugin' };\n")
-	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "index.js"), entryContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "sandbox-entry.js"), entryContent, 0o644))
 	bundleHash, integrity := runtimeHashes(entryContent)
 
 	req := PluginBuildRequest{
@@ -33,11 +33,12 @@ func TestReadRuntimeBuildResultValidatesManifest(t *testing.T) {
 	require.ErrorContains(t, err, "读取运行清单失败")
 
 	manifest := runtimeManifestFile{
-		PluginId:   req.PluginId,
-		Version:    req.Version,
-		ReleaseId:  "10001",
-		BundleHash: bundleHash,
-		Integrity:  integrity,
+		PluginId:     req.PluginId,
+		Version:      req.Version,
+		ReleaseId:    "10001",
+		BundleHash:   bundleHash,
+		Integrity:    integrity,
+		SandboxEntry: "runtime/sandbox-entry.js",
 		ExternalDependencies: []runtimeManifestDependency{
 			{Name: "three", Mode: "external"},
 		},
@@ -64,7 +65,7 @@ func TestReadRuntimeBuildResultRejectsInvalidDependencyMode(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
 
 	entryContent := []byte("export default { pluginId: 'demo-plugin' };\n")
-	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "index.js"), entryContent, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "sandbox-entry.js"), entryContent, 0o644))
 	bundleHash, integrity := runtimeHashes(entryContent)
 
 	req := PluginBuildRequest{
@@ -74,11 +75,12 @@ func TestReadRuntimeBuildResultRejectsInvalidDependencyMode(t *testing.T) {
 	}
 
 	manifest := runtimeManifestFile{
-		PluginId:   req.PluginId,
-		Version:    req.Version,
-		ReleaseId:  "10001",
-		BundleHash: bundleHash,
-		Integrity:  integrity,
+		PluginId:     req.PluginId,
+		Version:      req.Version,
+		ReleaseId:    "10001",
+		BundleHash:   bundleHash,
+		Integrity:    integrity,
+		SandboxEntry: "runtime/sandbox-entry.js",
 		ExternalDependencies: []runtimeManifestDependency{
 			{Name: "three", Mode: "bundled"},
 		},
