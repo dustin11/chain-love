@@ -211,6 +211,16 @@ func zeroIfEmpty(value string) string {
 	return normalizeDecimal(value)
 }
 
+// 默认运行来源。
+func defaultRuntimeKind(kind factory.ReleaseRuntimeKind) factory.ReleaseRuntimeKind {
+	switch kind {
+	case factory.ReleaseRuntimeKindBuiltin, factory.ReleaseRuntimeKindBook:
+		return kind
+	default:
+		return factory.ReleaseRuntimeKindArtifact
+	}
+}
+
 // 插件源码目录。
 func getPluginRoot(pluginId string) string {
 	return filepath.Join(setting.Config.App.FilePath.Plugin, pluginId)
@@ -493,6 +503,7 @@ func mapRelease(record factory.Release) PublishRecord {
 		BuildStatus:    defaultBuildStatus(record.BuildStatus),
 		BuildError:     record.BuildError,
 		BuiltAt:        formatTime(record.BuiltAt),
+		RuntimeKind:    defaultRuntimeKind(record.RuntimeKind),
 		UpgradePolicy:  defaultUpgradePolicy(record.UpgradePolicy),
 		UpgradePrice:   displayUpgradePrice(record.UpgradePolicy, record.UpgradePrice),
 		PublishedAt:    formatTime(record.PublishedAt),

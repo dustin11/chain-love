@@ -28,6 +28,7 @@ type Release struct {
 	BuildStatus      BuildStatus            `json:"buildStatus,omitempty" gorm:"type:varchar(32);not null;default:'pending';comment:构建状态"`
 	BuildError       string                 `json:"buildError,omitempty" gorm:"type:varchar(2000);comment:构建失败原因"`
 	BuiltAt          *time.Time             `json:"builtAt,omitempty" gorm:"comment:最近一次构建完成时间"`
+	RuntimeKind      ReleaseRuntimeKind     `json:"runtimeKind" gorm:"type:varchar(32);not null;default:'artifact';index:idx_factory_release_runtime;comment:运行来源类型"`
 	UpgradePolicy    ReleaseUpgradePolicy   `json:"upgradePolicy,omitempty" gorm:"type:varchar(32);not null;default:'none';comment:升级策略"`
 	UpgradePrice     string                 `json:"upgradePrice,omitempty" gorm:"type:decimal(36,18);comment:升级价格"`
 	PublishedAt      *time.Time             `json:"publishedAt,omitempty" gorm:"comment:发布时间"`

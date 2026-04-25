@@ -85,6 +85,7 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 			MintedCount:      0,
 			SourceHash:       sourceHash,
 			BuildStatus:      factory.BuildStatusPending,
+			RuntimeKind:      factory.ReleaseRuntimeKindArtifact,
 			UpgradePolicy:    req.Release.UpgradePolicy,
 			UpgradePrice:     zeroIfEmpty(req.Release.UpgradePrice),
 		}

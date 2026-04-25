@@ -151,6 +151,7 @@ type PublishRecord struct {
 	BuildStatus    factory.BuildStatus          `json:"buildStatus,omitempty"`
 	BuildError     string                       `json:"buildError,omitempty"`
 	BuiltAt        string                       `json:"builtAt,omitempty"`
+	RuntimeKind    factory.ReleaseRuntimeKind   `json:"runtimeKind"`
 	UpgradePolicy  factory.ReleaseUpgradePolicy `json:"upgradePolicy,omitempty"`
 	UpgradePrice   string                       `json:"upgradePrice,omitempty"`
 	PublishedAt    string                       `json:"publishedAt,omitempty"`

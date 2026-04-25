@@ -1,6 +1,9 @@
 package d_util
 
 import (
+	"database/sql"
+	"fmt"
+	"log"
 	"senspace/domain/active"
 	"senspace/domain/auth"
 	"senspace/domain/dev"
@@ -8,9 +11,6 @@ import (
 	"senspace/domain/factory"
 	"senspace/domain/sys"
 	"senspace/pkg/setting"
-	"database/sql"
-	"fmt"
-	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
@@ -58,6 +58,8 @@ func InitTable(db *gorm.DB) {
 	if err := EnsureTableAutoIncrement(db, "ds_note", 1000); err != nil {
 		log.Printf("ensure auto_increment ds_note failed: %v", err)
 	}
+
+	factory.SeedBuiltinReleases(db)
 }
 
 // EnsureTableAutoIncrement ensures the AUTO_INCREMENT for a MySQL table is at least start.

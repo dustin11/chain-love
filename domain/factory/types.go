@@ -54,6 +54,18 @@ const (
 	BuildStatusFailed BuildStatus = "failed"
 )
 
+// 运行来源类型。
+type ReleaseRuntimeKind string
+
+const (
+	// 工厂构建产物。
+	ReleaseRuntimeKindArtifact ReleaseRuntimeKind = "artifact"
+	// 宿主内置插件。
+	ReleaseRuntimeKindBuiltin ReleaseRuntimeKind = "builtin"
+	// 宿主内置书本预览。
+	ReleaseRuntimeKindBook ReleaseRuntimeKind = "book"
+)
+
 // 升级策略。
 type ReleaseUpgradePolicy string
 
