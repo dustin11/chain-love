@@ -1,10 +1,19 @@
 {
-  "schema": "senspace.asset-meta.v1",
+  "schema": "senspace.asset-meta.v2",
   "pluginId": "FishTank",
-  "basePrice": "10",
+  "basePrice": "0",
   "collections": [
     {
+      "label": "鱼缸",
+      "key": "tank",
+      "assetKind": "tank",
+      "ref": "defaultWaterMeta.json#tanks",
+      "unitPrice": "30"
+    },
+    {
       "label": "鱼",
+      "key": "fish",
+      "assetKind": "fish",
       "ref": "defaultWaterMeta.json#fish",
       "tierField": "tier",
       "maxTierCount": 24,

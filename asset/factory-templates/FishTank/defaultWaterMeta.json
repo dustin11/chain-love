@@ -7,6 +7,22 @@
     "volumeOpacity": 0.24,
     "enableFishDisturbance": true
   },
+  "tanks": [
+    {
+      "id": "tank-1",
+      "width": 0.85,
+      "depth": 0.44,
+      "height": 0.6,
+      "glassColor": "#dff4ff",
+      "water": {
+        "fillRatio": 0.88,
+        "color": "#5bb8ff",
+        "surfaceOpacity": 0.46,
+        "volumeOpacity": 0.24,
+        "enableFishDisturbance": true
+      }
+    }
+  ],
   "fish": [
     {
       "id": "fish-1",
@@ -16,6 +32,33 @@
       "verticalBias": 0.35,
       "curiosity": 0.82,
       "lightAffinity": 0.28
+    },
+    {
+      "id": "fish-1b",
+      "tier": "common",
+      "color": "#7bd88f",
+      "speedScale": 0.94,
+      "verticalBias": 0.42,
+      "curiosity": 0.7,
+      "lightAffinity": 0.18
+    },
+    {
+      "id": "fish-1c",
+      "tier": "common",
+      "color": "#8bb7ff",
+      "speedScale": 1.08,
+      "verticalBias": 0.52,
+      "curiosity": 0.76,
+      "lightAffinity": 0.34
+    },
+    {
+      "id": "fish-1d",
+      "tier": "common",
+      "color": "#f7d56b",
+      "speedScale": 1.02,
+      "verticalBias": 0.29,
+      "curiosity": 0.86,
+      "lightAffinity": 0.08
     },
     {
       "id": "fish-2",

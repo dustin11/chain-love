@@ -117,7 +117,7 @@ type RecordMintRequest struct {
 	TxHash        string
 }
 
-// 按发布价值模板铸造一份个人 NFT 元数据。
+// 按发布价值模板铸造独立 NFT。
 type MintAssetRequest struct {
 	Inputs    map[string]map[string]int64 `json:"inputs"`
 	TotalPaid string                      `json:"totalPaid"`
@@ -125,12 +125,19 @@ type MintAssetRequest struct {
 	TxHash    string                      `json:"txHash,omitempty"`
 }
 
-// 铸造生成的静态资产入口。
+// 铸造生成的单个 NFT 入口。
+type MintAssetResponseAsset struct {
+	AssetId   string            `json:"assetId"`
+	AssetKind factory.AssetKind `json:"assetKind"`
+	AssetUrl  string            `json:"assetUrl"`
+}
+
+// 铸造生成的快照入口。
 type MintAssetResponse struct {
-	AssetId       string `json:"assetId"`
-	AssetUrl      string `json:"assetUrl"`
-	OwnerIndexUrl string `json:"ownerIndexUrl"`
-	TotalPaid     string `json:"totalPaid"`
+	Assets              []MintAssetResponseAsset `json:"assets"`
+	OwnerIndexUrl       string                   `json:"ownerIndexUrl"`
+	OwnerCompositionUrl string                   `json:"ownerCompositionUrl"`
+	TotalPaid           string                   `json:"totalPaid"`
 }
 
 // 价格历史视图。

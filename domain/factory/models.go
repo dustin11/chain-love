@@ -7,6 +7,8 @@ func Tables() []interface{} {
 		&ReleasePriceHistory{},
 		&ReleaseStatusHistory{},
 		&MintRecord{},
+		&Asset{},
+		&AssetRelation{},
 		&UserOwnership{},
 		&UpgradeRecord{},
 	}

@@ -28,43 +28,55 @@ type assetValueTemplate struct {
 	Collections []assetValueCollection `json:"collections"`
 }
 
-// 一组可按等级计价的模板资产。
+// 可铸造模板集合。
 type assetValueCollection struct {
-	Label string `json:"label"`
-	// 模板数据位置，例如 defaultWaterMeta.json#fish。
+	Label     string            `json:"label"`
+	Key       string            `json:"key"`
+	AssetKind factory.AssetKind `json:"assetKind"`
+	// 例如 defaultWaterMeta.json#fish。
 	Ref string `json:"ref"`
-	// 模板项中用于区分等级的字段名。
+	// 模板项中用于区分等级的字段。
 	TierField string `json:"tierField"`
-	// 单个等级的选择上限。
+	// 单等级上限，0 表示不限。
 	MaxTierCount    int64             `json:"maxTierCount"`
+	UnitPrice       string            `json:"unitPrice"`
 	UnitPriceByTier map[string]string `json:"unitPriceByTier"`
 }
 
-// 汇总后端计价和 metaPatch 写入所需数据。
+// 计价后的铸造明细。
 type mintSelectionResult struct {
-	RefField     string
-	SelectedIds  []string
+	Items        []mintSelectionItem
 	ExpectedPaid string
+	TotalCount   int64
 }
 
-// 写入静态目录的个人 NFT 元数据。
+// 单个待生成 NFT。
+type mintSelectionItem struct {
+	AssetKind    factory.AssetKind
+	TemplateRef  string
+	TemplateFile string
+	RefField     string
+	TemplateId   string
+}
+
+// 静态目录中的单个 NFT 快照。
 type mintedFactoryAsset struct {
-	Schema      string                     `json:"schema"`
-	AssetId     string                     `json:"assetId"`
-	PluginId    string                     `json:"pluginId"`
-	ReleaseId   string                     `json:"releaseId"`
-	Version     string                     `json:"version"`
-	RuntimeKind factory.ReleaseRuntimeKind `json:"runtimeKind"`
-	OwnerKey    string                     `json:"ownerKey"`
-	ReleaseUrl  string                     `json:"releaseUrl"`
-	// 按模板字段记录本次抽取的条目 ID。
-	MetaPatch    map[string][]string `json:"metaPatch"`
-	PricePaid    string              `json:"pricePaid"`
-	MintedAt     string              `json:"mintedAt"`
-	TemplateRefs map[string]string   `json:"templateRefs,omitempty"`
+	Schema       string                     `json:"schema"`
+	AssetId      string                     `json:"assetId"`
+	PluginId     string                     `json:"pluginId"`
+	ReleaseId    string                     `json:"releaseId"`
+	Version      string                     `json:"version"`
+	RuntimeKind  factory.ReleaseRuntimeKind `json:"runtimeKind"`
+	AssetKind    factory.AssetKind          `json:"assetKind"`
+	TemplateRef  string                     `json:"templateRef"`
+	TemplateId   string                     `json:"templateId"`
+	ReleaseUrl   string                     `json:"releaseUrl"`
+	MintRecordId string                     `json:"mintRecordId"`
+	MintedAt     string                     `json:"mintedAt"`
+	TemplateRefs map[string]string          `json:"templateRefs,omitempty"`
 }
 
-// 钱包地址对应的静态资产索引。
+// 钱包地址对应的可重建资产索引。
 type ownerFactoryAssetIndex struct {
 	Schema    string                   `json:"schema"`
 	OwnerKey  string                   `json:"ownerKey"`
@@ -79,12 +91,32 @@ type ownerFactoryAssetEntry struct {
 	ReleaseId   string                     `json:"releaseId"`
 	Version     string                     `json:"version"`
 	RuntimeKind factory.ReleaseRuntimeKind `json:"runtimeKind"`
+	AssetKind   factory.AssetKind          `json:"assetKind"`
+	TemplateRef string                     `json:"templateRef"`
+	TemplateId  string                     `json:"templateId"`
 	AssetUrl    string                     `json:"assetUrl"`
 	ReleaseUrl  string                     `json:"releaseUrl"`
 	MintedAt    string                     `json:"mintedAt"`
 }
 
-// 按发布快照中的价值模板生成个人 NFT 元数据。
+// 钱包地址对应的组合快照。
+type ownerFactoryAssetComposition struct {
+	Schema    string                             `json:"schema"`
+	OwnerKey  string                             `json:"ownerKey"`
+	UpdatedAt string                             `json:"updatedAt"`
+	Relations []ownerFactoryAssetCompositionEdge `json:"relations"`
+}
+
+// NFT 组合边。
+type ownerFactoryAssetCompositionEdge struct {
+	Id            string `json:"id"`
+	RelationType  string `json:"relationType"`
+	SourceAssetId string `json:"sourceAssetId"`
+	TargetAssetId string `json:"targetAssetId"`
+	Metadata      any    `json:"metadata,omitempty"`
+}
+
+// 按发布快照生成独立 NFT，并用 DB 保持权威状态。
 func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetRequest) (*MintAssetResponse, error) {
 	releaseId, err := parseID(releaseIdRaw, "发布记录ID")
 	if err != nil {
@@ -110,6 +142,7 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 	}
 
 	var response MintAssetResponse
+	var ownerKey string
 	err = tx.Transaction(func(tx *gorm.DB) error {
 		var release factory.Release
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&release, "id = ?", releaseId).Error; err != nil {
@@ -124,9 +157,6 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		if defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
 			return newConflictError("当前发布记录构建未完成")
 		}
-		if release.MintedCount+1 > release.TotalSupply {
-			return newConflictError("铸造数量超过可发行数量")
-		}
 		if err := factory.EnsureReleaseStaticSnapshot(release); err != nil {
 			return err
 		}
@@ -139,17 +169,21 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		if err != nil {
 			return err
 		}
+		if release.MintedCount+mintSelection.TotalCount > release.TotalSupply {
+			return newConflictError("铸造数量超过可发行数量")
+		}
 		if mintSelection.ExpectedPaid != req.TotalPaid {
 			return newParameterError(fmt.Sprintf("支付总额应为 %s", mintSelection.ExpectedPaid))
 		}
 
+		ownerKey = factory.OwnerIndexKey(walletAddress)
 		record := factory.MintRecord{
 			Id:            generateID(),
 			PluginId:      release.PluginId,
 			ReleaseId:     release.Id,
 			UserId:        user.Id,
 			WalletAddress: walletAddress,
-			Quantity:      1,
+			Quantity:      mintSelection.TotalCount,
 			TotalPaid:     req.TotalPaid,
 			ChainId:       req.ChainId,
 			TxHash:        strings.TrimSpace(req.TxHash),
@@ -158,7 +192,34 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 			return err
 		}
 
-		release.MintedCount++
+		var createdAssets []factory.Asset
+		for _, selected := range mintSelection.Items {
+			asset := factory.Asset{
+				Id:           generateID(),
+				PluginId:     release.PluginId,
+				ReleaseId:    release.Id,
+				Version:      release.Version,
+				RuntimeKind:  defaultRuntimeKind(release.RuntimeKind),
+				AssetKind:    selected.AssetKind,
+				TemplateRef:  selected.TemplateRef,
+				TemplateId:   selected.TemplateId,
+				OwnerAddress: walletAddress,
+				OwnerKey:     ownerKey,
+				MintRecordId: record.Id,
+				ChainId:      req.ChainId,
+				Status:       factory.AssetStatusActive,
+			}
+			if err := tx.Create(&asset).Error; err != nil {
+				return err
+			}
+			createdAssets = append(createdAssets, asset)
+		}
+
+		if err := createDefaultMintRelations(tx, ownerKey, createdAssets); err != nil {
+			return err
+		}
+
+		release.MintedCount += mintSelection.TotalCount
 		if release.MintedCount >= release.TotalSupply {
 			release.Status = factory.ReleaseStatusSoldOut
 		}
@@ -170,60 +231,31 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 			return err
 		}
 
-		ownerKey := factory.OwnerIndexKey(walletAddress)
-		mintedAt := time.Now().Format(time.RFC3339Nano)
-		assetId := record.Id
-		assetUrl := factory.AssetStaticURL(release.PluginId, assetId)
-		releaseUrl := factory.ReleaseStaticURL(release)
-		asset := mintedFactoryAsset{
-			Schema:      "senspace.factory.asset.v1",
-			AssetId:     strconv.FormatInt(assetId, 10),
-			PluginId:    release.PluginId,
-			ReleaseId:   strconv.FormatInt(release.Id, 10),
-			Version:     release.Version,
-			RuntimeKind: defaultRuntimeKind(release.RuntimeKind),
-			OwnerKey:    ownerKey,
-			ReleaseUrl:  releaseUrl,
-			MetaPatch: map[string][]string{
-				mintSelection.RefField: mintSelection.SelectedIds,
-			},
-			PricePaid: req.TotalPaid,
-			MintedAt:  mintedAt,
-			TemplateRefs: map[string]string{
-				"assetMeta":        "asset.meta.json",
-				"defaultWaterMeta": "defaultWaterMeta.json",
-			},
-		}
-		if err := factory.WriteJSONAtomic(factory.AssetStaticPath(release.PluginId, assetId), asset); err != nil {
-			return err
-		}
-		if err := appendOwnerFactoryAsset(ownerKey, ownerFactoryAssetEntry{
-			AssetId:     strconv.FormatInt(assetId, 10),
-			PluginId:    release.PluginId,
-			ReleaseId:   strconv.FormatInt(release.Id, 10),
-			Version:     release.Version,
-			RuntimeKind: defaultRuntimeKind(release.RuntimeKind),
-			AssetUrl:    assetUrl,
-			ReleaseUrl:  releaseUrl,
-			MintedAt:    mintedAt,
-		}); err != nil {
-			return err
-		}
-
 		response = MintAssetResponse{
-			AssetId:       strconv.FormatInt(assetId, 10),
-			AssetUrl:      assetUrl,
-			OwnerIndexUrl: factory.OwnerIndexStaticURL(ownerKey),
-			TotalPaid:     req.TotalPaid,
+			Assets:              make([]MintAssetResponseAsset, 0, len(createdAssets)),
+			OwnerIndexUrl:       factory.OwnerIndexStaticURL(ownerKey),
+			OwnerCompositionUrl: factory.OwnerCompositionStaticURL(ownerKey),
+			TotalPaid:           req.TotalPaid,
+		}
+		for _, asset := range createdAssets {
+			response.Assets = append(response.Assets, MintAssetResponseAsset{
+				AssetId:   strconv.FormatInt(asset.Id, 10),
+				AssetKind: asset.AssetKind,
+				AssetUrl:  factory.AssetStaticURL(asset.PluginId, asset.Id),
+			})
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	if err := rebuildOwnerFactorySnapshots(ownerKey); err != nil {
+		return nil, err
+	}
 	return &response, nil
 }
 
+// 确保用户拥有该插件的权益记录。
 func ensurePluginOwnership(tx *gorm.DB, userId uint64, release factory.Release) error {
 	var ownership factory.UserOwnership
 	err := tx.Where("user_id = ? AND plugin_id = ?", userId, release.PluginId).First(&ownership).Error
@@ -243,6 +275,7 @@ func ensurePluginOwnership(tx *gorm.DB, userId uint64, release factory.Release) 
 	return tx.Create(&ownership).Error
 }
 
+// 读取发布快照中的铸造模板。
 func loadReleaseMintTemplate(release factory.Release) (assetValueTemplate, error) {
 	dir := factory.ReleaseStaticDir(release)
 	var valueTemplate assetValueTemplate
@@ -252,6 +285,7 @@ func loadReleaseMintTemplate(release factory.Release) (assetValueTemplate, error
 	return valueTemplate, nil
 }
 
+// 读取 JSON 文件到目标结构。
 func readJSONFile(path string, target any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -260,33 +294,12 @@ func readJSONFile(path string, target any) error {
 	return json.Unmarshal(data, target)
 }
 
+// 校验铸造输入并计算待生成资产。
 func resolveMintSelection(
 	release factory.Release,
 	valueTemplate assetValueTemplate,
 	inputs map[string]map[string]int64,
 ) (mintSelectionResult, error) {
-	// 前端以 collection.ref 作为输入 key，后端据此找到对应集合配置。
-	collection, counts, ok := selectMintCollection(valueTemplate, inputs)
-	if !ok {
-		return mintSelectionResult{}, newParameterError("发布模板缺少可铸造资产配置")
-	}
-	if len(counts) == 0 {
-		return mintSelectionResult{}, newParameterError("请选择" + collectionDisplayName(collection) + "的等级和数量")
-	}
-	templateFile, refField, err := parseAssetRef(collection.Ref)
-	if err != nil {
-		return mintSelectionResult{}, err
-	}
-	// # 后面的模板字段会同步写入 metaPatch。
-	templateItems, err := loadTemplateItems(filepath.Join(factory.ReleaseStaticDir(release), templateFile), refField)
-	if err != nil {
-		return mintSelectionResult{}, err
-	}
-	tierField := strings.TrimSpace(collection.TierField)
-	if tierField == "" {
-		tierField = "tier"
-	}
-
 	total := new(big.Rat)
 	base, err := parsePriceRat(valueTemplate.BasePrice, "基础价格")
 	if err != nil {
@@ -294,64 +307,47 @@ func resolveMintSelection(
 	}
 	total.Add(total, base)
 
-	var totalCount int64
-	var selected []string
-	for tier, count := range counts {
-		tier = strings.TrimSpace(tier)
-		if tier == "" || count <= 0 {
-			continue
-		}
-		unitRaw, ok := collection.UnitPriceByTier[tier]
-		if !ok {
-			return mintSelectionResult{}, newParameterError("未知等级: " + tier)
-		}
-		if collection.MaxTierCount > 0 && count > collection.MaxTierCount {
-			return mintSelectionResult{}, newParameterError(fmt.Sprintf("%s等级 %s 不能超过 %d", collectionDisplayName(collection), tier, collection.MaxTierCount))
-		}
-		unit, err := parsePriceRat(unitRaw, tier+" 单价")
-		if err != nil {
-			return mintSelectionResult{}, err
-		}
-		total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
-		// 同一等级可重复抽取模板项，形成独立的个人资产实例。
-		ids, err := pickTemplateIds(templateItems, tierField, tier, count)
-		if err != nil {
-			return mintSelectionResult{}, err
-		}
-		selected = append(selected, ids...)
-		totalCount += count
-	}
-	if totalCount <= 0 {
-		return mintSelectionResult{}, newParameterError("请选择" + collectionDisplayName(collection) + "的等级和数量")
-	}
-	return mintSelectionResult{
-		RefField:     refField,
-		SelectedIds:  selected,
-		ExpectedPaid: normalizeDecimal(total.FloatString(18)),
-	}, nil
-}
-
-func selectMintCollection(valueTemplate assetValueTemplate, inputs map[string]map[string]int64) (assetValueCollection, map[string]int64, bool) {
+	var result mintSelectionResult
 	for _, collection := range valueTemplate.Collections {
 		ref := strings.TrimSpace(collection.Ref)
 		if ref == "" {
 			continue
 		}
-		if counts, ok := inputs[ref]; ok {
-			return collection, counts, true
+		counts := inputs[ref]
+		if len(counts) == 0 {
+			continue
 		}
-	}
-	for _, collection := range valueTemplate.Collections {
+		assetKind, err := resolveCollectionAssetKind(collection)
+		if err != nil {
+			return mintSelectionResult{}, err
+		}
+		templateFile, refField, err := parseAssetRef(ref)
+		if err != nil {
+			return mintSelectionResult{}, err
+		}
+		templateItems, err := loadTemplateItems(filepath.Join(factory.ReleaseStaticDir(release), templateFile), refField)
+		if err != nil {
+			return mintSelectionResult{}, err
+		}
+
 		if len(collection.UnitPriceByTier) > 0 {
-			return collection, inputs[strings.TrimSpace(collection.Ref)], true
+			if err := appendTieredSelection(&result, total, collection, assetKind, templateFile, refField, templateItems, counts); err != nil {
+				return mintSelectionResult{}, err
+			}
+			continue
+		}
+		if err := appendFlatSelection(&result, total, collection, assetKind, templateFile, refField, templateItems, counts); err != nil {
+			return mintSelectionResult{}, err
 		}
 	}
-	for _, collection := range valueTemplate.Collections {
-		return collection, inputs[strings.TrimSpace(collection.Ref)], true
+	if result.TotalCount <= 0 {
+		return mintSelectionResult{}, newParameterError("请选择要铸造的资产数量")
 	}
-	return assetValueCollection{}, nil, false
+	result.ExpectedPaid = normalizeDecimal(total.FloatString(18))
+	return result, nil
 }
 
+// 返回集合的展示名称。
 func collectionDisplayName(collection assetValueCollection) string {
 	label := strings.TrimSpace(collection.Label)
 	if label != "" {
@@ -360,6 +356,113 @@ func collectionDisplayName(collection assetValueCollection) string {
 	return strings.TrimSpace(collection.Ref)
 }
 
+// 校验并返回集合资产类型。
+func resolveCollectionAssetKind(collection assetValueCollection) (factory.AssetKind, error) {
+	switch collection.AssetKind {
+	case factory.AssetKindTank, factory.AssetKindFish:
+		return collection.AssetKind, nil
+	default:
+		return "", newParameterError(collectionDisplayName(collection) + "缺少资产类型")
+	}
+}
+
+// 追加按等级计价的资产选择项。
+func appendTieredSelection(
+	result *mintSelectionResult,
+	total *big.Rat,
+	collection assetValueCollection,
+	assetKind factory.AssetKind,
+	templateFile string,
+	refField string,
+	templateItems []map[string]any,
+	counts map[string]int64,
+) error {
+	tierField := strings.TrimSpace(collection.TierField)
+	if tierField == "" {
+		tierField = "tier"
+	}
+
+	for tier, count := range counts {
+		tier = strings.TrimSpace(tier)
+		if tier == "" || count <= 0 {
+			continue
+		}
+		unitRaw, ok := collection.UnitPriceByTier[tier]
+		if !ok {
+			return newParameterError("未知等级: " + tier)
+		}
+		if collection.MaxTierCount > 0 && count > collection.MaxTierCount {
+			return newParameterError(fmt.Sprintf("%s等级 %s 不能超过 %d", collectionDisplayName(collection), tier, collection.MaxTierCount))
+		}
+		unit, err := parsePriceRat(unitRaw, tier+" 单价")
+		if err != nil {
+			return err
+		}
+		total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
+		ids, err := pickTemplateIdsByField(templateItems, tierField, tier, count)
+		if err != nil {
+			return err
+		}
+		appendSelectedItems(result, assetKind, collection.Ref, templateFile, refField, ids)
+	}
+	return nil
+}
+
+// 追加不分等级计价的资产选择项。
+func appendFlatSelection(
+	result *mintSelectionResult,
+	total *big.Rat,
+	collection assetValueCollection,
+	assetKind factory.AssetKind,
+	templateFile string,
+	refField string,
+	templateItems []map[string]any,
+	counts map[string]int64,
+) error {
+	var count int64
+	for _, itemCount := range counts {
+		if itemCount > 0 {
+			count += itemCount
+		}
+	}
+	if count <= 0 {
+		return nil
+	}
+	unit, err := parsePriceRat(collection.UnitPrice, collectionDisplayName(collection)+"单价")
+	if err != nil {
+		return err
+	}
+	total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
+	ids, err := pickAnyTemplateIds(templateItems, count)
+	if err != nil {
+		return err
+	}
+	appendSelectedItems(result, assetKind, collection.Ref, templateFile, refField, ids)
+	return nil
+}
+
+// 将模板 ID 追加为待铸造项。
+func appendSelectedItems(
+	result *mintSelectionResult,
+	assetKind factory.AssetKind,
+	templateRef string,
+	templateFile string,
+	refField string,
+	ids []string,
+) {
+	for _, id := range ids {
+		result.Items = append(result.Items, mintSelectionItem{
+			AssetKind:    assetKind,
+			TemplateRef:  strings.TrimSpace(templateRef),
+			TemplateFile: templateFile,
+			RefField:     refField,
+			TemplateId:   id,
+		})
+		result.TotalCount++
+	}
+}
+
+// 解析 file.json#field 格式的模板引用。
 func parseAssetRef(ref string) (string, string, error) {
 	parts := strings.SplitN(strings.TrimSpace(ref), "#", 2)
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
@@ -372,6 +475,7 @@ func parseAssetRef(ref string) (string, string, error) {
 	return file, strings.TrimSpace(parts[1]), nil
 }
 
+// 读取模板文件中的数组字段。
 func loadTemplateItems(path string, field string) ([]map[string]any, error) {
 	var root map[string]json.RawMessage
 	if err := readJSONFile(path, &root); err != nil {
@@ -388,6 +492,7 @@ func loadTemplateItems(path string, field string) ([]map[string]any, error) {
 	return items, nil
 }
 
+// 解析价格字符串为有理数。
 func parsePriceRat(raw string, field string) (*big.Rat, error) {
 	normalized, err := validateDecimalString(raw, field, false)
 	if err != nil {
@@ -400,18 +505,38 @@ func parsePriceRat(raw string, field string) (*big.Rat, error) {
 	return rat, nil
 }
 
-func pickTemplateIds(templates []map[string]any, tierField string, tier string, count int64) ([]string, error) {
+// 按字段值随机选择模板 ID。
+func pickTemplateIdsByField(templates []map[string]any, field string, value string, count int64) ([]string, error) {
 	candidates := make([]string, 0, len(templates))
 	for _, item := range templates {
 		id, _ := item["id"].(string)
-		if strings.TrimSpace(id) != "" && fmt.Sprint(item[tierField]) == tier {
+		if strings.TrimSpace(id) != "" && fmt.Sprint(item[field]) == value {
 			candidates = append(candidates, id)
 		}
 	}
 	if len(candidates) == 0 {
-		return nil, newParameterError("等级 " + tier + " 没有可用资产模板")
+		return nil, newParameterError("没有可用资产模板: " + value)
 	}
+	return pickTemplateIdsFromCandidates(candidates, count)
+}
 
+// 从所有模板中随机选择 ID。
+func pickAnyTemplateIds(templates []map[string]any, count int64) ([]string, error) {
+	candidates := make([]string, 0, len(templates))
+	for _, item := range templates {
+		id, _ := item["id"].(string)
+		if strings.TrimSpace(id) != "" {
+			candidates = append(candidates, id)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, newParameterError("没有可用资产模板")
+	}
+	return pickTemplateIdsFromCandidates(candidates, count)
+}
+
+// 从候选 ID 中随机抽取指定数量。
+func pickTemplateIdsFromCandidates(candidates []string, count int64) ([]string, error) {
 	result := make([]string, 0, count)
 	for i := int64(0); i < count; i++ {
 		index, err := secureRandomIndex(len(candidates))
@@ -423,6 +548,7 @@ func pickTemplateIds(templates []map[string]any, tierField string, tier string, 
 	return result, nil
 }
 
+// 返回安全随机下标。
 func secureRandomIndex(max int) (int, error) {
 	if max <= 0 {
 		return 0, newParameterError("随机候选为空")
@@ -434,29 +560,147 @@ func secureRandomIndex(max int) (int, error) {
 	return int(value.Int64()), nil
 }
 
-func appendOwnerFactoryAsset(ownerKey string, entry ownerFactoryAssetEntry) error {
-	path := factory.OwnerIndexStaticPath(ownerKey)
-	index := ownerFactoryAssetIndex{
-		Schema:   "senspace.factory.owner-assets.v1",
-		OwnerKey: ownerKey,
-		Assets:   []ownerFactoryAssetEntry{},
+// 为默认鱼缸和鱼创建包含关系。
+func createDefaultMintRelations(tx *gorm.DB, ownerKey string, assets []factory.Asset) error {
+	tankIDs := make([]int64, 0)
+	for _, asset := range assets {
+		if asset.AssetKind == factory.AssetKindTank {
+			tankIDs = append(tankIDs, asset.Id)
+		}
 	}
-	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &index); err != nil {
+	if len(tankIDs) == 0 {
+		return nil
+	}
+
+	var fishIndex int
+	for _, asset := range assets {
+		if asset.AssetKind != factory.AssetKindFish {
+			continue
+		}
+		relation := factory.AssetRelation{
+			Id:            generateID(),
+			OwnerKey:      ownerKey,
+			RelationType:  "contains",
+			SourceAssetId: tankIDs[fishIndex%len(tankIDs)],
+			TargetAssetId: asset.Id,
+			MetadataJson:  "{}",
+			Status:        factory.AssetRelationStatusActive,
+		}
+		if err := tx.Create(&relation).Error; err != nil {
 			return err
 		}
-	} else if !os.IsNotExist(err) {
+		fishIndex++
+	}
+	return nil
+}
+
+// 重建持有人的资产索引和组合快照。
+func rebuildOwnerFactorySnapshots(ownerKey string) error {
+	tx, err := db()
+	if err != nil {
 		return err
 	}
 
-	for _, existing := range index.Assets {
-		if existing.AssetId == entry.AssetId {
-			return nil
-		}
+	var assets []factory.Asset
+	if err := tx.
+		Where("owner_key = ? AND status = ?", ownerKey, factory.AssetStatusActive).
+		Order("created_at DESC").
+		Find(&assets).Error; err != nil {
+		return err
 	}
-	index.Schema = "senspace.factory.owner-assets.v1"
-	index.OwnerKey = ownerKey
-	index.UpdatedAt = time.Now().Format(time.RFC3339Nano)
-	index.Assets = append([]ownerFactoryAssetEntry{entry}, index.Assets...)
-	return factory.WriteJSONAtomic(path, index)
+
+	var relations []factory.AssetRelation
+	if err := tx.
+		Where("owner_key = ? AND status = ?", ownerKey, factory.AssetRelationStatusActive).
+		Order("created_at ASC").
+		Find(&relations).Error; err != nil {
+		return err
+	}
+
+	now := time.Now().Format(time.RFC3339Nano)
+	index := ownerFactoryAssetIndex{
+		Schema:    "senspace.factory.owner-assets.v2",
+		OwnerKey:  ownerKey,
+		UpdatedAt: now,
+		Assets:    make([]ownerFactoryAssetEntry, 0, len(assets)),
+	}
+	for _, asset := range assets {
+		if err := writeFactoryAssetSnapshot(asset); err != nil {
+			return err
+		}
+		index.Assets = append(index.Assets, ownerFactoryAssetEntry{
+			AssetId:     strconv.FormatInt(asset.Id, 10),
+			PluginId:    asset.PluginId,
+			ReleaseId:   strconv.FormatInt(asset.ReleaseId, 10),
+			Version:     asset.Version,
+			RuntimeKind: defaultRuntimeKind(asset.RuntimeKind),
+			AssetKind:   asset.AssetKind,
+			TemplateRef: asset.TemplateRef,
+			TemplateId:  asset.TemplateId,
+			AssetUrl:    factory.AssetStaticURL(asset.PluginId, asset.Id),
+			ReleaseUrl:  releaseStaticURLFromAsset(asset),
+			MintedAt:    asset.CreatedAt.Format(time.RFC3339Nano),
+		})
+	}
+	if err := factory.WriteJSONAtomic(factory.OwnerIndexStaticPath(ownerKey), index); err != nil {
+		return err
+	}
+
+	composition := ownerFactoryAssetComposition{
+		Schema:    "senspace.factory.owner-composition.v1",
+		OwnerKey:  ownerKey,
+		UpdatedAt: now,
+		Relations: make([]ownerFactoryAssetCompositionEdge, 0, len(relations)),
+	}
+	for _, relation := range relations {
+		composition.Relations = append(composition.Relations, ownerFactoryAssetCompositionEdge{
+			Id:            strconv.FormatInt(relation.Id, 10),
+			RelationType:  relation.RelationType,
+			SourceAssetId: strconv.FormatInt(relation.SourceAssetId, 10),
+			TargetAssetId: strconv.FormatInt(relation.TargetAssetId, 10),
+			Metadata:      decodeRelationMetadata(relation.MetadataJson),
+		})
+	}
+	return factory.WriteJSONAtomic(factory.OwnerCompositionStaticPath(ownerKey), composition)
+}
+
+// 写入单个资产静态快照。
+func writeFactoryAssetSnapshot(asset factory.Asset) error {
+	snapshot := mintedFactoryAsset{
+		Schema:       "senspace.factory.asset.v2",
+		AssetId:      strconv.FormatInt(asset.Id, 10),
+		PluginId:     asset.PluginId,
+		ReleaseId:    strconv.FormatInt(asset.ReleaseId, 10),
+		Version:      asset.Version,
+		RuntimeKind:  defaultRuntimeKind(asset.RuntimeKind),
+		AssetKind:    asset.AssetKind,
+		TemplateRef:  asset.TemplateRef,
+		TemplateId:   asset.TemplateId,
+		ReleaseUrl:   releaseStaticURLFromAsset(asset),
+		MintRecordId: strconv.FormatInt(asset.MintRecordId, 10),
+		MintedAt:     asset.CreatedAt.Format(time.RFC3339Nano),
+		TemplateRefs: map[string]string{
+			"assetMeta":        "asset.meta.json",
+			"defaultWaterMeta": "defaultWaterMeta.json",
+		},
+	}
+	return factory.WriteJSONAtomic(factory.AssetStaticPath(asset.PluginId, asset.Id), snapshot)
+}
+
+// 返回资产对应的发布快照地址。
+func releaseStaticURLFromAsset(asset factory.Asset) string {
+	return factory.FactoryStaticURL("releases", asset.PluginId, fmt.Sprintf("%s-%d", asset.Version, asset.ReleaseId), "release.json")
+}
+
+// 解码关系扩展数据。
+func decodeRelationMetadata(raw string) any {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "{}" {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal([]byte(trimmed), &value); err != nil {
+		return nil
+	}
+	return value
 }

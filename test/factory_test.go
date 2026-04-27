@@ -56,6 +56,7 @@ type factoryTestEnv struct {
 
 type fakePluginBuildExecutor struct{}
 
+// 模拟插件构建产物。
 func (fakePluginBuildExecutor) Build(ctx context.Context, req factory_service.PluginBuildRequest) (*factory_service.PluginBuildResult, error) {
 	select {
 	case <-ctx.Done():
@@ -444,6 +445,7 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 	}
 
 	t.Cleanup(func() {
+		executeSQLFile(t, env.db, filepath.Join(repoRoot(t), "asset", "database", "factory_test_cleanup.sql"))
 		if sqlDB, err := env.db.DB(); err == nil {
 			_ = sqlDB.Close()
 		}
@@ -471,6 +473,13 @@ func loadFactoryDevConfig(t *testing.T) {
 
 	resolved := strings.ReplaceAll(string(conf), "${s90}", setting.Config.S90)
 	require.NoError(t, yaml.Unmarshal([]byte(resolved), setting.Config))
+
+	// ldev MySQL 由 docker-compose 暴露在 3307，测试不使用本机 3306。
+	setting.Config.Database.User = testEnvOrDefault("SENSPACE_TEST_DB_USER", "root")
+	setting.Config.Database.Password = testEnvOrDefault("SENSPACE_TEST_DB_PASSWORD", "smart@vserp")
+	setting.Config.Database.Host = testEnvOrDefault("SENSPACE_TEST_DB_HOST", "127.0.0.1:3307")
+	setting.Config.Database.Name = testEnvOrDefault("SENSPACE_TEST_DB_NAME", "senspace")
+	require.NoError(t, d_util.EnsureDatabaseExists(setting.Config.Database.Name))
 }
 
 // 执行 SQL 文件。
@@ -515,6 +524,15 @@ func repoRoot(t *testing.T) string {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	return filepath.Clean(filepath.Join(wd, ".."))
+}
+
+// 测试环境变量默认值。
+func testEnvOrDefault(key string, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // 写入插件源码目录。
