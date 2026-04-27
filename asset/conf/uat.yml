@@ -23,6 +23,12 @@ app:
   logSaveName: log
   logFileExt: log
   timeFormat: 20060102
+  filePath:
+    book: /usr/local/app/senspace/runtime/book
+    font: /usr/local/app/senspace/runtime/font
+    image: /usr/local/app/senspace/runtime/image
+    plugin: /usr/local/app/senspace/runtime/plugin
+    factory: /usr/local/app/senspace/runtime/factory
 server:
   runmode: debug
   port: 9010

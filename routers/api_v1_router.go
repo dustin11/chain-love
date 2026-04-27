@@ -120,6 +120,7 @@ func SetupApiV1Router(router *gin.Engine) {
 		factoryRouter.POST("/publish", context.WithAppContext(factory_api.PublishPlugin))
 		factoryRouter.GET("/releases/my", context.WithAppContext(factory_api.GetMyReleases))
 		factoryRouter.GET("/releases/:id", context.WithAppContext(factory_api.GetReleaseDetail))
+		factoryRouter.POST("/releases/:id/mint", context.WithAppContext(factory_api.MintReleaseAsset))
 		factoryRouter.PATCH("/releases/:id", context.WithAppContext(factory_api.UpdateRelease))
 		factoryRouter.PATCH("/releases/:id/price", context.WithAppContext(factory_api.UpdateReleasePrice))
 		factoryRouter.PATCH("/releases/:id/status", context.WithAppContext(factory_api.UpdateReleaseStatus))

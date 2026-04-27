@@ -117,6 +117,22 @@ type RecordMintRequest struct {
 	TxHash        string
 }
 
+// 按发布价值模板铸造一份个人 NFT 元数据。
+type MintAssetRequest struct {
+	Inputs    map[string]map[string]int64 `json:"inputs"`
+	TotalPaid string                      `json:"totalPaid"`
+	ChainId   *int64                      `json:"chainId,omitempty"`
+	TxHash    string                      `json:"txHash,omitempty"`
+}
+
+// 铸造生成的静态资产入口。
+type MintAssetResponse struct {
+	AssetId       string `json:"assetId"`
+	AssetUrl      string `json:"assetUrl"`
+	OwnerIndexUrl string `json:"ownerIndexUrl"`
+	TotalPaid     string `json:"totalPaid"`
+}
+
 // 价格历史视图。
 type PriceHistoryRecord struct {
 	Id                string `json:"id"`
@@ -152,6 +168,7 @@ type PublishRecord struct {
 	BuildError     string                       `json:"buildError,omitempty"`
 	BuiltAt        string                       `json:"builtAt,omitempty"`
 	RuntimeKind    factory.ReleaseRuntimeKind   `json:"runtimeKind"`
+	ReleaseUrl     string                       `json:"releaseUrl,omitempty"`
 	UpgradePolicy  factory.ReleaseUpgradePolicy `json:"upgradePolicy,omitempty"`
 	UpgradePrice   string                       `json:"upgradePrice,omitempty"`
 	PublishedAt    string                       `json:"publishedAt,omitempty"`

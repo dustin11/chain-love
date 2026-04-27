@@ -25,6 +25,7 @@ app:
     font: ../runtime/ldev/font
     image: ../runtime/ldev/image
     plugin: ../runtime/ldev/plugin
+    factory: ../runtime/ldev/factory
 server:
   runmode: debug
   port: 9010

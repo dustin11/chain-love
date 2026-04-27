@@ -347,5 +347,21 @@ func SavePlugin(ctx *contextx.AppContext, pluginId string, form *multipart.Form)
 		}
 	}
 
+	assetMetaPath := filepath.Join(rootPath, "asset.meta.json")
+	if _, err := os.Stat(assetMetaPath); errors.Is(err, os.ErrNotExist) {
+		defaultAssetMeta := map[string]interface{}{
+			"schema":      "senspace.asset-meta.v1",
+			"pluginId":    newPluginIdStr,
+			"basePrice":   "0",
+			"collections": []interface{}{},
+		}
+		bytes, err := json.MarshalIndent(defaultAssetMeta, "", "  ")
+		e.PanicIfErr(err)
+		bytes = append(bytes, '\n')
+		e.PanicIfErr(os.WriteFile(assetMetaPath, bytes, 0644))
+	} else {
+		e.PanicIfErr(err)
+	}
+
 	return map[string]interface{}{"id": newPluginIdStr}, nil
 }

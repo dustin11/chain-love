@@ -26,6 +26,7 @@ app:
     font: F:\project\senspace\runtime\font\
     image: F:\project\senspace\runtime\image\
     plugin: F:\project\senspace\runtime\plugin\
+    factory: F:\project\senspace\runtime\factory\
 server:
   runmode: debug
   port: 9010

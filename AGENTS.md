@@ -54,6 +54,7 @@
 
 注释规则：
 - 公共接口、导出类型、枚举、复杂业务逻辑必须有中文注释, 注释风格简洁重点。
+- 注释只描述重点，避免在注释开头重复类型名、方法名、字段名或把标识符翻译一遍。
 - 注释风格优先参考 [`auth_api.go`](/f:/project/senspace/senspace/api/api_v1/auth_api/auth_api.go)。
 - Swagger 注释、普通中文注释、关键逻辑前的短注释可以混合使用，但必须保持简洁、直接、可读。
 - 除非注释本身错误或已过期，否则不要删除已有有效注释。
@@ -81,7 +82,7 @@ func GetNonce(c *gin.Context) {
 结构体与请求体示例：
 
 ```go
-// LoginReq 表示登录请求体。
+// 登录请求体。
 type LoginReq struct {
 	Message   string `json:"message" binding:"required"`
 	Signature string `json:"signature" binding:"required"`

@@ -82,6 +82,22 @@ func GetReleaseDetail(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(record))
 }
 
+// @Summary 按价值模板铸造发布资产
+// @Tags 数字工厂
+// @Param id path string true "发布记录ID"
+// @Param data body factory_service.MintAssetRequest true "铸造参数"
+// @Success 200 {object} e.Error
+// @Router /api/v1/factory/releases/{id}/mint [post]
+func MintReleaseAsset(ctx *contextx.AppContext) {
+	var req factory_service.MintAssetRequest
+	err := ctx.Gin.ShouldBindJSON(&req)
+	e.PanicParameterError(err)
+
+	record, err := factory_service.MintReleaseAsset(*ctx.User, ctx.Gin.Param("id"), req)
+	panicIfFactoryError(err)
+	app.Response(ctx.Gin, e.SuccessData(record))
+}
+
 // @Summary 更新发布市场信息
 // @Tags 数字工厂
 // @Param id path string true "发布记录ID"

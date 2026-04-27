@@ -504,6 +504,7 @@ func mapRelease(record factory.Release) PublishRecord {
 		BuildError:     record.BuildError,
 		BuiltAt:        formatTime(record.BuiltAt),
 		RuntimeKind:    defaultRuntimeKind(record.RuntimeKind),
+		ReleaseUrl:     factory.ReleaseStaticURL(record),
 		UpgradePolicy:  defaultUpgradePolicy(record.UpgradePolicy),
 		UpgradePrice:   displayUpgradePrice(record.UpgradePolicy, record.UpgradePrice),
 		PublishedAt:    formatTime(record.PublishedAt),

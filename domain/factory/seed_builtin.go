@@ -29,8 +29,8 @@ type builtinFactoryReleaseSeed struct {
 var builtinFactoryReleaseSeeds = []builtinFactoryReleaseSeed{
 	{
 		Id:          910000000000001,
-		PluginId:    "FishTankPlugin",
-		Name:        "FishTank",
+		PluginId:    "FishTank",
+		Name:        "水空间",
 		Version:     "1.0.0",
 		RuntimeKind: ReleaseRuntimeKindBuiltin,
 		Description: "鱼缸插件。",
@@ -108,37 +108,50 @@ func seedBuiltinRelease(db *gorm.DB, seed builtinFactoryReleaseSeed) error {
 	var existing Release
 	err := db.Where("plugin_id = ? AND version = ?", seed.PluginId, seed.Version).First(&existing).Error
 	if err == nil {
-		updates := map[string]interface{}{
-			"author_id":         release.AuthorId,
-			"author_snapshot":   release.AuthorSnapshot,
-			"name":              release.Name,
-			"status":            release.Status,
-			"review_status":     release.ReviewStatus,
-			"current_release":   release.CurrentRelease,
-			"manifest_snapshot": release.ManifestSnapshot,
-			"summary":           release.Summary,
-			"category":          release.Category,
-			"tags":              release.Tags,
-			"cover_url":         release.CoverUrl,
-			"total_supply":      release.TotalSupply,
-			"mint_per":          release.MintPer,
-			"mint_price":        release.MintPrice,
-			"build_status":      release.BuildStatus,
-			"runtime_kind":      release.RuntimeKind,
-			"upgrade_policy":    release.UpgradePolicy,
-			"upgrade_price":     release.UpgradePrice,
-		}
-		if existing.PublishedAt == nil {
-			updates["published_at"] = release.PublishedAt
-		}
-		if existing.BuiltAt == nil {
-			updates["built_at"] = release.BuiltAt
-		}
-		return db.Model(&Release{}).Where("id = ?", existing.Id).Updates(updates).Error
+		return updateBuiltinRelease(db, existing, release)
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
-	return db.Create(&release).Error
+	if err := db.Create(&release).Error; err != nil {
+		return err
+	}
+	return EnsureReleaseStaticSnapshot(release)
+}
+
+func updateBuiltinRelease(db *gorm.DB, existing Release, release Release) error {
+	updates := map[string]interface{}{
+		"plugin_id":         release.PluginId,
+		"author_id":         release.AuthorId,
+		"author_snapshot":   release.AuthorSnapshot,
+		"name":              release.Name,
+		"version":           release.Version,
+		"status":            release.Status,
+		"review_status":     release.ReviewStatus,
+		"current_release":   release.CurrentRelease,
+		"manifest_snapshot": release.ManifestSnapshot,
+		"summary":           release.Summary,
+		"category":          release.Category,
+		"tags":              release.Tags,
+		"cover_url":         release.CoverUrl,
+		"total_supply":      release.TotalSupply,
+		"mint_per":          release.MintPer,
+		"mint_price":        release.MintPrice,
+		"build_status":      release.BuildStatus,
+		"runtime_kind":      release.RuntimeKind,
+		"upgrade_policy":    release.UpgradePolicy,
+		"upgrade_price":     release.UpgradePrice,
+	}
+	if existing.PublishedAt == nil {
+		updates["published_at"] = release.PublishedAt
+	}
+	if existing.BuiltAt == nil {
+		updates["built_at"] = release.BuiltAt
+	}
+	if err := db.Model(&Release{}).Where("id = ?", existing.Id).Updates(updates).Error; err != nil {
+		return err
+	}
+	release.Id = existing.Id
+	return EnsureReleaseStaticSnapshot(release)
 }

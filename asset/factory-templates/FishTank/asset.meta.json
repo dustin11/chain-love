@@ -1,0 +1,19 @@
+{
+  "schema": "senspace.asset-meta.v1",
+  "pluginId": "FishTank",
+  "basePrice": "10",
+  "collections": [
+    {
+      "label": "鱼",
+      "ref": "defaultWaterMeta.json#fish",
+      "tierField": "tier",
+      "maxTierCount": 24,
+      "unitPriceByTier": {
+        "common": "5",
+        "rare": "20",
+        "epic": "50",
+        "legendary": "120"
+      }
+    }
+  ]
+}

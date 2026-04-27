@@ -1,13 +1,14 @@
 package routers
 
 import (
+	"log"
+	"net/http"
 	"senspace/asset"
+	"senspace/domain/factory"
 	"senspace/middleware"
 	"senspace/pkg/e"
 	"senspace/pkg/setting"
 	"senspace/pkg/util"
-	"log"
-	"net/http"
 	"strings"
 	"time"
 
@@ -70,6 +71,8 @@ func SetupRouter() *gin.Engine {
 	router.StaticFS("/avatar", http.Dir(util.RootPath()+"avatar/"))
 	// 将磁盘目录挂到 /static/images 下（请求示例 /static/images/1001/xxx.jpg）
 	router.StaticFS("/static/images", gin.Dir(setting.Config.App.FilePath.Image, false))
+	// 数字工厂静态资产：发布模板、铸造 NFT 元数据、owner hash 索引。
+	router.StaticFS("/static/factory", gin.Dir(factory.FactoryStaticRoot(), false))
 	//swagger
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
