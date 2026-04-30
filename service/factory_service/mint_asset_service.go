@@ -34,13 +34,20 @@ type assetValueCollection struct {
 	Key       string            `json:"key"`
 	AssetKind factory.AssetKind `json:"assetKind"`
 	// 例如 defaultWaterMeta.json#fish。
-	Ref string `json:"ref"`
-	// 模板项中用于区分等级的字段。
-	TierField string `json:"tierField"`
-	// 单等级上限，0 表示不限。
-	MaxTierCount    int64             `json:"maxTierCount"`
-	UnitPrice       string            `json:"unitPrice"`
-	UnitPriceByTier map[string]string `json:"unitPriceByTier"`
+	Ref       string `json:"ref"`
+	UnitPrice string `json:"unitPrice"`
+	// 按等级合并价格、发行量和单次铸造上限；key 必须匹配模板项的 tier 字段。
+	TierConfig map[string]assetTierConfig `json:"tierConfig"`
+}
+
+// 单个等级的铸造配置。
+type assetTierConfig struct {
+	// 值为 "-" 表示该等级暂不开放铸造。
+	Price string `json:"price"`
+	// 等级总量，后续库存校验使用。
+	Supply int64 `json:"supply"`
+	// 单次铸造上限，0 表示不可选。
+	MintLimit int64 `json:"mintLimit"`
 }
 
 // 计价后的铸造明细。
@@ -330,7 +337,7 @@ func resolveMintSelection(
 			return mintSelectionResult{}, err
 		}
 
-		if len(collection.UnitPriceByTier) > 0 {
+		if len(collection.TierConfig) > 0 {
 			if err := appendTieredSelection(&result, total, collection, assetKind, templateFile, refField, templateItems, counts); err != nil {
 				return mintSelectionResult{}, err
 			}
@@ -377,35 +384,38 @@ func appendTieredSelection(
 	templateItems []map[string]any,
 	counts map[string]int64,
 ) error {
-	tierField := strings.TrimSpace(collection.TierField)
-	if tierField == "" {
-		tierField = "tier"
-	}
-
 	for tier, count := range counts {
 		tier = strings.TrimSpace(tier)
 		if tier == "" || count <= 0 {
 			continue
 		}
-		unitRaw, ok := collection.UnitPriceByTier[tier]
+		tierConfig, ok := collection.TierConfig[tier]
 		if !ok {
 			return newParameterError("未知等级: " + tier)
 		}
-		if collection.MaxTierCount > 0 && count > collection.MaxTierCount {
-			return newParameterError(fmt.Sprintf("%s等级 %s 不能超过 %d", collectionDisplayName(collection), tier, collection.MaxTierCount))
+		if isDisabledTierPrice(tierConfig.Price) || tierConfig.MintLimit == 0 {
+			return newParameterError(fmt.Sprintf("%s等级 %s 暂未开放铸造", collectionDisplayName(collection), tier))
 		}
-		unit, err := parsePriceRat(unitRaw, tier+" 单价")
+		if tierConfig.MintLimit > 0 && count > tierConfig.MintLimit {
+			return newParameterError(fmt.Sprintf("%s等级 %s 不能超过 %d", collectionDisplayName(collection), tier, tierConfig.MintLimit))
+		}
+		unit, err := parsePriceRat(tierConfig.Price, tier+" 单价")
 		if err != nil {
 			return err
 		}
 		total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
-		ids, err := pickTemplateIdsByField(templateItems, tierField, tier, count)
+		ids, err := pickTemplateIdsByField(templateItems, "tier", tier, count)
 		if err != nil {
 			return err
 		}
 		appendSelectedItems(result, assetKind, collection.Ref, templateFile, refField, ids)
 	}
 	return nil
+}
+
+// 判断等级价格是否表示禁用。
+func isDisabledTierPrice(price string) bool {
+	return strings.TrimSpace(price) == "-"
 }
 
 // 追加不分等级计价的资产选择项。

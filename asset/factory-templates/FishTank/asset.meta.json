@@ -8,20 +8,18 @@
       "key": "tank",
       "assetKind": "tank",
       "ref": "defaultWaterMeta.json#tanks",
-      "unitPrice": "30"
+      "unitPrice": "10"
     },
     {
       "label": "鱼",
       "key": "fish",
       "assetKind": "fish",
       "ref": "defaultWaterMeta.json#fish",
-      "tierField": "tier",
-      "maxTierCount": 24,
-      "unitPriceByTier": {
-        "common": "5",
-        "rare": "20",
-        "epic": "50",
-        "legendary": "120"
+      "tierConfig": {
+        "common": { "price": "5", "supply": 51000, "mintLimit": 10 },
+        "rare": { "price": "50", "supply": 8400, "mintLimit": 5 },
+        "epic": { "price": "500", "supply": 588, "mintLimit": 1 },
+        "legendary": { "price": "-", "supply": 12, "mintLimit": 0 }
       }
     }
   ]

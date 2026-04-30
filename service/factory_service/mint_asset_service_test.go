@@ -2,6 +2,7 @@ package factory_service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,12 +22,12 @@ import (
 // 独立 NFT 铸造与组合快照。
 func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 	env := setupMintAssetServiceTest(t)
+	release := createFishTankMintTestRelease(t, env.db)
 	user := security.JwtUser{
 		Id:   990000000000101,
-		Addr: "0xe9a51481d67ca775d19b02a220833ce6c4575f53",
+		Addr: fmt.Sprintf("0x%040x", release.Id),
 	}
 	ownerKey := factory.OwnerIndexKey(user.Addr)
-	release := createFishTankMintTestRelease(t, env.db)
 	t.Cleanup(func() {
 		cleanupMintTestData(t, env.db, release.Id, user.Id, ownerKey)
 	})
@@ -41,10 +42,10 @@ func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 				"rare":   1,
 			},
 		},
-		TotalPaid: "60",
+		TotalPaid: "70",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "60", response.TotalPaid)
+	require.Equal(t, "70", response.TotalPaid)
 	require.Len(t, response.Assets, 4)
 	require.Equal(t, factory.OwnerIndexStaticURL(ownerKey), response.OwnerIndexUrl)
 	require.Equal(t, factory.OwnerCompositionStaticURL(ownerKey), response.OwnerCompositionUrl)
@@ -58,7 +59,7 @@ func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 	var record factory.MintRecord
 	require.NoError(t, env.db.First(&record, "release_id = ? AND user_id = ?", release.Id, user.Id).Error)
 	require.Equal(t, int64(4), record.Quantity)
-	require.Equal(t, "60.000000000000000000", record.TotalPaid)
+	require.Equal(t, "70.000000000000000000", record.TotalPaid)
 
 	var refreshedRelease factory.Release
 	require.NoError(t, env.db.First(&refreshedRelease, "id = ?", release.Id).Error)
@@ -93,6 +94,16 @@ func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 		require.Equal(t, asset.TemplateId, snapshot["templateId"])
 		require.NotContains(t, snapshot, "ownerKey")
 	}
+
+	_, err = MintReleaseAsset(user, strconv.FormatInt(release.Id, 10), MintAssetRequest{
+		Inputs: map[string]map[string]int64{
+			"defaultWaterMeta.json#fish": {
+				"legendary": 1,
+			},
+		},
+		TotalPaid: "5000",
+	})
+	require.ErrorContains(t, err, "暂未开放铸造")
 }
 
 type mintAssetServiceTestEnv struct {
