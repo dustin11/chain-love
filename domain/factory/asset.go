@@ -1,6 +1,6 @@
 package factory
 
-import "time"
+import "senspace/domain"
 
 // 独立 NFT 的业务类型。
 type AssetKind string
@@ -34,15 +34,21 @@ type Asset struct {
 	AssetKind       AssetKind          `json:"assetKind" gorm:"type:varchar(64);not null;index:idx_factory_asset_kind;comment:资产类型"`
 	TemplateRef     string             `json:"templateRef" gorm:"type:varchar(255);not null;comment:模板引用"`
 	TemplateId      string             `json:"templateId" gorm:"type:varchar(128);not null;comment:模板项ID"`
+	FishId          string             `json:"fishId,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_fish;comment:冻结鱼ID"`
+	FishIndex       *int               `json:"fishIndex,omitempty" gorm:"index:idx_factory_asset_fish_index;comment:冻结鱼等级内序号"`
+	Tier            string             `json:"tier,omitempty" gorm:"type:varchar(64);index:idx_factory_asset_tier;comment:资产等级"`
+	TraitHash       string             `json:"traitHash,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_trait;comment:冻结属性哈希"`
 	OwnerAddress    string             `json:"ownerAddress" gorm:"type:varchar(255);not null;index:idx_factory_asset_owner;comment:当前钱包地址"`
 	OwnerKey        string             `json:"ownerKey" gorm:"type:varchar(128);not null;index:idx_factory_asset_owner_key;comment:当前钱包索引键"`
 	MintRecordId    int64              `json:"mintRecordId,string" gorm:"not null;index:idx_factory_asset_mint;comment:铸造记录ID"`
 	ChainId         *int64             `json:"chainId,omitempty" gorm:"comment:链ID"`
 	ContractAddress string             `json:"contractAddress,omitempty" gorm:"type:varchar(255);comment:合约地址"`
 	TokenId         string             `json:"tokenId,omitempty" gorm:"type:varchar(255);comment:链上Token ID"`
+	MetadataUri     string             `json:"metadataUri,omitempty" gorm:"type:varchar(512);comment:NFT metadata 静态地址"`
+	ProofUri        string             `json:"proofUri,omitempty" gorm:"type:varchar(512);comment:NFT proof 静态地址"`
 	Status          AssetStatus        `json:"status" gorm:"type:varchar(32);not null;index:idx_factory_asset_status;comment:资产状态"`
-	CreatedAt       time.Time          `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt       time.Time          `json:"updatedAt" gorm:"autoUpdateTime"`
+	domain.CreatInfo
+	domain.UpdateInfo
 }
 
 // 数据表。
@@ -69,8 +75,8 @@ type AssetRelation struct {
 	TargetAssetId int64               `json:"targetAssetId,string" gorm:"not null;index:idx_factory_relation_target;comment:目标资产ID"`
 	MetadataJson  string              `json:"metadataJson,omitempty" gorm:"type:json;comment:关系扩展数据"`
 	Status        AssetRelationStatus `json:"status" gorm:"type:varchar(32);not null;index:idx_factory_relation_status;comment:关系状态"`
-	CreatedAt     time.Time           `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt     time.Time           `json:"updatedAt" gorm:"autoUpdateTime"`
+	domain.CreatInfo
+	domain.UpdateInfo
 }
 
 // 数据表。

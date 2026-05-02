@@ -183,7 +183,52 @@ func executeReleaseBuild(release factory.Release) (factory.Release, error) {
 		return release, err
 	}
 
+	if hasFactoryAssetTemplate(release.PluginId) {
+		var stagingDir string
+		var backupDir string
+		activatedSnapshot := false
+		if err := tx.Transaction(func(tx *gorm.DB) error {
+			_, releaseStagingDir, err := freezeReleaseAssets(tx, release)
+			if err != nil {
+				return err
+			}
+			stagingDir = releaseStagingDir
+			if stagingDir != "" {
+				releaseBackupDir, snapshotActivated, err := activateStagedReleaseSnapshot(release, stagingDir)
+				if err != nil {
+					return err
+				}
+				backupDir = releaseBackupDir
+				activatedSnapshot = snapshotActivated
+				stagingDir = ""
+			}
+			return nil
+		}); err != nil {
+			rollbackFreezeStaticSnapshot(release, stagingDir, backupDir, activatedSnapshot)
+			message := truncateBuildError(err.Error())
+			updateErr := tx.Model(&factory.Release{}).
+				Where("id = ?", release.Id).
+				Updates(map[string]interface{}{
+					"build_status": factory.BuildStatusFailed,
+					"build_error":  message,
+				}).Error
+			if updateErr != nil {
+				return release, updateErr
+			}
+			release.BuildStatus = factory.BuildStatusFailed
+			release.BuildError = message
+			return release, err
+		}
+		commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+	}
+
 	return release, nil
+}
+
+func hasFactoryAssetTemplate(pluginId string) bool {
+	assetMetaPath := filepath.Join("asset", "factory-templates", pluginId, "asset.meta.json")
+	info, err := os.Stat(assetMetaPath)
+	return err == nil && !info.IsDir()
 }
 
 func (dockerPluginBuildExecutor) Build(ctx context.Context, req PluginBuildRequest) (*PluginBuildResult, error) {

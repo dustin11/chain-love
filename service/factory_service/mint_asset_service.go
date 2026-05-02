@@ -2,12 +2,14 @@ package factory_service
 
 import (
 	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,12 +32,16 @@ type assetValueTemplate struct {
 
 // 可铸造模板集合。
 type assetValueCollection struct {
-	Label     string            `json:"label"`
-	Key       string            `json:"key"`
+	Label string `json:"label"`
+	// 集合业务键，mint 请求按该 key 提交数量。
+	Key string `json:"key"`
+	// 独立 NFT 类型。
 	AssetKind factory.AssetKind `json:"assetKind"`
-	// 例如 defaultWaterMeta.json#fish。
-	Ref       string `json:"ref"`
-	UnitPrice string `json:"unitPrice"`
+	// 例如 generated/fish/{tier}.json。
+	MetadataRef string `json:"metadataRef"`
+	// 配置后强制校验 item 上的属性哈希字段。
+	TraitHashField string `json:"traitHashField"`
+	UnitPrice      string `json:"unitPrice"`
 	// 按等级合并价格、发行量和单次铸造上限；key 必须匹配模板项的 tier 字段。
 	TierConfig map[string]assetTierConfig `json:"tierConfig"`
 }
@@ -59,17 +65,28 @@ type mintSelectionResult struct {
 
 // 单个待生成 NFT。
 type mintSelectionItem struct {
-	AssetKind    factory.AssetKind
-	TemplateRef  string
-	TemplateFile string
-	RefField     string
-	TemplateId   string
+	AssetKind       factory.AssetKind
+	CollectionKey   string
+	InventoryItemId int64
+	TemplateRef     string
+	TemplateId      string
+	FishId          string
+	FishIndex       *int
+	Tier            string
+	TraitHash       string
+}
+
+// 模板项定位结果。
+type templateItemMatch struct {
+	Item  map[string]any
+	Index int
 }
 
 // 静态目录中的单个 NFT 快照。
 type mintedFactoryAsset struct {
 	Schema       string                     `json:"schema"`
 	AssetId      string                     `json:"assetId"`
+	TokenId      string                     `json:"tokenId,omitempty"`
 	PluginId     string                     `json:"pluginId"`
 	ReleaseId    string                     `json:"releaseId"`
 	Version      string                     `json:"version"`
@@ -77,10 +94,47 @@ type mintedFactoryAsset struct {
 	AssetKind    factory.AssetKind          `json:"assetKind"`
 	TemplateRef  string                     `json:"templateRef"`
 	TemplateId   string                     `json:"templateId"`
+	FishId       string                     `json:"fishId,omitempty"`
+	FishIndex    *int                       `json:"fishIndex,omitempty"`
+	Tier         string                     `json:"tier,omitempty"`
+	TraitHash    string                     `json:"traitHash,omitempty"`
 	ReleaseUrl   string                     `json:"releaseUrl"`
 	MintRecordId string                     `json:"mintRecordId"`
 	MintedAt     string                     `json:"mintedAt"`
+	MetadataUri  string                     `json:"metadataUri,omitempty"`
+	ProofUri     string                     `json:"proofUri,omitempty"`
 	TemplateRefs map[string]string          `json:"templateRefs,omitempty"`
+}
+
+// 标准 NFT metadata。
+type nftMetadata struct {
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	Image        string                 `json:"image,omitempty"`
+	AnimationURL string                 `json:"animation_url,omitempty"`
+	ExternalURL  string                 `json:"external_url,omitempty"`
+	Attributes   []nftMetadataAttribute `json:"attributes"`
+	Properties   map[string]any         `json:"properties"`
+}
+
+// 市场属性项。
+type nftMetadataAttribute struct {
+	TraitType string `json:"trait_type"`
+	Value     any    `json:"value"`
+}
+
+// 当前阶段的可验证声明。
+type nftProofSnapshot struct {
+	Schema       string   `json:"schema"`
+	TokenId      string   `json:"tokenId"`
+	FishId       string   `json:"fishId,omitempty"`
+	FishIndex    *int     `json:"fishIndex,omitempty"`
+	Tier         string   `json:"tier,omitempty"`
+	TraitHash    string   `json:"traitHash,omitempty"`
+	MetadataHash string   `json:"metadataHash"`
+	Leaf         string   `json:"leaf"`
+	MerkleRoot   string   `json:"merkleRoot"`
+	Proof        []string `json:"proof"`
 }
 
 // 钱包地址对应的可重建资产索引。
@@ -101,6 +155,10 @@ type ownerFactoryAssetEntry struct {
 	AssetKind   factory.AssetKind          `json:"assetKind"`
 	TemplateRef string                     `json:"templateRef"`
 	TemplateId  string                     `json:"templateId"`
+	FishId      string                     `json:"fishId,omitempty"`
+	FishIndex   *int                       `json:"fishIndex,omitempty"`
+	Tier        string                     `json:"tier,omitempty"`
+	TraitHash   string                     `json:"traitHash,omitempty"`
 	AssetUrl    string                     `json:"assetUrl"`
 	ReleaseUrl  string                     `json:"releaseUrl"`
 	MintedAt    string                     `json:"mintedAt"`
@@ -164,15 +222,11 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		if defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
 			return newConflictError("当前发布记录构建未完成")
 		}
-		if err := factory.EnsureReleaseStaticSnapshot(release); err != nil {
-			return err
-		}
-
 		valueTemplate, err := loadReleaseMintTemplate(release)
 		if err != nil {
 			return err
 		}
-		mintSelection, err := resolveMintSelection(release, valueTemplate, req.Inputs)
+		mintSelection, err := resolveMintSelection(tx, release, valueTemplate, req.Inputs)
 		if err != nil {
 			return err
 		}
@@ -201,8 +255,10 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 
 		var createdAssets []factory.Asset
 		for _, selected := range mintSelection.Items {
+			assetId := generateID()
+			tokenId := strconv.FormatInt(assetId, 10)
 			asset := factory.Asset{
-				Id:           generateID(),
+				Id:           assetId,
 				PluginId:     release.PluginId,
 				ReleaseId:    release.Id,
 				Version:      release.Version,
@@ -210,14 +266,43 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 				AssetKind:    selected.AssetKind,
 				TemplateRef:  selected.TemplateRef,
 				TemplateId:   selected.TemplateId,
+				FishId:       selected.FishId,
+				FishIndex:    selected.FishIndex,
+				Tier:         selected.Tier,
+				TraitHash:    selected.TraitHash,
 				OwnerAddress: walletAddress,
 				OwnerKey:     ownerKey,
 				MintRecordId: record.Id,
 				ChainId:      req.ChainId,
+				TokenId:      tokenId,
+				MetadataUri:  factory.MetadataStaticURL(release.PluginId, tokenId),
+				ProofUri:     factory.ProofStaticURL(release.PluginId, tokenId),
 				Status:       factory.AssetStatusActive,
 			}
 			if err := tx.Create(&asset).Error; err != nil {
 				return err
+			}
+			if selected.InventoryItemId != 0 {
+				now := time.Now()
+				if err := tx.Model(&factory.NFTInventoryItem{}).
+					Where("id = ? AND status = ?", selected.InventoryItemId, factory.NFTInventoryItemStatusAvailable).
+					Updates(map[string]any{
+						"status":         factory.NFTInventoryItemStatusMinted,
+						"asset_id":       asset.Id,
+						"token_id":       asset.TokenId,
+						"mint_record_id": record.Id,
+						"owner_key":      ownerKey,
+						"minted_at":      &now,
+						"metadata_uri":   asset.MetadataUri,
+						"proof_uri":      asset.ProofUri,
+					}).Error; err != nil {
+					return err
+				}
+				if err := tx.Model(&factory.NFTInventoryPool{}).
+					Where("release_id = ? AND collection_key = ?", release.Id, selected.CollectionKey).
+					UpdateColumn("minted_count", gorm.Expr("minted_count + ?", 1)).Error; err != nil {
+					return err
+				}
 			}
 			createdAssets = append(createdAssets, asset)
 		}
@@ -246,9 +331,15 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		}
 		for _, asset := range createdAssets {
 			response.Assets = append(response.Assets, MintAssetResponseAsset{
-				AssetId:   strconv.FormatInt(asset.Id, 10),
-				AssetKind: asset.AssetKind,
-				AssetUrl:  factory.AssetStaticURL(asset.PluginId, asset.Id),
+				AssetId:     strconv.FormatInt(asset.Id, 10),
+				AssetKind:   asset.AssetKind,
+				AssetUrl:    factory.AssetStaticURL(asset.PluginId, asset.Id),
+				FishId:      asset.FishId,
+				FishIndex:   asset.FishIndex,
+				Tier:        asset.Tier,
+				TraitHash:   asset.TraitHash,
+				MetadataUri: asset.MetadataUri,
+				ProofUri:    asset.ProofUri,
 			})
 		}
 		return nil
@@ -260,6 +351,283 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		return nil, err
 	}
 	return &response, nil
+}
+
+// 冻结当前插件发布的资产快照与库存池。
+func FreezeCurrentPluginReleaseAssets(user security.JwtUser, pluginIdRaw string) (*FreezeReleaseAssetsResponse, error) {
+	if user.Id == 0 {
+		return nil, newParameterError("用户ID不能为空")
+	}
+	pluginId := strings.TrimSpace(pluginIdRaw)
+	if pluginId == "" {
+		return nil, newParameterError("插件ID不能为空")
+	}
+
+	tx, err := db()
+	if err != nil {
+		return nil, err
+	}
+
+	var response *FreezeReleaseAssetsResponse
+	var release factory.Release
+	var stagingDir string
+	var backupDir string
+	activatedSnapshot := false
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("plugin_id = ? AND current_release = ?", pluginId, true).
+			Order("published_at DESC").
+			Order("updated_at DESC").
+			First(&release).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return newNotFoundError("当前插件发布记录不存在")
+			}
+			return err
+		}
+		if release.AuthorId != 0 && release.AuthorId != user.Id {
+			return newForbiddenError("无权冻结该发布记录")
+		}
+
+		freezeResponse, releaseStagingDir, err := freezeReleaseAssets(tx, release)
+		if err != nil {
+			return err
+		}
+		stagingDir = releaseStagingDir
+		if stagingDir != "" {
+			releaseBackupDir, snapshotActivated, err := activateStagedReleaseSnapshot(release, stagingDir)
+			if err != nil {
+				return err
+			}
+			backupDir = releaseBackupDir
+			activatedSnapshot = snapshotActivated
+			stagingDir = ""
+		}
+		response = freezeResponse
+		return nil
+	})
+	if err != nil {
+		rollbackFreezeStaticSnapshot(release, stagingDir, backupDir, activatedSnapshot)
+		return nil, err
+	}
+	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+	return response, nil
+}
+
+func activateStagedReleaseSnapshot(release factory.Release, stagingDir string) (string, bool, error) {
+	if stagingDir == "" {
+		return "", false, nil
+	}
+	backupDir, err := factory.ActivateReleaseStaticSnapshot(release, stagingDir)
+	if err != nil {
+		return "", false, err
+	}
+	return backupDir, true, nil
+}
+
+func rollbackFreezeStaticSnapshot(release factory.Release, stagingDir string, backupDir string, activatedSnapshot bool) {
+	if activatedSnapshot {
+		_ = factory.RollbackActivatedReleaseStaticSnapshot(release, backupDir)
+	}
+	if stagingDir != "" {
+		_ = os.RemoveAll(stagingDir)
+	}
+}
+
+func commitFreezeStaticSnapshot(backupDir string, activatedSnapshot bool) {
+	if activatedSnapshot {
+		_ = factory.CommitActivatedReleaseStaticSnapshot(backupDir)
+	}
+}
+
+// 按 release 静态快照和 asset.meta.json 冻结库存。
+func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAssetsResponse, string, error) {
+	if release.Status != factory.ReleaseStatusPublished && release.Status != factory.ReleaseStatusPaused {
+		return nil, "", newConflictError("当前发布记录不可冻结")
+	}
+	if defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
+		return nil, "", newConflictError("当前发布记录构建未完成")
+	}
+
+	var existingPools []factory.NFTInventoryPool
+	if err := tx.Where("release_id = ?", release.Id).
+		Order("collection_key ASC").
+		Find(&existingPools).Error; err != nil {
+		return nil, "", err
+	}
+	stagingDir, err := factory.StageReleaseStaticSnapshot(release)
+	if err != nil {
+		return nil, "", err
+	}
+	snapshotDir := stagingDir
+
+	valueTemplate, err := loadReleaseMintTemplateFromDir(snapshotDir)
+	if err != nil {
+		return nil, stagingDir, err
+	}
+
+	if len(existingPools) > 0 {
+		hashes, err := collectReleaseCollectionHashes(release, valueTemplate, snapshotDir)
+		if err != nil {
+			return nil, stagingDir, err
+		}
+		changed, changedKeys := collectionHashesChanged(existingPools, hashes)
+		if !changed {
+			_ = os.RemoveAll(stagingDir)
+			pools, err := collectReleaseInventoryPools(tx, release)
+			if err != nil {
+				return nil, "", err
+			}
+			return freezeReleaseResponse(release, "unchanged", "资产集合未变动，不需要重新发布", pools), "", nil
+		}
+
+		hasMinted, err := releaseHasMintedRecords(tx, release, existingPools)
+		if err != nil {
+			return nil, stagingDir, err
+		}
+		if hasMinted {
+			_ = os.RemoveAll(stagingDir)
+			pools, err := collectReleaseInventoryPools(tx, release)
+			if err != nil {
+				return nil, "", err
+			}
+			return freezeReleaseResponse(release, "blocked_minted", "资产集合已变动，铸造记录已生成，无法重新生成库存："+strings.Join(changedKeys, "、"), pools), "", nil
+		}
+
+		if err := clearReleaseInventory(tx, release.Id); err != nil {
+			return nil, stagingDir, err
+		}
+	}
+
+	if err := ensureReleaseInventory(tx, release, valueTemplate, snapshotDir); err != nil {
+		return nil, stagingDir, err
+	}
+
+	pools, err := collectReleaseInventoryPools(tx, release)
+	if err != nil {
+		return nil, stagingDir, err
+	}
+	status := "ready"
+	message := "发布资产已冻结，库存池已准备完成"
+	if len(existingPools) > 0 {
+		status = "rebuilt"
+		message = "资产集合已变动，已清空旧库存并重新冻结"
+	}
+
+	return freezeReleaseResponse(release, status, message, pools), stagingDir, nil
+}
+
+func freezeReleaseResponse(release factory.Release, status string, message string, pools []FreezeReleaseInventoryPool) *FreezeReleaseAssetsResponse {
+	return &FreezeReleaseAssetsResponse{
+		ReleaseId:    strconv.FormatInt(release.Id, 10),
+		PluginId:     release.PluginId,
+		Version:      release.Version,
+		Status:       status,
+		Message:      message,
+		ReleaseUrl:   factory.ReleaseStaticURL(release),
+		AssetMetaUrl: releaseStaticFileURL(release, "asset.meta.json"),
+		Pools:        pools,
+	}
+}
+
+func collectReleaseCollectionHashes(release factory.Release, valueTemplate assetValueTemplate, snapshotDir string) (map[string]string, error) {
+	result := map[string]string{}
+	for _, collection := range valueTemplate.Collections {
+		collectionKey := strings.TrimSpace(collection.Key)
+		if collectionKey == "" {
+			return nil, newParameterError("资产集合缺少 key")
+		}
+		items, err := resolveInventoryMetadataItems(release, collection, snapshotDir)
+		if err != nil {
+			return nil, err
+		}
+		result[collectionKey] = hashInventoryCollection(items)
+	}
+	return result, nil
+}
+
+func collectionHashesChanged(existingPools []factory.NFTInventoryPool, currentHashes map[string]string) (bool, []string) {
+	seen := map[string]struct{}{}
+	changedKeys := []string{}
+	for _, pool := range existingPools {
+		key := strings.TrimSpace(pool.CollectionKey)
+		seen[key] = struct{}{}
+		if currentHashes[key] != strings.TrimSpace(pool.CollectionHash) {
+			changedKeys = append(changedKeys, key)
+		}
+	}
+	for key := range currentHashes {
+		if _, ok := seen[key]; !ok {
+			changedKeys = append(changedKeys, key)
+		}
+	}
+	sort.Strings(changedKeys)
+	return len(changedKeys) > 0, changedKeys
+}
+
+func releaseHasMintedRecords(tx *gorm.DB, release factory.Release, pools []factory.NFTInventoryPool) (bool, error) {
+	if release.MintedCount > 0 {
+		return true, nil
+	}
+	for _, pool := range pools {
+		if pool.MintedCount > 0 {
+			return true, nil
+		}
+	}
+
+	var count int64
+	if err := tx.Model(&factory.MintRecord{}).Where("release_id = ?", release.Id).Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	if err := tx.Model(&factory.Asset{}).Where("release_id = ?", release.Id).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func clearReleaseInventory(tx *gorm.DB, releaseId int64) error {
+	if err := tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryItem{}).Error; err != nil {
+		return err
+	}
+	return tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryPool{}).Error
+}
+
+// 返回发布快照内文件的静态 URL。
+func releaseStaticFileURL(release factory.Release, file string) string {
+	return factory.FactoryStaticURL(
+		"releases",
+		release.PluginId,
+		fmt.Sprintf("%s-%d", release.Version, release.Id),
+		file,
+	)
+}
+
+// 收集发布库存池摘要。
+func collectReleaseInventoryPools(tx *gorm.DB, release factory.Release) ([]FreezeReleaseInventoryPool, error) {
+	var pools []factory.NFTInventoryPool
+	if err := tx.Where("release_id = ?", release.Id).
+		Order("collection_key ASC").
+		Find(&pools).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]FreezeReleaseInventoryPool, 0, len(pools))
+	for _, pool := range pools {
+		result = append(result, FreezeReleaseInventoryPool{
+			CollectionKey:  pool.CollectionKey,
+			AssetKind:      pool.AssetKind,
+			MetadataRef:    pool.MetadataRef,
+			Strategy:       pool.Strategy,
+			TotalSupply:    pool.TotalSupply,
+			MintedCount:    pool.MintedCount,
+			Status:         pool.Status,
+			CollectionHash: pool.CollectionHash,
+			MerkleRoot:     pool.MerkleRoot,
+		})
+	}
+	return result, nil
 }
 
 // 确保用户拥有该插件的权益记录。
@@ -284,7 +652,10 @@ func ensurePluginOwnership(tx *gorm.DB, userId uint64, release factory.Release) 
 
 // 读取发布快照中的铸造模板。
 func loadReleaseMintTemplate(release factory.Release) (assetValueTemplate, error) {
-	dir := factory.ReleaseStaticDir(release)
+	return loadReleaseMintTemplateFromDir(factory.ReleaseStaticDir(release))
+}
+
+func loadReleaseMintTemplateFromDir(dir string) (assetValueTemplate, error) {
 	var valueTemplate assetValueTemplate
 	if err := readJSONFile(filepath.Join(dir, "asset.meta.json"), &valueTemplate); err != nil {
 		return valueTemplate, err
@@ -303,10 +674,15 @@ func readJSONFile(path string, target any) error {
 
 // 校验铸造输入并计算待生成资产。
 func resolveMintSelection(
+	tx *gorm.DB,
 	release factory.Release,
 	valueTemplate assetValueTemplate,
 	inputs map[string]map[string]int64,
 ) (mintSelectionResult, error) {
+	if err := requireReleaseInventory(tx, release, valueTemplate); err != nil {
+		return mintSelectionResult{}, err
+	}
+
 	total := new(big.Rat)
 	base, err := parsePriceRat(valueTemplate.BasePrice, "基础价格")
 	if err != nil {
@@ -316,11 +692,14 @@ func resolveMintSelection(
 
 	var result mintSelectionResult
 	for _, collection := range valueTemplate.Collections {
-		ref := strings.TrimSpace(collection.Ref)
-		if ref == "" {
-			continue
+		collectionKey := strings.TrimSpace(collection.Key)
+		if collectionKey == "" {
+			return mintSelectionResult{}, newParameterError("资产集合缺少 key")
 		}
-		counts := inputs[ref]
+		if strings.TrimSpace(collection.MetadataRef) == "" {
+			return mintSelectionResult{}, newParameterError(collectionDisplayName(collection) + "缺少 metadataRef")
+		}
+		counts := inputs[collectionKey]
 		if len(counts) == 0 {
 			continue
 		}
@@ -328,22 +707,14 @@ func resolveMintSelection(
 		if err != nil {
 			return mintSelectionResult{}, err
 		}
-		templateFile, refField, err := parseAssetRef(ref)
-		if err != nil {
-			return mintSelectionResult{}, err
-		}
-		templateItems, err := loadTemplateItems(filepath.Join(factory.ReleaseStaticDir(release), templateFile), refField)
-		if err != nil {
-			return mintSelectionResult{}, err
-		}
 
 		if len(collection.TierConfig) > 0 {
-			if err := appendTieredSelection(&result, total, collection, assetKind, templateFile, refField, templateItems, counts); err != nil {
+			if err := appendTieredSelection(tx, release, &result, total, collection, assetKind, counts); err != nil {
 				return mintSelectionResult{}, err
 			}
 			continue
 		}
-		if err := appendFlatSelection(&result, total, collection, assetKind, templateFile, refField, templateItems, counts); err != nil {
+		if err := appendFlatSelection(tx, release, &result, total, collection, assetKind, counts); err != nil {
 			return mintSelectionResult{}, err
 		}
 	}
@@ -360,7 +731,10 @@ func collectionDisplayName(collection assetValueCollection) string {
 	if label != "" {
 		return label
 	}
-	return strings.TrimSpace(collection.Ref)
+	if key := strings.TrimSpace(collection.Key); key != "" {
+		return key
+	}
+	return strings.TrimSpace(collection.MetadataRef)
 }
 
 // 校验并返回集合资产类型。
@@ -375,13 +749,12 @@ func resolveCollectionAssetKind(collection assetValueCollection) (factory.AssetK
 
 // 追加按等级计价的资产选择项。
 func appendTieredSelection(
+	tx *gorm.DB,
+	release factory.Release,
 	result *mintSelectionResult,
 	total *big.Rat,
 	collection assetValueCollection,
 	assetKind factory.AssetKind,
-	templateFile string,
-	refField string,
-	templateItems []map[string]any,
 	counts map[string]int64,
 ) error {
 	for tier, count := range counts {
@@ -404,11 +777,11 @@ func appendTieredSelection(
 			return err
 		}
 		total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
-		ids, err := pickTemplateIdsByField(templateItems, "tier", tier, count)
+		items, err := claimInventoryItems(tx, release, collection, assetKind, tier, count)
 		if err != nil {
 			return err
 		}
-		appendSelectedItems(result, assetKind, collection.Ref, templateFile, refField, ids)
+		appendSelectedInventoryItems(result, collection, assetKind, items)
 	}
 	return nil
 }
@@ -420,13 +793,12 @@ func isDisabledTierPrice(price string) bool {
 
 // 追加不分等级计价的资产选择项。
 func appendFlatSelection(
+	tx *gorm.DB,
+	release factory.Release,
 	result *mintSelectionResult,
 	total *big.Rat,
 	collection assetValueCollection,
 	assetKind factory.AssetKind,
-	templateFile string,
-	refField string,
-	templateItems []map[string]any,
 	counts map[string]int64,
 ) error {
 	var count int64
@@ -443,32 +815,535 @@ func appendFlatSelection(
 		return err
 	}
 	total.Add(total, new(big.Rat).Mul(unit, big.NewRat(count, 1)))
-	ids, err := pickAnyTemplateIds(templateItems, count)
+	items, err := pickReusableInventoryItems(tx, release, collection, assetKind, count)
 	if err != nil {
 		return err
 	}
-	appendSelectedItems(result, assetKind, collection.Ref, templateFile, refField, ids)
+	appendSelectedInventoryItems(result, collection, assetKind, items)
 	return nil
 }
 
-// 将模板 ID 追加为待铸造项。
-func appendSelectedItems(
-	result *mintSelectionResult,
-	assetKind factory.AssetKind,
-	templateRef string,
-	templateFile string,
-	refField string,
-	ids []string,
-) {
-	for _, id := range ids {
-		result.Items = append(result.Items, mintSelectionItem{
-			AssetKind:    assetKind,
-			TemplateRef:  strings.TrimSpace(templateRef),
-			TemplateFile: templateFile,
-			RefField:     refField,
-			TemplateId:   id,
+// 元数据导入后的库存项摘要。
+type inventorySelectionItem struct {
+	Id          int64
+	ItemId      string
+	ItemIndex   int64
+	Tier        string
+	TraitHash   string
+	MetadataRef string
+}
+
+// 发布后生成通用 NFT 库存池。
+func ensureReleaseInventory(tx *gorm.DB, release factory.Release, valueTemplate assetValueTemplate, snapshotDir string) error {
+	for _, collection := range valueTemplate.Collections {
+		if err := ensureCollectionInventory(tx, release, collection, snapshotDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 确保发布库存池已由发布冻结流程准备好。
+func requireReleaseInventory(tx *gorm.DB, release factory.Release, valueTemplate assetValueTemplate) error {
+	for _, collection := range valueTemplate.Collections {
+		collectionKey := strings.TrimSpace(collection.Key)
+		if collectionKey == "" {
+			return newParameterError("资产集合缺少 key")
+		}
+
+		var pool factory.NFTInventoryPool
+		err := tx.First(&pool, "release_id = ? AND collection_key = ?", release.Id, collectionKey).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return newConflictError("发布库存未准备完成，请先执行发布冻结")
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 确保单个 collection 已导入库存池。
+func ensureCollectionInventory(tx *gorm.DB, release factory.Release, collection assetValueCollection, snapshotDir string) error {
+	collectionKey := strings.TrimSpace(collection.Key)
+	if collectionKey == "" {
+		return newParameterError("资产集合缺少 key")
+	}
+	if strings.TrimSpace(collection.MetadataRef) == "" {
+		return newParameterError(collectionDisplayName(collection) + "缺少 metadataRef")
+	}
+	assetKind, err := resolveCollectionAssetKind(collection)
+	if err != nil {
+		return err
+	}
+
+	var existing factory.NFTInventoryPool
+	err = tx.First(&existing, "release_id = ? AND collection_key = ?", release.Id, collectionKey).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	items, err := resolveInventoryMetadataItems(release, collection, snapshotDir)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return newConflictError(collectionDisplayName(collection) + " metadata item 为空")
+	}
+	now := time.Now()
+	pool := factory.NFTInventoryPool{
+		Id:             generateID(),
+		PluginId:       release.PluginId,
+		ReleaseId:      release.Id,
+		CollectionKey:  collectionKey,
+		AssetKind:      assetKind,
+		MetadataRef:    strings.TrimSpace(collection.MetadataRef),
+		Strategy:       inventoryStrategyForCollection(collection),
+		TotalSupply:    int64(len(items)),
+		Status:         factory.NFTInventoryPoolStatusActive,
+		CollectionHash: hashInventoryCollection(items),
+		MerkleRoot:     hashInventoryMerkleRoot(items),
+		GeneratedAt:    &now,
+		FrozenAt:       &now,
+	}
+	if err := tx.Create(&pool).Error; err != nil {
+		return err
+	}
+
+	shuffleIndexes, err := createShuffleIndexes(len(items))
+	if err != nil {
+		return err
+	}
+	dbItems := make([]factory.NFTInventoryItem, 0, len(items))
+	for index, item := range items {
+		dbItems = append(dbItems, factory.NFTInventoryItem{
+			Id:            generateID(),
+			PoolId:        pool.Id,
+			PluginId:      release.PluginId,
+			ReleaseId:     release.Id,
+			CollectionKey: collectionKey,
+			AssetKind:     assetKind,
+			ItemId:        item.ItemId,
+			ItemIndex:     item.ItemIndex,
+			Tier:          item.Tier,
+			TraitHash:     item.TraitHash,
+			ShuffleIndex:  shuffleIndexes[index],
+			MetadataHash:  item.MetadataHash,
+			LeafHash:      item.LeafHash,
+			ProofJson:     "[]",
+			Status:        factory.NFTInventoryItemStatusAvailable,
+			MetadataUri:   factory.ItemMetadataStaticURL(release.PluginId, collectionKey, item.ItemId),
+			ProofUri:      factory.ItemProofStaticURL(release.PluginId, collectionKey, item.ItemId),
 		})
+	}
+	return tx.CreateInBatches(dbItems, 500).Error
+}
+
+// 单个 metadata item 的标准化信息。
+type inventoryMetadataItem struct {
+	Item         map[string]any
+	ItemId       string
+	ItemIndex    int64
+	Tier         string
+	TraitHash    string
+	MetadataRef  string
+	MetadataHash string
+	LeafHash     string
+}
+
+// 解析 collection 的 metadataRef 并校验 item。
+func resolveInventoryMetadataItems(release factory.Release, collection assetValueCollection, snapshotDir string) ([]inventoryMetadataItem, error) {
+	if isFishTankBuiltinTankCollection(release, collection) {
+		return normalizeInventoryMetadataItems(
+			release,
+			collection,
+			strings.TrimSpace(collection.MetadataRef),
+			[]map[string]any{{"id": "tank-1"}},
+			"",
+		)
+	}
+	if len(collection.TierConfig) > 0 && strings.Contains(collection.MetadataRef, "{tier}") {
+		return resolveTieredInventoryMetadataItems(release, collection, snapshotDir)
+	}
+	items, err := loadMetadataRefItems(snapshotDir, strings.TrimSpace(collection.MetadataRef))
+	if err != nil {
+		return nil, err
+	}
+	return normalizeInventoryMetadataItems(release, collection, strings.TrimSpace(collection.MetadataRef), items, "")
+}
+
+func isFishTankBuiltinTankCollection(release factory.Release, collection assetValueCollection) bool {
+	return release.PluginId == "FishTank" &&
+		collection.AssetKind == factory.AssetKindTank &&
+		strings.TrimSpace(collection.MetadataRef) == "defaultWaterMeta.json#tanks"
+}
+
+// 按 tierConfig 展开 metadataRef。
+func resolveTieredInventoryMetadataItems(release factory.Release, collection assetValueCollection, snapshotDir string) ([]inventoryMetadataItem, error) {
+	var result []inventoryMetadataItem
+	for _, tier := range sortedTierKeys(collection.TierConfig) {
+		ref := strings.ReplaceAll(strings.TrimSpace(collection.MetadataRef), "{tier}", tier)
+		items, err := loadMetadataRefItems(snapshotDir, ref)
+		if err != nil {
+			return nil, err
+		}
+		normalized, err := normalizeInventoryMetadataItems(release, collection, ref, items, tier)
+		if err != nil {
+			return nil, err
+		}
+		tierConfig := collection.TierConfig[tier]
+		if tierConfig.Supply > 0 && int64(len(normalized)) != tierConfig.Supply {
+			return nil, newConflictError(fmt.Sprintf("%s 等级 %s 库存数量应为 %d，实际为 %d", collectionDisplayName(collection), tier, tierConfig.Supply, len(normalized)))
+		}
+		result = append(result, normalized...)
+	}
+	return result, nil
+}
+
+// 标准化 metadata item 并计算哈希。
+func normalizeInventoryMetadataItems(
+	release factory.Release,
+	collection assetValueCollection,
+	metadataRef string,
+	items []map[string]any,
+	expectedTier string,
+) ([]inventoryMetadataItem, error) {
+	seen := map[string]struct{}{}
+	result := make([]inventoryMetadataItem, 0, len(items))
+	for _, item := range items {
+		itemId := stringFromJSONValue(item["id"])
+		if itemId == "" {
+			return nil, newParameterError(collectionDisplayName(collection) + " metadata item 缺少 id")
+		}
+		if _, ok := seen[itemId]; ok {
+			return nil, newConflictError(collectionDisplayName(collection) + " metadata item id 重复: " + itemId)
+		}
+		seen[itemId] = struct{}{}
+
+		tier := stringFromJSONValue(item["tier"])
+		if len(collection.TierConfig) > 0 {
+			if tier == "" {
+				return nil, newParameterError(collectionDisplayName(collection) + " metadata item 缺少 tier")
+			}
+			if _, ok := collection.TierConfig[tier]; !ok {
+				return nil, newParameterError(collectionDisplayName(collection) + " metadata item tier 未配置: " + tier)
+			}
+			if expectedTier != "" && tier != expectedTier {
+				return nil, newParameterError(fmt.Sprintf("%s metadata item tier 应为 %s，实际为 %s", collectionDisplayName(collection), expectedTier, tier))
+			}
+		}
+
+		traitHash := ""
+		if field := strings.TrimSpace(collection.TraitHashField); field != "" {
+			traitHash = stringFromJSONValue(item[field])
+			if traitHash == "" {
+				return nil, newParameterError(collectionDisplayName(collection) + " metadata item 缺少 " + field)
+			}
+		}
+		itemIndex := int64(len(result) + 1)
+		metadataHash, err := hashItemMetadata(release, collection, metadataRef, item, itemIndex, tier, traitHash)
+		if err != nil {
+			return nil, err
+		}
+		leafHash := hashInventoryLeaf(release, collection.Key, itemIndex, itemId, tier, traitHash, metadataHash)
+		result = append(result, inventoryMetadataItem{
+			Item:         item,
+			ItemId:       itemId,
+			ItemIndex:    itemIndex,
+			Tier:         tier,
+			TraitHash:    traitHash,
+			MetadataRef:  metadataRef,
+			MetadataHash: metadataHash,
+			LeafHash:     leafHash,
+		})
+	}
+	return result, nil
+}
+
+// 读取 metadataRef 指向的数组。
+func loadMetadataRefItems(snapshotDir string, metadataRef string) ([]map[string]any, error) {
+	file, field, hasField, err := parseMetadataRef(metadataRef)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(snapshotDir, file)
+	if hasField {
+		return loadTemplateItems(path, field)
+	}
+	return loadRootArrayTemplateItems(path)
+}
+
+// 解析 metadataRef，支持 file.json 和 file.json#field。
+func parseMetadataRef(metadataRef string) (string, string, bool, error) {
+	parts := strings.SplitN(strings.TrimSpace(metadataRef), "#", 2)
+	file := filepath.Clean(strings.TrimSpace(parts[0]))
+	if file == "" || filepath.IsAbs(file) || file == "." || strings.HasPrefix(file, ".."+string(filepath.Separator)) || file == ".." {
+		return "", "", false, newParameterError("metadataRef 文件路径不合法")
+	}
+	if len(parts) == 1 {
+		return file, "", false, nil
+	}
+	field := strings.TrimSpace(parts[1])
+	if field == "" {
+		return "", "", false, newParameterError("metadataRef 字段不能为空")
+	}
+	return file, field, true, nil
+}
+
+// 固定集合默认按打乱顺序发放，普通模板允许复用。
+func inventoryStrategyForCollection(collection assetValueCollection) factory.NFTInventoryStrategy {
+	if len(collection.TierConfig) > 0 {
+		return factory.NFTInventoryStrategyShuffled
+	}
+	return factory.NFTInventoryStrategyAllowDuplicate
+}
+
+// 锁定固定库存项。
+func claimInventoryItems(
+	tx *gorm.DB,
+	release factory.Release,
+	collection assetValueCollection,
+	assetKind factory.AssetKind,
+	tier string,
+	count int64,
+) ([]inventorySelectionItem, error) {
+	var items []factory.NFTInventoryItem
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("release_id = ? AND collection_key = ? AND asset_kind = ? AND tier = ? AND status = ?", release.Id, collection.Key, assetKind, tier, factory.NFTInventoryItemStatusAvailable).
+		Order("shuffle_index ASC").
+		Limit(int(count)).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if int64(len(items)) < count {
+		return nil, newConflictError(fmt.Sprintf("%s 等级 %s 库存不足", collectionDisplayName(collection), tier))
+	}
+	result := make([]inventorySelectionItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, inventorySelectionItem{
+			Id:          item.Id,
+			ItemId:      item.ItemId,
+			ItemIndex:   item.ItemIndex,
+			Tier:        item.Tier,
+			TraitHash:   item.TraitHash,
+			MetadataRef: collection.MetadataRef,
+		})
+	}
+	return result, nil
+}
+
+// 从可复用模板库存中按数量挑选。
+func pickReusableInventoryItems(
+	tx *gorm.DB,
+	release factory.Release,
+	collection assetValueCollection,
+	assetKind factory.AssetKind,
+	count int64,
+) ([]inventorySelectionItem, error) {
+	var items []factory.NFTInventoryItem
+	if err := tx.Where("release_id = ? AND collection_key = ? AND asset_kind = ?", release.Id, collection.Key, assetKind).
+		Order("item_index ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, newConflictError(collectionDisplayName(collection) + "没有可用库存模板")
+	}
+	result := make([]inventorySelectionItem, 0, count)
+	for i := int64(0); i < count; i++ {
+		index, err := secureRandomIndex(len(items))
+		if err != nil {
+			return nil, err
+		}
+		item := items[index]
+		result = append(result, inventorySelectionItem{
+			ItemId:      item.ItemId,
+			ItemIndex:   item.ItemIndex,
+			Tier:        item.Tier,
+			TraitHash:   item.TraitHash,
+			MetadataRef: collection.MetadataRef,
+		})
+	}
+	return result, nil
+}
+
+// 将库存项转换为待铸造资产。
+func appendSelectedInventoryItems(
+	result *mintSelectionResult,
+	collection assetValueCollection,
+	assetKind factory.AssetKind,
+	items []inventorySelectionItem,
+) {
+	for _, item := range items {
+		fishIndex := int(item.ItemIndex)
+		selected := mintSelectionItem{
+			AssetKind:       assetKind,
+			CollectionKey:   strings.TrimSpace(collection.Key),
+			InventoryItemId: item.Id,
+			TemplateRef:     strings.TrimSpace(item.MetadataRef),
+			TemplateId:      item.ItemId,
+			Tier:            item.Tier,
+			TraitHash:       item.TraitHash,
+		}
+		if assetKind == factory.AssetKindFish {
+			selected.FishId = item.ItemId
+			selected.FishIndex = &fishIndex
+		}
+		result.Items = append(result.Items, selected)
 		result.TotalCount++
+	}
+}
+
+// 生成随机发放顺序。
+func createShuffleIndexes(count int) ([]int64, error) {
+	indexes := make([]int64, count)
+	for index := range indexes {
+		indexes[index] = int64(index + 1)
+	}
+	for index := len(indexes) - 1; index > 0; index-- {
+		swapIndex, err := secureRandomIndex(index + 1)
+		if err != nil {
+			return nil, err
+		}
+		indexes[index], indexes[swapIndex] = indexes[swapIndex], indexes[index]
+	}
+	return indexes, nil
+}
+
+// 返回稳定排序后的 tier key。
+func sortedTierKeys(tierConfig map[string]assetTierConfig) []string {
+	keys := make([]string, 0, len(tierConfig))
+	for key := range tierConfig {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// 计算发布集合哈希。
+func hashInventoryCollection(items []inventoryMetadataItem) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, item.LeafHash)
+	}
+	return sha256Hex([]byte(strings.Join(parts, "\n")))
+}
+
+// 第一阶段使用 leaf 列表哈希作为集合 root。
+func hashInventoryMerkleRoot(items []inventoryMetadataItem) string {
+	return hashInventoryCollection(items)
+}
+
+// 计算单个 item 的 metadata hash。
+func hashItemMetadata(
+	release factory.Release,
+	collection assetValueCollection,
+	metadataRef string,
+	item map[string]any,
+	itemIndex int64,
+	tier string,
+	traitHash string,
+) (string, error) {
+	metadata := buildItemNFTMetadata(release, collection, metadataRef, item, itemIndex, tier, traitHash)
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return "", err
+	}
+	return sha256Hex(data), nil
+}
+
+// 生成发布后 item metadata。
+func buildItemNFTMetadata(
+	release factory.Release,
+	collection assetValueCollection,
+	metadataRef string,
+	item map[string]any,
+	itemIndex int64,
+	tier string,
+	traitHash string,
+) nftMetadata {
+	itemId := stringFromJSONValue(item["id"])
+	attributes := []nftMetadataAttribute{
+		{TraitType: "Asset Kind", Value: string(collection.AssetKind)},
+		{TraitType: "Collection", Value: strings.TrimSpace(collection.Key)},
+		{TraitType: "Item ID", Value: itemId},
+		{TraitType: "Item Index", Value: itemIndex},
+	}
+	if tier != "" {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Tier", Value: tier})
+	}
+	if traitHash != "" {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Trait Hash", Value: traitHash})
+	}
+	attributes = appendMetadataAttribute(attributes, item, "paletteId", "Palette")
+	attributes = appendMetadataAttribute(attributes, item, "archetypeId", "Pattern")
+	attributes = appendMetadataAttribute(attributes, item, "themePreset", "Theme")
+	attributes = appendMetadataAttribute(attributes, item, "finArchetypeId", "Fin Pattern")
+	attributes = appendMetadataAttribute(attributes, item, "finStyle", "Fin Style")
+	attributes = appendMetadataAttribute(attributes, item, "dorsalFinShape", "Dorsal Fin")
+	attributes = appendMetadataAttribute(attributes, item, "personalityId", "Personality")
+	attributes = appendMetadataAttribute(attributes, item, "color", "Body Color")
+	attributes = appendMetadataAttribute(attributes, item, "tailColor", "Tail Color")
+	attributes = appendMetadataAttribute(attributes, item, "eyeColor", "Eye Color")
+
+	properties := map[string]any{
+		"pluginId":      release.PluginId,
+		"releaseId":     strconv.FormatInt(release.Id, 10),
+		"collectionKey": strings.TrimSpace(collection.Key),
+		"itemId":        itemId,
+		"itemIndex":     itemIndex,
+		"metadataRef":   metadataRef,
+	}
+	if tier != "" {
+		properties["tier"] = tier
+	}
+	if traitHash != "" {
+		properties["traitHash"] = traitHash
+	}
+	return nftMetadata{
+		Name:         fmt.Sprintf("%s %s %s", release.PluginId, collectionDisplayName(collection), itemId),
+		Description:  fmt.Sprintf("%s composable %s NFT.", release.PluginId, collection.AssetKind),
+		AnimationURL: factory.ReleaseStaticURL(release),
+		Attributes:   attributes,
+		Properties:   properties,
+	}
+}
+
+// 计算库存 leaf hash。
+func hashInventoryLeaf(
+	release factory.Release,
+	collectionKey string,
+	itemIndex int64,
+	itemId string,
+	tier string,
+	traitHash string,
+	metadataHash string,
+) string {
+	leaf := strings.Join([]string{
+		strconv.FormatInt(release.Id, 10),
+		strings.TrimSpace(collectionKey),
+		strconv.FormatInt(itemIndex, 10),
+		itemId,
+		tier,
+		traitHash,
+		metadataHash,
+	}, "|")
+	return sha256Hex([]byte(leaf))
+}
+
+// 将 JSON 值转成稳定字符串。
+func stringFromJSONValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
 	}
 }
 
@@ -647,6 +1522,10 @@ func rebuildOwnerFactorySnapshots(ownerKey string) error {
 			AssetKind:   asset.AssetKind,
 			TemplateRef: asset.TemplateRef,
 			TemplateId:  asset.TemplateId,
+			FishId:      asset.FishId,
+			FishIndex:   asset.FishIndex,
+			Tier:        asset.Tier,
+			TraitHash:   asset.TraitHash,
 			AssetUrl:    factory.AssetStaticURL(asset.PluginId, asset.Id),
 			ReleaseUrl:  releaseStaticURLFromAsset(asset),
 			MintedAt:    asset.CreatedAt.Format(time.RFC3339Nano),
@@ -679,6 +1558,7 @@ func writeFactoryAssetSnapshot(asset factory.Asset) error {
 	snapshot := mintedFactoryAsset{
 		Schema:       "senspace.factory.asset.v2",
 		AssetId:      strconv.FormatInt(asset.Id, 10),
+		TokenId:      asset.TokenId,
 		PluginId:     asset.PluginId,
 		ReleaseId:    strconv.FormatInt(asset.ReleaseId, 10),
 		Version:      asset.Version,
@@ -686,15 +1566,215 @@ func writeFactoryAssetSnapshot(asset factory.Asset) error {
 		AssetKind:    asset.AssetKind,
 		TemplateRef:  asset.TemplateRef,
 		TemplateId:   asset.TemplateId,
+		FishId:       asset.FishId,
+		FishIndex:    asset.FishIndex,
+		Tier:         asset.Tier,
+		TraitHash:    asset.TraitHash,
 		ReleaseUrl:   releaseStaticURLFromAsset(asset),
 		MintRecordId: strconv.FormatInt(asset.MintRecordId, 10),
 		MintedAt:     asset.CreatedAt.Format(time.RFC3339Nano),
+		MetadataUri:  asset.MetadataUri,
+		ProofUri:     asset.ProofUri,
 		TemplateRefs: map[string]string{
-			"assetMeta":        "asset.meta.json",
-			"defaultWaterMeta": "defaultWaterMeta.json",
+			"assetMeta":     "asset.meta.json",
+			"generatedFish": "generated/fish",
 		},
 	}
+	if err := writeNFTMetadataAndProof(asset, snapshot); err != nil {
+		return err
+	}
 	return factory.WriteJSONAtomic(factory.AssetStaticPath(asset.PluginId, asset.Id), snapshot)
+}
+
+// 写入标准 NFT metadata 和当前阶段的 proof。
+func writeNFTMetadataAndProof(asset factory.Asset, snapshot mintedFactoryAsset) error {
+	tokenId := asset.TokenId
+	if strings.TrimSpace(tokenId) == "" {
+		tokenId = strconv.FormatInt(asset.Id, 10)
+	}
+	metadata := buildNFTMetadata(asset, snapshot)
+	metadataData, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	metadataHash := sha256Hex(metadataData)
+	if err := factory.WriteJSONAtomic(factory.MetadataStaticPath(asset.PluginId, tokenId), metadata); err != nil {
+		return err
+	}
+	if asset.AssetKind == factory.AssetKindFish && strings.TrimSpace(asset.FishId) != "" {
+		if err := factory.WriteJSONAtomic(metadataByFishStaticPath(asset.PluginId, asset.FishId), metadata); err != nil {
+			return err
+		}
+	}
+
+	fishIndex := 0
+	if asset.FishIndex != nil {
+		fishIndex = *asset.FishIndex
+	}
+	leaf := strings.Join([]string{
+		tokenId,
+		strconv.Itoa(fishIndex),
+		asset.FishId,
+		asset.Tier,
+		asset.TraitHash,
+		metadataHash,
+	}, "|")
+	leafHash := sha256Hex([]byte(leaf))
+	proof := nftProofSnapshot{
+		Schema:       "senspace.factory.nft-proof.v1",
+		TokenId:      tokenId,
+		FishId:       asset.FishId,
+		FishIndex:    asset.FishIndex,
+		Tier:         asset.Tier,
+		TraitHash:    asset.TraitHash,
+		MetadataHash: metadataHash,
+		Leaf:         leafHash,
+		MerkleRoot:   leafHash,
+		Proof:        []string{},
+	}
+	return factory.WriteJSONAtomic(factory.ProofStaticPath(asset.PluginId, tokenId), proof)
+}
+
+// 生成市场通用 NFT metadata。
+func buildNFTMetadata(asset factory.Asset, snapshot mintedFactoryAsset) nftMetadata {
+	templateItem := loadMintedAssetTemplateItem(asset)
+	assetId := strconv.FormatInt(asset.Id, 10)
+	name := fmt.Sprintf("%s %s", asset.PluginId, asset.TemplateId)
+	if asset.AssetKind == factory.AssetKindFish && asset.FishId != "" {
+		name = fmt.Sprintf("%s Fish %s", asset.PluginId, asset.FishId)
+	}
+	if asset.AssetKind == factory.AssetKindTank {
+		name = fmt.Sprintf("%s Tank %s", asset.PluginId, asset.TemplateId)
+	}
+
+	attributes := []nftMetadataAttribute{
+		{TraitType: "Asset Kind", Value: string(asset.AssetKind)},
+		{TraitType: "Template ID", Value: asset.TemplateId},
+	}
+	if asset.Tier != "" {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Tier", Value: asset.Tier})
+	}
+	if asset.FishId != "" {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Fish ID", Value: asset.FishId})
+	}
+	if asset.FishIndex != nil {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Fish Index", Value: *asset.FishIndex})
+	}
+	if asset.TraitHash != "" {
+		attributes = append(attributes, nftMetadataAttribute{TraitType: "Trait Hash", Value: asset.TraitHash})
+	}
+	attributes = appendMetadataAttribute(attributes, templateItem, "paletteId", "Palette")
+	attributes = appendMetadataAttribute(attributes, templateItem, "archetypeId", "Pattern")
+	attributes = appendMetadataAttribute(attributes, templateItem, "themePreset", "Theme")
+	attributes = appendMetadataAttribute(attributes, templateItem, "finArchetypeId", "Fin Pattern")
+	attributes = appendMetadataAttribute(attributes, templateItem, "finStyle", "Fin Style")
+	attributes = appendMetadataAttribute(attributes, templateItem, "dorsalFinShape", "Dorsal Fin")
+	attributes = appendMetadataAttribute(attributes, templateItem, "personalityId", "Personality")
+	attributes = appendMetadataAttribute(attributes, templateItem, "color", "Body Color")
+	attributes = appendMetadataAttribute(attributes, templateItem, "tailColor", "Tail Color")
+	attributes = appendMetadataAttribute(attributes, templateItem, "eyeColor", "Eye Color")
+
+	properties := map[string]any{
+		"assetId":     assetId,
+		"pluginId":    asset.PluginId,
+		"releaseId":   strconv.FormatInt(asset.ReleaseId, 10),
+		"templateRef": asset.TemplateRef,
+		"templateId":  asset.TemplateId,
+		"assetUrl":    factory.AssetStaticURL(asset.PluginId, asset.Id),
+	}
+	if asset.FishId != "" {
+		properties["fishId"] = asset.FishId
+	}
+	if asset.FishIndex != nil {
+		properties["fishIndex"] = *asset.FishIndex
+	}
+	if asset.Tier != "" {
+		properties["tier"] = asset.Tier
+	}
+	if asset.TraitHash != "" {
+		properties["traitHash"] = asset.TraitHash
+	}
+
+	return nftMetadata{
+		Name:         name,
+		Description:  fmt.Sprintf("%s composable %s asset minted from release %s.", asset.PluginId, asset.AssetKind, snapshot.ReleaseId),
+		AnimationURL: snapshot.ReleaseUrl,
+		ExternalURL:  factory.AssetStaticURL(asset.PluginId, asset.Id),
+		Attributes:   attributes,
+		Properties:   properties,
+	}
+}
+
+// 附加模板属性到 metadata attributes。
+func appendMetadataAttribute(attributes []nftMetadataAttribute, item map[string]any, key string, traitType string) []nftMetadataAttribute {
+	if item == nil {
+		return attributes
+	}
+	value, ok := item[key]
+	if !ok || value == nil || stringFromJSONValue(value) == "" {
+		return attributes
+	}
+	return append(attributes, nftMetadataAttribute{TraitType: traitType, Value: value})
+}
+
+// 读取已铸造资产对应的模板项，用于补充 metadata traits。
+func loadMintedAssetTemplateItem(asset factory.Asset) map[string]any {
+	if asset.AssetKind == factory.AssetKindFish && asset.Tier != "" && asset.FishId != "" {
+		items, err := loadRootArrayTemplateItems(filepath.Join(releaseStaticDirFromAsset(asset), "generated", "fish", asset.Tier+".json"))
+		if err == nil {
+			if item := findTemplateItemById(items, asset.FishId); item != nil {
+				return item
+			}
+		}
+	}
+
+	templateFile, refField, err := parseAssetRef(asset.TemplateRef)
+	if err != nil {
+		return nil
+	}
+	if asset.PluginId == "FishTank" && asset.AssetKind == factory.AssetKindTank && asset.TemplateRef == "defaultWaterMeta.json#tanks" {
+		return map[string]any{"id": asset.TemplateId}
+	}
+	items, err := loadTemplateItems(filepath.Join(releaseStaticDirFromAsset(asset), templateFile), refField)
+	if err != nil {
+		return nil
+	}
+	return findTemplateItemById(items, asset.TemplateId)
+}
+
+// 读取根节点为数组的模板文件。
+func loadRootArrayTemplateItems(path string) ([]map[string]any, error) {
+	var items []map[string]any
+	if err := readJSONFile(path, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// 按 id 查找模板项。
+func findTemplateItemById(items []map[string]any, id string) map[string]any {
+	for _, item := range items {
+		if stringFromJSONValue(item["id"]) == id {
+			return item
+		}
+	}
+	return nil
+}
+
+// 鱼 ID 反查 metadata 文件。
+func metadataByFishStaticPath(pluginId string, fishId string) string {
+	return filepath.Join(factory.FactoryStaticRoot(), "metadata", pluginId, "by-fish", fmt.Sprintf("%s.json", fishId))
+}
+
+// 返回资产对应的发布快照目录。
+func releaseStaticDirFromAsset(asset factory.Asset) string {
+	return filepath.Join(factory.FactoryStaticRoot(), "releases", asset.PluginId, fmt.Sprintf("%s-%d", asset.Version, asset.ReleaseId))
+}
+
+// SHA-256 十六进制。
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum[:])
 }
 
 // 返回资产对应的发布快照地址。

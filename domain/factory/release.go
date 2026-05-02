@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // 发布记录。
 type Release struct {
@@ -34,8 +38,8 @@ type Release struct {
 	PublishedAt      *time.Time             `json:"publishedAt,omitempty" gorm:"comment:发布时间"`
 	PausedAt         *time.Time             `json:"pausedAt,omitempty" gorm:"comment:暂停时间"`
 	ClosedAt         *time.Time             `json:"closedAt,omitempty" gorm:"comment:关闭时间"`
-	CreatedAt        time.Time              `json:"-" gorm:"autoCreateTime"`
-	UpdatedAt        time.Time              `json:"updatedAt" gorm:"autoUpdateTime"`
+	domain.CreatInfo
+	domain.UpdateInfo
 	// PriceHistory 价格历史。
 	PriceHistory []ReleasePriceHistory `json:"priceHistory,omitempty" gorm:"-"`
 }

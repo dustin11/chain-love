@@ -46,6 +46,12 @@ func InitTable(db *gorm.DB) {
 		if err := db.AutoMigrate(table); err != nil {
 			log.Printf("automigrate %T failed: %v", table, err)
 		}
+		if err := migrateAuditTimeColumns(db, table); err != nil {
+			log.Printf("migrate audit time columns %T failed: %v", table, err)
+		}
+	}
+	if err := factory.DropUnusedNFTInventoryPoolColumns(db); err != nil {
+		log.Printf("drop unused nft inventory pool columns failed: %v", err)
 	}
 
 	// ensure ds_book auto_increment starts at 10000 (MySQL). Safe no-op if DB/dialect differs.
@@ -60,6 +66,41 @@ func InitTable(db *gorm.DB) {
 	}
 
 	factory.SeedBuiltinReleases(db)
+}
+
+// migrateAuditTimeColumns 将旧审计字段 created_on/updated_on 迁移到 CreatedAt/UpdatedAt 对应列。
+func migrateAuditTimeColumns(db *gorm.DB, table interface{}) error {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(table); err != nil {
+		return err
+	}
+	tableName := stmt.Schema.Table
+	if tableName == "" {
+		return nil
+	}
+
+	if err := migrateAuditTimeColumn(db, table, tableName, "created_on", "created_at"); err != nil {
+		return err
+	}
+	return migrateAuditTimeColumn(db, table, tableName, "updated_on", "updated_at")
+}
+
+func migrateAuditTimeColumn(db *gorm.DB, table interface{}, tableName string, oldColumn string, newColumn string) error {
+	if !db.Migrator().HasColumn(table, oldColumn) || !db.Migrator().HasColumn(table, newColumn) {
+		return nil
+	}
+	copySQL := fmt.Sprintf(
+		"UPDATE `%s` SET `%s` = `%s` WHERE `%s` IS NOT NULL AND `%s` IS NULL",
+		tableName,
+		newColumn,
+		oldColumn,
+		oldColumn,
+		newColumn,
+	)
+	if err := db.Exec(copySQL).Error; err != nil {
+		return err
+	}
+	return db.Migrator().DropColumn(table, oldColumn)
 }
 
 // EnsureTableAutoIncrement ensures the AUTO_INCREMENT for a MySQL table is at least start.

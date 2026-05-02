@@ -49,6 +49,11 @@ func ReleaseStaticDir(release Release) string {
 	return filepath.Join(FactoryStaticRoot(), "releases", release.PluginId, fmt.Sprintf("%s-%d", release.Version, release.Id))
 }
 
+// 发布快照临时目录。
+func ReleaseStaticStagingDir(release Release) string {
+	return filepath.Join(FactoryStaticRoot(), "releases", ".staging", release.PluginId, fmt.Sprintf("%s-%d", release.Version, release.Id))
+}
+
 // 发布 manifest 访问路径。
 func ReleaseStaticURL(release Release) string {
 	return FactoryStaticURL("releases", release.PluginId, fmt.Sprintf("%s-%d", release.Version, release.Id), "release.json")
@@ -62,6 +67,46 @@ func AssetStaticPath(pluginId string, assetId int64) string {
 // 独立资产访问路径。
 func AssetStaticURL(pluginId string, assetId int64) string {
 	return FactoryStaticURL("assets", pluginId, fmt.Sprintf("%d.json", assetId))
+}
+
+// 标准 NFT metadata 文件。
+func MetadataStaticPath(pluginId string, tokenId string) string {
+	return filepath.Join(FactoryStaticRoot(), "metadata", pluginId, fmt.Sprintf("%s.json", tokenId))
+}
+
+// 标准 NFT metadata 访问路径。
+func MetadataStaticURL(pluginId string, tokenId string) string {
+	return FactoryStaticURL("metadata", pluginId, fmt.Sprintf("%s.json", tokenId))
+}
+
+// NFT 可验证 proof 文件。
+func ProofStaticPath(pluginId string, tokenId string) string {
+	return filepath.Join(FactoryStaticRoot(), "proofs", pluginId, fmt.Sprintf("%s.json", tokenId))
+}
+
+// NFT 可验证 proof 访问路径。
+func ProofStaticURL(pluginId string, tokenId string) string {
+	return FactoryStaticURL("proofs", pluginId, fmt.Sprintf("%s.json", tokenId))
+}
+
+// 发布后 item metadata 文件。
+func ItemMetadataStaticPath(pluginId string, collectionKey string, itemId string) string {
+	return filepath.Join(FactoryStaticRoot(), "metadata", pluginId, "by-item", collectionKey, fmt.Sprintf("%s.json", itemId))
+}
+
+// 发布后 item metadata 访问路径。
+func ItemMetadataStaticURL(pluginId string, collectionKey string, itemId string) string {
+	return FactoryStaticURL("metadata", pluginId, "by-item", collectionKey, fmt.Sprintf("%s.json", itemId))
+}
+
+// 发布后 item proof 文件。
+func ItemProofStaticPath(pluginId string, collectionKey string, itemId string) string {
+	return filepath.Join(FactoryStaticRoot(), "proofs", pluginId, "by-item", collectionKey, fmt.Sprintf("%s.json", itemId))
+}
+
+// 发布后 item proof 访问路径。
+func ItemProofStaticURL(pluginId string, collectionKey string, itemId string) string {
+	return FactoryStaticURL("proofs", pluginId, "by-item", collectionKey, fmt.Sprintf("%s.json", itemId))
 }
 
 // 钱包地址不可逆索引。
@@ -93,27 +138,96 @@ func OwnerCompositionStaticURL(ownerKey string) string {
 
 // 从插件模板重建发布快照。
 func EnsureReleaseStaticSnapshot(release Release) error {
-	dir := ReleaseStaticDir(release)
+	return buildReleaseStaticSnapshot(release, ReleaseStaticDir(release))
+}
+
+// 在 staging 目录中构建发布快照；调用方确认成功后再激活为正式快照。
+func StageReleaseStaticSnapshot(release Release) (string, error) {
+	dir := ReleaseStaticStagingDir(release)
+	if err := os.RemoveAll(dir); err != nil {
+		return "", err
+	}
+	if err := buildReleaseStaticSnapshot(release, dir); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+	return dir, nil
+}
+
+// 激活 staging 快照，并保留旧正式目录作为回滚备份。
+func ActivateReleaseStaticSnapshot(release Release, stagingDir string) (string, error) {
+	finalDir := ReleaseStaticDir(release)
+	backupDir := finalDir + ".previous"
+	if err := os.MkdirAll(filepath.Dir(finalDir), 0755); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(backupDir); err != nil {
+		return "", err
+	}
+
+	hasFinal := false
+	if info, err := os.Stat(finalDir); err == nil && info.IsDir() {
+		hasFinal = true
+		if err := os.Rename(finalDir, backupDir); err != nil {
+			return "", err
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+
+	if err := os.Rename(stagingDir, finalDir); err != nil {
+		if hasFinal {
+			_ = os.Rename(backupDir, finalDir)
+		}
+		return "", err
+	}
+	if !hasFinal {
+		backupDir = ""
+	}
+	return backupDir, nil
+}
+
+// 提交已激活的发布快照，清理回滚备份。
+func CommitActivatedReleaseStaticSnapshot(backupDir string) error {
+	if backupDir == "" {
+		return nil
+	}
+	return os.RemoveAll(backupDir)
+}
+
+// 回滚已激活的发布快照。
+func RollbackActivatedReleaseStaticSnapshot(release Release, backupDir string) error {
+	finalDir := ReleaseStaticDir(release)
+	if err := os.RemoveAll(finalDir); err != nil {
+		return err
+	}
+	if backupDir == "" {
+		return nil
+	}
+	if _, err := os.Stat(backupDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Rename(backupDir, finalDir)
+}
+
+func buildReleaseStaticSnapshot(release Release, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
 	templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
 	templateFiles := map[string]string{}
-	if entries, err := os.ReadDir(templateDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-				continue
-			}
-			src := filepath.Join(templateDir, entry.Name())
-			dst := filepath.Join(dir, entry.Name())
-			if err := copyFile(src, dst); err != nil {
-				return err
-			}
-			templateFiles[entry.Name()] = FactoryStaticURL("releases", release.PluginId, fmt.Sprintf("%s-%d", release.Version, release.Id), entry.Name())
+	if release.PluginId == "FishTank" {
+		if err := copyFishTankReleaseSnapshot(templateDir, dir, release, templateFiles); err != nil {
+			return err
 		}
-	} else if !os.IsNotExist(err) {
-		return err
+	} else {
+		if err := copyJSONTree(templateDir, dir, "", release, templateFiles); err != nil {
+			return err
+		}
 	}
 
 	manifest := ReleaseStaticManifest{
@@ -128,6 +242,110 @@ func EnsureReleaseStaticSnapshot(release Release) error {
 		manifest.AssetMetaUrl = url
 	}
 	return writeJSONAtomic(filepath.Join(dir, "release.json"), manifest)
+}
+
+// 递归复制 JSON 模板文件，并写入发布 manifest 的模板文件索引。
+func copyJSONTree(srcRoot string, dstRoot string, prefix string, release Release, templateFiles map[string]string) error {
+	entries, err := os.ReadDir(srcRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		rel := name
+		if prefix != "" {
+			rel = filepath.Join(prefix, name)
+		}
+		src := filepath.Join(srcRoot, name)
+		if entry.IsDir() {
+			if err := copyJSONTree(src, dstRoot, rel, release, templateFiles); err != nil {
+				return err
+			}
+			continue
+		}
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		dst := filepath.Join(dstRoot, rel)
+		if err := copyFile(src, dst); err != nil {
+			return err
+		}
+		key := filepath.ToSlash(rel)
+		templateFiles[key] = FactoryStaticURL(
+			"releases",
+			release.PluginId,
+			fmt.Sprintf("%s-%d", release.Version, release.Id),
+			key,
+		)
+	}
+	return nil
+}
+
+func copyJSONFile(srcRoot string, dstRoot string, rel string, release Release, templateFiles map[string]string) error {
+	src := filepath.Join(srcRoot, rel)
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	dst := filepath.Join(dstRoot, rel)
+	if err := copyFile(src, dst); err != nil {
+		return err
+	}
+	key := filepath.ToSlash(rel)
+	templateFiles[key] = FactoryStaticURL(
+		"releases",
+		release.PluginId,
+		fmt.Sprintf("%s-%d", release.Version, release.Id),
+		key,
+	)
+	return nil
+}
+
+// FishTank 发布快照只托管正式鱼数据，测试数据和生成摘要不进入发布目录。
+func copyFishTankReleaseSnapshot(templateDir string, dir string, release Release, templateFiles map[string]string) error {
+	if err := removeFishTankDeprecatedSnapshotFiles(dir); err != nil {
+		return err
+	}
+	if err := copyJSONFile(templateDir, dir, "asset.meta.json", release, templateFiles); err != nil {
+		return err
+	}
+
+	fishDir := firstExistingDir([]string{
+		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator", "generated", "fish"),
+		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator", "generated", "fish"),
+	})
+	if fishDir == "" {
+		return nil
+	}
+	return copyJSONTree(fishDir, dir, filepath.Join("generated", "fish"), release, templateFiles)
+}
+
+func removeFishTankDeprecatedSnapshotFiles(dir string) error {
+	for _, rel := range []string{
+		"defaultWaterMeta.json",
+		filepath.Join("generated", "fish-test"),
+		filepath.Join("generated", "summary.json"),
+	} {
+		if err := os.RemoveAll(filepath.Join(dir, rel)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 返回第一个存在的目录。
+func firstExistingDir(candidates []string) string {
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // 原子写入 JSON。
@@ -171,5 +389,8 @@ func copyFile(src string, dst string) error {
 	if copyErr != nil {
 		return copyErr
 	}
-	return closeErr
+	if closeErr != nil {
+		return closeErr
+	}
+	return nil
 }

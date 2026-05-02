@@ -28,6 +28,33 @@ func PublishPlugin(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(record))
 }
 
+// @Summary 冻结当前插件发布资产
+// @Tags 数字工厂
+// @Param pluginId path string true "插件业务ID"
+// @Success 200 {object} e.Error
+// @Router /api/v1/factory/plugins/{pluginId}/freeze-current [post]
+func FreezeCurrentPluginReleaseAssets(ctx *contextx.AppContext) {
+	record, err := factory_service.FreezeCurrentPluginReleaseAssets(*ctx.User, ctx.Gin.Param("pluginId"))
+	panicIfFactoryError(err)
+	app.Response(ctx.Gin, e.SuccessData(record))
+}
+
+// @Summary 生成 FishTank 鱼数据
+// @Tags 数字工厂
+// @Param pluginId path string true "插件业务ID"
+// @Param data body factory_service.GenerateFishDataRequest true "生成参数"
+// @Success 200 {object} e.Error
+// @Router /api/v1/factory/plugins/{pluginId}/generate-fish-data [post]
+func GenerateFishData(ctx *contextx.AppContext) {
+	var req factory_service.GenerateFishDataRequest
+	err := ctx.Gin.ShouldBindJSON(&req)
+	e.PanicParameterError(err)
+
+	record, err := factory_service.GenerateFishData(*ctx.User, ctx.Gin.Param("pluginId"), req)
+	panicIfFactoryError(err)
+	app.Response(ctx.Gin, e.SuccessData(record))
+}
+
 // @Summary 查询我的发布记录
 // @Tags 数字工厂
 // @Param pluginId query string false "插件业务ID"

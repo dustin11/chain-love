@@ -7,14 +7,15 @@
       "label": "鱼缸",
       "key": "tank",
       "assetKind": "tank",
-      "ref": "defaultWaterMeta.json#tanks",
-      "unitPrice": "10"
+      "metadataRef": "defaultWaterMeta.json#tanks",
+      "unitPrice": "5"
     },
     {
       "label": "鱼",
       "key": "fish",
       "assetKind": "fish",
-      "ref": "defaultWaterMeta.json#fish",
+      "metadataRef": "generated/fish/{tier}.json",
+      "traitHashField": "traitHash",
       "tierConfig": {
         "common": { "price": "5", "supply": 51000, "mintLimit": 10 },
         "rare": { "price": "50", "supply": 8400, "mintLimit": 5 },

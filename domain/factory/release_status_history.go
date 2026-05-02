@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // 发布状态历史。
 type ReleaseStatusHistory struct {
@@ -12,6 +16,7 @@ type ReleaseStatusHistory struct {
 	Reason         string        `json:"reason,omitempty" gorm:"type:varchar(500);comment:状态变更原因"`
 	ChangedBy      string        `json:"changedBy,omitempty" gorm:"type:varchar(64);comment:状态操作人"`
 	ChangedAt      time.Time     `json:"changedAt" gorm:"autoCreateTime"`
+	domain.CreatInfo
 }
 
 // TableName 表名。

@@ -9,6 +9,8 @@ func Tables() []interface{} {
 		&MintRecord{},
 		&Asset{},
 		&AssetRelation{},
+		&NFTInventoryPool{},
+		&NFTInventoryItem{},
 		&UserOwnership{},
 		&UpgradeRecord{},
 	}

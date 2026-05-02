@@ -1,10 +1,10 @@
 package domain
 
 import (
+	"fmt"
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/logging"
 	"senspace/pkg/setting"
-	"fmt"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -15,12 +15,12 @@ import (
 var Db *gorm.DB
 
 type CreatInfo struct {
-	CreatedOn time.Time `json:"-" gorm:"autoCreateTime"`
+	CreatedAt time.Time `json:"-" gorm:"autoCreateTime"`
 	CreatedBy uint64    `json:"-"`
 }
 
 type UpdateInfo struct {
-	UpdatedOn time.Time `json:"-" gorm:"autoUpdateTime"`
+	UpdatedAt time.Time `json:"-" gorm:"autoUpdateTime"`
 	UpdatedBy uint64    `json:"-"`
 }
 

@@ -52,6 +52,13 @@
 - `domain` 层负责模型定义、数据库操作和领域对象行为。
 - 不要把大量业务逻辑直接堆在 `api` 层。
 
+领域模型时间规则：
+
+- 数字工厂相关 GORM 模型需要记录创建/更新审计信息时，统一嵌入 `domain.CreatInfo` 与 `domain.UpdateInfo`，不要重复手写 `CreatedAt` / `UpdatedAt` 字段。
+- 不会被修改的事件表、历史表、流水表只嵌入 `domain.CreatInfo`，不要为了统一而添加无业务含义的 `domain.UpdateInfo`。
+- 业务发生时间可以保留独立字段，例如 `PublishedAt`、`MintedAt`、`ChangedAt`、`UpgradedAt`，不要和审计字段混用。
+- service 查询、排序、响应映射中引用审计时间时，使用 `CreatedAt` / `UpdatedAt` 以及对应数据库列 `created_at` / `updated_at`。
+
 注释规则：
 - 公共接口、导出类型、枚举、复杂业务逻辑必须有中文注释, 注释风格简洁重点。
 - 注释只描述重点，避免在注释开头重复类型名、方法名、字段名或把标识符翻译一遍。

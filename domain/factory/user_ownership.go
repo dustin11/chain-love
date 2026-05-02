@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // 用户插件资产。
 type UserOwnership struct {
@@ -10,8 +14,8 @@ type UserOwnership struct {
 	MintedReleaseId    int64      `json:"mintedReleaseId,string" gorm:"not null;comment:首次铸造发布ID"`
 	EffectiveReleaseId int64      `json:"effectiveReleaseId,string" gorm:"not null;comment:当前生效发布ID"`
 	UpgradedAt         *time.Time `json:"upgradedAt,omitempty" gorm:"comment:最近升级时间"`
-	CreatedAt          time.Time  `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt          time.Time  `json:"updatedAt" gorm:"autoUpdateTime"`
+	domain.CreatInfo
+	domain.UpdateInfo
 }
 
 // TableName 表名。

@@ -19,8 +19,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// 独立 NFT 铸造与组合快照。
-func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
+// 独立 Fish NFT 铸造快照。
+func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 	env := setupMintAssetServiceTest(t)
 	release := createFishTankMintTestRelease(t, env.db)
 	user := security.JwtUser{
@@ -32,59 +32,84 @@ func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 		cleanupMintTestData(t, env.db, release.Id, user.Id, ownerKey)
 	})
 
+	freezeResponse, stagingDir, err := freezeReleaseAssets(env.db, release)
+	require.NoError(t, err)
+	if stagingDir != "" {
+		backupDir, activatedSnapshot, err := activateStagedReleaseSnapshot(release, stagingDir)
+		require.NoError(t, err)
+		require.True(t, activatedSnapshot)
+		commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+	}
+	require.Equal(t, "ready", freezeResponse.Status)
+	require.NotEmpty(t, freezeResponse.Pools)
+
 	response, err := MintReleaseAsset(user, strconv.FormatInt(release.Id, 10), MintAssetRequest{
 		Inputs: map[string]map[string]int64{
-			"defaultWaterMeta.json#tanks": {
-				"default": 1,
-			},
-			"defaultWaterMeta.json#fish": {
+			"fish": {
 				"common": 2,
 				"rare":   1,
 			},
 		},
-		TotalPaid: "70",
+		TotalPaid: "60",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "70", response.TotalPaid)
-	require.Len(t, response.Assets, 4)
+	require.Equal(t, "60", response.TotalPaid)
+	require.Len(t, response.Assets, 3)
 	require.Equal(t, factory.OwnerIndexStaticURL(ownerKey), response.OwnerIndexUrl)
 	require.Equal(t, factory.OwnerCompositionStaticURL(ownerKey), response.OwnerCompositionUrl)
 
 	var assets []factory.Asset
 	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
-	require.Len(t, assets, 4)
-	require.Equal(t, int64(1), countAssetsByKind(assets, factory.AssetKindTank))
+	require.Len(t, assets, 3)
 	require.Equal(t, int64(3), countAssetsByKind(assets, factory.AssetKindFish))
+	seenFishIds := map[string]struct{}{}
+	for _, asset := range assets {
+		if asset.AssetKind != factory.AssetKindFish {
+			continue
+		}
+		require.NotEmpty(t, asset.FishId)
+		require.NotNil(t, asset.FishIndex)
+		require.NotEmpty(t, asset.Tier)
+		require.NotEmpty(t, asset.TraitHash)
+		require.NotEmpty(t, asset.MetadataUri)
+		require.NotEmpty(t, asset.ProofUri)
+		require.Equal(t, asset.FishId, asset.TemplateId)
+		require.NotContains(t, seenFishIds, asset.FishId)
+		seenFishIds[asset.FishId] = struct{}{}
+	}
+	var fishPool factory.NFTInventoryPool
+	require.NoError(t, env.db.First(&fishPool, "release_id = ? AND collection_key = ?", release.Id, "fish").Error)
+	require.Equal(t, factory.NFTInventoryStrategyShuffled, fishPool.Strategy)
+	require.Equal(t, int64(3), fishPool.MintedCount)
+
+	var mintedInventoryItems []factory.NFTInventoryItem
+	require.NoError(t, env.db.Where("release_id = ? AND collection_key = ? AND status = ?", release.Id, "fish", factory.NFTInventoryItemStatusMinted).Find(&mintedInventoryItems).Error)
+	require.Len(t, mintedInventoryItems, 3)
 
 	var record factory.MintRecord
 	require.NoError(t, env.db.First(&record, "release_id = ? AND user_id = ?", release.Id, user.Id).Error)
-	require.Equal(t, int64(4), record.Quantity)
-	require.Equal(t, "70.000000000000000000", record.TotalPaid)
+	require.Equal(t, int64(3), record.Quantity)
+	require.Equal(t, "60.000000000000000000", record.TotalPaid)
 
 	var refreshedRelease factory.Release
 	require.NoError(t, env.db.First(&refreshedRelease, "id = ?", release.Id).Error)
-	require.Equal(t, int64(4), refreshedRelease.MintedCount)
+	require.Equal(t, int64(3), refreshedRelease.MintedCount)
 
 	var relations []factory.AssetRelation
 	require.NoError(t, env.db.Where("owner_key = ?", ownerKey).Find(&relations).Error)
-	require.Len(t, relations, 3)
-	for _, relation := range relations {
-		require.Equal(t, "contains", relation.RelationType)
-		require.NotZero(t, relation.SourceAssetId)
-		require.NotZero(t, relation.TargetAssetId)
-	}
+	require.Empty(t, relations)
 
 	var index ownerFactoryAssetIndex
 	readJSONFileForTest(t, factory.OwnerIndexStaticPath(ownerKey), &index)
 	require.Equal(t, "senspace.factory.owner-assets.v2", index.Schema)
 	require.Equal(t, ownerKey, index.OwnerKey)
-	require.Len(t, index.Assets, 4)
+	require.Len(t, index.Assets, 3)
 
 	var composition ownerFactoryAssetComposition
 	readJSONFileForTest(t, factory.OwnerCompositionStaticPath(ownerKey), &composition)
 	require.Equal(t, "senspace.factory.owner-composition.v1", composition.Schema)
 	require.Equal(t, ownerKey, composition.OwnerKey)
-	require.Len(t, composition.Relations, 3)
+	require.Empty(t, composition.Relations)
 
 	for _, asset := range assets {
 		var snapshot map[string]any
@@ -93,17 +118,51 @@ func TestMintReleaseAssetCreatesComposableNFTSnapshots(t *testing.T) {
 		require.Equal(t, string(asset.AssetKind), snapshot["assetKind"])
 		require.Equal(t, asset.TemplateId, snapshot["templateId"])
 		require.NotContains(t, snapshot, "ownerKey")
+		var metadata map[string]any
+		readJSONFileForTest(t, factory.MetadataStaticPath(asset.PluginId, asset.TokenId), &metadata)
+		require.NotEmpty(t, metadata["name"])
+		var proof map[string]any
+		readJSONFileForTest(t, factory.ProofStaticPath(asset.PluginId, asset.TokenId), &proof)
+		require.NotEmpty(t, proof["metadataHash"])
+		if asset.AssetKind == factory.AssetKindFish {
+			require.Equal(t, asset.FishId, snapshot["fishId"])
+			require.Equal(t, asset.Tier, snapshot["tier"])
+			require.Equal(t, asset.TraitHash, snapshot["traitHash"])
+			require.Equal(t, asset.FishId, proof["fishId"])
+		}
 	}
 
 	_, err = MintReleaseAsset(user, strconv.FormatInt(release.Id, 10), MintAssetRequest{
 		Inputs: map[string]map[string]int64{
-			"defaultWaterMeta.json#fish": {
+			"fish": {
 				"legendary": 1,
 			},
 		},
 		TotalPaid: "5000",
 	})
 	require.ErrorContains(t, err, "暂未开放铸造")
+}
+
+func TestCollectionHashesChanged(t *testing.T) {
+	changed, keys := collectionHashesChanged([]factory.NFTInventoryPool{
+		{CollectionKey: "fish", CollectionHash: "fish-hash"},
+		{CollectionKey: "tank", CollectionHash: "tank-hash"},
+	}, map[string]string{
+		"fish": "fish-hash",
+		"tank": "tank-hash",
+	})
+	require.False(t, changed)
+	require.Empty(t, keys)
+
+	changed, keys = collectionHashesChanged([]factory.NFTInventoryPool{
+		{CollectionKey: "fish", CollectionHash: "old-fish-hash"},
+		{CollectionKey: "tank", CollectionHash: "tank-hash"},
+	}, map[string]string{
+		"fish": "new-fish-hash",
+		"tank": "tank-hash",
+	})
+	require.True(t, changed)
+	require.Equal(t, []string{"fish"}, keys)
 }
 
 type mintAssetServiceTestEnv struct {
@@ -194,6 +253,8 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 	t.Helper()
 
 	require.NoError(t, db.Exec("DELETE FROM fact_asset_relation WHERE owner_key = ?", ownerKey).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_item WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_pool WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_user_ownership WHERE user_id = ? AND plugin_id = ?", userId, "FishTank").Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_mint_record WHERE release_id = ?", releaseId).Error)

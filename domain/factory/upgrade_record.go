@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // 插件升级记录。
 type UpgradeRecord struct {
@@ -13,6 +17,7 @@ type UpgradeRecord struct {
 	UpgradeType   UpgradeType `json:"upgradeType" gorm:"type:varchar(32);not null;comment:升级方式"`
 	PaidAmount    string      `json:"paidAmount,omitempty" gorm:"type:decimal(36,18);comment:支付金额"`
 	UpgradedAt    time.Time   `json:"upgradedAt" gorm:"autoCreateTime"`
+	domain.CreatInfo
 }
 
 // TableName 表名。

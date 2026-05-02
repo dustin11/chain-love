@@ -64,6 +64,55 @@ type PublishRequest struct {
 	Release ReleasePayload `json:"release"`
 }
 
+// 发布资产冻结结果。
+type FreezeReleaseAssetsResponse struct {
+	ReleaseId    string                       `json:"releaseId"`
+	PluginId     string                       `json:"pluginId"`
+	Version      string                       `json:"version"`
+	Status       string                       `json:"status"`
+	Message      string                       `json:"message"`
+	ReleaseUrl   string                       `json:"releaseUrl"`
+	AssetMetaUrl string                       `json:"assetMetaUrl"`
+	Pools        []FreezeReleaseInventoryPool `json:"pools"`
+}
+
+// 单个库存池冻结摘要。
+type FreezeReleaseInventoryPool struct {
+	CollectionKey  string                         `json:"collectionKey"`
+	AssetKind      factory.AssetKind              `json:"assetKind"`
+	MetadataRef    string                         `json:"metadataRef"`
+	Strategy       factory.NFTInventoryStrategy   `json:"strategy"`
+	TotalSupply    int64                          `json:"totalSupply"`
+	MintedCount    int64                          `json:"mintedCount"`
+	Status         factory.NFTInventoryPoolStatus `json:"status"`
+	CollectionHash string                         `json:"collectionHash,omitempty"`
+	MerkleRoot     string                         `json:"merkleRoot,omitempty"`
+}
+
+// FishTank 生成器数据模式。
+type GenerateFishDataMode string
+
+const (
+	GenerateFishDataModeTest   GenerateFishDataMode = "test"
+	GenerateFishDataModeFormal GenerateFishDataMode = "formal"
+)
+
+// FishTank 生成数据请求。
+type GenerateFishDataRequest struct {
+	Mode  GenerateFishDataMode `json:"mode"`
+	Tier  string               `json:"tier,omitempty"`
+	Count int                  `json:"count,omitempty"`
+}
+
+// FishTank 生成数据响应。
+type GenerateFishDataResponse struct {
+	Mode        GenerateFishDataMode `json:"mode"`
+	FishDirName string               `json:"fishDirName"`
+	OutputDir   string               `json:"outputDir"`
+	Total       int                  `json:"total"`
+	Message     string               `json:"message"`
+}
+
 // 我的发布筛选。
 type ReleaseQuery struct {
 	PluginId    string
@@ -119,6 +168,7 @@ type RecordMintRequest struct {
 
 // 按发布价值模板铸造独立 NFT。
 type MintAssetRequest struct {
+	// 按 collection.key 分组的数量输入。
 	Inputs    map[string]map[string]int64 `json:"inputs"`
 	TotalPaid string                      `json:"totalPaid"`
 	ChainId   *int64                      `json:"chainId,omitempty"`
@@ -127,9 +177,15 @@ type MintAssetRequest struct {
 
 // 铸造生成的单个 NFT 入口。
 type MintAssetResponseAsset struct {
-	AssetId   string            `json:"assetId"`
-	AssetKind factory.AssetKind `json:"assetKind"`
-	AssetUrl  string            `json:"assetUrl"`
+	AssetId     string            `json:"assetId"`
+	AssetKind   factory.AssetKind `json:"assetKind"`
+	AssetUrl    string            `json:"assetUrl"`
+	FishId      string            `json:"fishId,omitempty"`
+	FishIndex   *int              `json:"fishIndex,omitempty"`
+	Tier        string            `json:"tier,omitempty"`
+	TraitHash   string            `json:"traitHash,omitempty"`
+	MetadataUri string            `json:"metadataUri,omitempty"`
+	ProofUri    string            `json:"proofUri,omitempty"`
 }
 
 // 铸造生成的快照入口。

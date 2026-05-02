@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // NFT 铸造记录。
 type MintRecord struct {
@@ -14,6 +18,7 @@ type MintRecord struct {
 	ChainId       *int64    `json:"chainId,omitempty" gorm:"comment:链ID"`
 	TxHash        string    `json:"txHash,omitempty" gorm:"type:varchar(255);comment:交易哈希"`
 	MintedAt      time.Time `json:"mintedAt" gorm:"autoCreateTime"`
+	domain.CreatInfo
 }
 
 // TableName 表名。

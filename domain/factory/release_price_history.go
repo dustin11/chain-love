@@ -1,6 +1,10 @@
 package factory
 
-import "time"
+import (
+	"time"
+
+	"senspace/domain"
+)
 
 // 发布价格历史。
 type ReleasePriceHistory struct {
@@ -12,6 +16,7 @@ type ReleasePriceHistory struct {
 	Reason            string    `json:"reason,omitempty" gorm:"type:varchar(500);comment:调价原因"`
 	ChangedBy         string    `json:"changedBy,omitempty" gorm:"type:varchar(64);comment:调价操作人"`
 	ChangedAt         time.Time `json:"changedAt" gorm:"autoCreateTime"`
+	domain.CreatInfo
 }
 
 // TableName 表名。
