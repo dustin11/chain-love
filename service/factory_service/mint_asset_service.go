@@ -659,26 +659,23 @@ func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAs
 	if err != nil {
 		return nil, "", err
 	}
-	snapshotDir := stagingDir
-
-	valueTemplate, err := loadReleaseMintTemplateFromDir(snapshotDir)
+	valueTemplate, err := loadReleaseMintTemplateFromDir(stagingDir)
 	if err != nil {
 		return nil, stagingDir, err
 	}
 
 	if len(existingPools) > 0 {
-		hashes, err := collectReleaseCollectionHashes(release, valueTemplate, snapshotDir)
+		hashes, err := collectReleaseCollectionHashes(release, valueTemplate, stagingDir)
 		if err != nil {
 			return nil, stagingDir, err
 		}
 		changed, changedKeys := collectionHashesChanged(existingPools, hashes)
 		if !changed {
-			_ = os.RemoveAll(stagingDir)
 			pools, err := collectReleaseInventoryPools(tx, release)
 			if err != nil {
-				return nil, "", err
+				return nil, stagingDir, err
 			}
-			return freezeReleaseResponse(release, "unchanged", "资产集合未变动，不需要重新发布", pools), "", nil
+			return freezeReleaseResponse(release, "unchanged", "资产集合未变动，已同步发布快照", pools), stagingDir, nil
 		}
 
 		hasMinted, err := releaseHasMintedRecords(tx, release, existingPools)
@@ -693,13 +690,15 @@ func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAs
 			}
 			return freezeReleaseResponse(release, "blocked_minted", "资产集合已变动，铸造记录已生成，无法重新生成库存："+strings.Join(changedKeys, "、"), pools), "", nil
 		}
+	}
 
+	if len(existingPools) > 0 {
 		if err := clearReleaseInventory(tx, release.Id); err != nil {
 			return nil, stagingDir, err
 		}
 	}
 
-	if err := ensureReleaseInventory(tx, release, valueTemplate, snapshotDir); err != nil {
+	if err := ensureReleaseInventory(tx, release, valueTemplate, stagingDir); err != nil {
 		return nil, stagingDir, err
 	}
 

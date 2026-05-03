@@ -218,13 +218,13 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 		return err
 	}
 
-	templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
 	templateFiles := map[string]string{}
 	if release.PluginId == "FishTank" {
-		if err := copyFishTankReleaseSnapshot(templateDir, dir, release, templateFiles); err != nil {
+		if err := copyFishTankReleaseSnapshot(dir, release, templateFiles); err != nil {
 			return err
 		}
 	} else {
+		templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
 		if err := copyJSONTree(templateDir, dir, "", release, templateFiles); err != nil {
 			return err
 		}
@@ -284,58 +284,32 @@ func copyJSONTree(srcRoot string, dstRoot string, prefix string, release Release
 	return nil
 }
 
-func copyJSONFile(srcRoot string, dstRoot string, rel string, release Release, templateFiles map[string]string) error {
-	src := filepath.Join(srcRoot, rel)
-	if _, err := os.Stat(src); err != nil {
+// FishTank 发布快照由源码配置和前端生成数据共同组成。
+func copyFishTankReleaseSnapshot(dir string, release Release, templateFiles map[string]string) error {
+	srcRoot := firstExistingDir([]string{
+		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank"),
+		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank"),
+	})
+	if srcRoot == "" {
+		return fmt.Errorf("FishTank source root not found")
+	}
+	if err := copyFile(filepath.Join(srcRoot, "asset.meta.json"), filepath.Join(dir, "asset.meta.json")); err != nil {
+		return err
+	}
+	templateFiles["asset.meta.json"] = FactoryStaticURL(
+		"releases",
+		release.PluginId,
+		fmt.Sprintf("%s-%d", release.Version, release.Id),
+		"asset.meta.json",
+	)
+	fishDir := filepath.Join(srcRoot, "fish-generator", "generated", "fish")
+	if _, err := os.Stat(fishDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	dst := filepath.Join(dstRoot, rel)
-	if err := copyFile(src, dst); err != nil {
-		return err
-	}
-	key := filepath.ToSlash(rel)
-	templateFiles[key] = FactoryStaticURL(
-		"releases",
-		release.PluginId,
-		fmt.Sprintf("%s-%d", release.Version, release.Id),
-		key,
-	)
-	return nil
-}
-
-// FishTank 发布快照只托管正式鱼数据，测试数据和生成摘要不进入发布目录。
-func copyFishTankReleaseSnapshot(templateDir string, dir string, release Release, templateFiles map[string]string) error {
-	if err := removeFishTankDeprecatedSnapshotFiles(dir); err != nil {
-		return err
-	}
-	if err := copyJSONFile(templateDir, dir, "asset.meta.json", release, templateFiles); err != nil {
-		return err
-	}
-
-	fishDir := firstExistingDir([]string{
-		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator", "generated", "fish"),
-		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator", "generated", "fish"),
-	})
-	if fishDir == "" {
-		return nil
-	}
 	return copyJSONTree(fishDir, dir, filepath.Join("generated", "fish"), release, templateFiles)
-}
-
-func removeFishTankDeprecatedSnapshotFiles(dir string) error {
-	for _, rel := range []string{
-		"defaultWaterMeta.json",
-		filepath.Join("generated", "fish-test"),
-		filepath.Join("generated", "summary.json"),
-	} {
-		if err := os.RemoveAll(filepath.Join(dir, rel)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // 返回第一个存在的目录。

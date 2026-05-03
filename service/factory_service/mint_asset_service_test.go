@@ -165,6 +165,111 @@ func TestCollectionHashesChanged(t *testing.T) {
 	require.Equal(t, []string{"fish"}, keys)
 }
 
+// 资产集合 hash 不变时，仍应同步发布快照中的 asset.meta.json。
+func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	repoRoot := factoryServiceRepoRoot(t)
+
+	workspace := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "asset", "factory-templates", "SyncMetaPlugin"), 0o755))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(repoRoot)) })
+	require.NoError(t, os.Chdir(workspace))
+
+	assetMetaPath := filepath.Join(workspace, "asset", "factory-templates", "SyncMetaPlugin", "asset.meta.json")
+	itemsPath := filepath.Join(workspace, "asset", "factory-templates", "SyncMetaPlugin", "items.json")
+	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "SyncMetaPlugin",
+  "basePrice": "0",
+  "collections": [
+    {
+      "label": "收藏集",
+      "key": "items",
+      "assetKind": "tank",
+      "metadataRef": "items.json",
+      "unitPrice": "1"
+    }
+  ]
+}`), 0o644))
+	require.NoError(t, os.WriteFile(itemsPath, []byte(`[
+  { "id": "item-1" }
+]`), 0o644))
+
+	release := factory.Release{
+		Id:           generateID(),
+		PluginId:     "SyncMetaPlugin",
+		AuthorId:     990000000000102,
+		Name:         "Sync Meta Plugin",
+		Version:      "1.0.0",
+		Status:       factory.ReleaseStatusPublished,
+		CurrentRelease: false,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Sync Meta Plugin",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       5,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+
+	freezeResponse, stagingDir, err := freezeReleaseAssets(env.db, release)
+	require.NoError(t, err)
+	require.Equal(t, "ready", freezeResponse.Status)
+	require.NotEmpty(t, stagingDir)
+
+	backupDir, activatedSnapshot, err := activateStagedReleaseSnapshot(release, stagingDir)
+	require.NoError(t, err)
+	require.True(t, activatedSnapshot)
+	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+
+	initialMetaPath := filepath.Join(factory.ReleaseStaticDir(release), "asset.meta.json")
+	var initialMeta map[string]any
+	readJSONFileForTest(t, initialMetaPath, &initialMeta)
+	collections := initialMeta["collections"].([]any)
+	firstCollection := collections[0].(map[string]any)
+	require.Equal(t, "1", firstCollection["unitPrice"])
+
+	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "SyncMetaPlugin",
+  "basePrice": "0",
+  "collections": [
+    {
+      "label": "收藏集",
+      "key": "items",
+      "assetKind": "tank",
+      "metadataRef": "items.json",
+      "unitPrice": "2"
+    }
+  ]
+}`), 0o644))
+
+	freezeResponse, stagingDir, err = freezeReleaseAssets(env.db, release)
+	require.NoError(t, err)
+	require.Equal(t, "unchanged", freezeResponse.Status)
+	require.NotEmpty(t, stagingDir)
+
+	backupDir, activatedSnapshot, err = activateStagedReleaseSnapshot(release, stagingDir)
+	require.NoError(t, err)
+	require.True(t, activatedSnapshot)
+	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+
+	var refreshedMeta map[string]any
+	readJSONFileForTest(t, filepath.Join(factory.ReleaseStaticDir(release), "asset.meta.json"), &refreshedMeta)
+	collections = refreshedMeta["collections"].([]any)
+	firstCollection = collections[0].(map[string]any)
+	require.Equal(t, "2", firstCollection["unitPrice"])
+}
+
 type mintAssetServiceTestEnv struct {
 	db *gorm.DB
 }

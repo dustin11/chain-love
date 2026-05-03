@@ -54,20 +54,21 @@ const (
 
 // 通用 NFT 库存池。
 type NFTInventoryPool struct {
-	Id             int64                  `json:"id,string" gorm:"primaryKey;autoIncrement:false;comment:库存池ID"`
-	PluginId       string                 `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_nft_inventory_pool_plugin;comment:插件业务ID"`
-	ReleaseId      int64                  `json:"releaseId,string" gorm:"not null;uniqueIndex:idx_nft_inventory_pool_release_collection,priority:1;index:idx_nft_inventory_pool_release;comment:发布记录ID"`
-	CollectionKey  string                 `json:"collectionKey" gorm:"type:varchar(128);not null;uniqueIndex:idx_nft_inventory_pool_release_collection,priority:2;comment:集合业务键"`
-	AssetKind      AssetKind              `json:"assetKind" gorm:"type:varchar(64);not null;index:idx_nft_inventory_pool_kind;comment:资产类型"`
-	MetadataRef    string                 `json:"metadataRef" gorm:"type:varchar(255);not null;comment:元数据来源"`
-	Strategy       NFTInventoryStrategy   `json:"strategy" gorm:"type:varchar(32);not null;comment:发放策略"`
-	TotalSupply    int64                  `json:"totalSupply" gorm:"not null;comment:库存总量"`
-	MintedCount    int64                  `json:"mintedCount" gorm:"not null;default:0;comment:已发放数量"`
-	Status         NFTInventoryPoolStatus `json:"status" gorm:"type:varchar(32);not null;index:idx_nft_inventory_pool_status;comment:库存池状态"`
-	CollectionHash string                 `json:"collectionHash,omitempty" gorm:"type:varchar(128);comment:集合哈希"`
-	MerkleRoot     string                 `json:"merkleRoot,omitempty" gorm:"type:varchar(128);comment:Merkle Root"`
-	GeneratedAt    *time.Time             `json:"generatedAt,omitempty" gorm:"comment:生成时间"`
-	FrozenAt       *time.Time             `json:"frozenAt,omitempty" gorm:"comment:冻结时间"`
+	Id            int64                  `json:"id,string" gorm:"primaryKey;autoIncrement:false;comment:库存池ID"`
+	PluginId      string                 `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_nft_inventory_pool_plugin;comment:插件业务ID"`
+	ReleaseId     int64                  `json:"releaseId,string" gorm:"not null;uniqueIndex:idx_nft_inventory_pool_release_collection,priority:1;index:idx_nft_inventory_pool_release;comment:发布记录ID"`
+	CollectionKey string                 `json:"collectionKey" gorm:"type:varchar(128);not null;uniqueIndex:idx_nft_inventory_pool_release_collection,priority:2;comment:集合业务键"`
+	AssetKind     AssetKind              `json:"assetKind" gorm:"type:varchar(64);not null;index:idx_nft_inventory_pool_kind;comment:资产类型"`
+	MetadataRef   string                 `json:"metadataRef" gorm:"type:varchar(255);not null;comment:元数据来源"`
+	Strategy      NFTInventoryStrategy   `json:"strategy" gorm:"type:varchar(32);not null;comment:发放策略"`
+	TotalSupply   int64                  `json:"totalSupply" gorm:"not null;comment:库存总量"`
+	MintedCount   int64                  `json:"mintedCount" gorm:"not null;default:0;comment:已发放数量"`
+	Status        NFTInventoryPoolStatus `json:"status" gorm:"type:varchar(32);not null;index:idx_nft_inventory_pool_status;comment:库存池状态"`
+	// 该 collection 全量发布数据的聚合哈希，用于判断是否变更
+	CollectionHash string     `json:"collectionHash,omitempty" gorm:"type:varchar(128);comment:集合哈希"`
+	MerkleRoot     string     `json:"merkleRoot,omitempty" gorm:"type:varchar(128);comment:Merkle Root"`
+	GeneratedAt    *time.Time `json:"generatedAt,omitempty" gorm:"comment:生成时间"`
+	FrozenAt       *time.Time `json:"frozenAt,omitempty" gorm:"comment:冻结时间"`
 	domain.CreatInfo
 	domain.UpdateInfo
 }
