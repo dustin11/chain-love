@@ -12,7 +12,7 @@ DELETE FROM fact_release WHERE plugin_id IN ('990000000000001001', '990000000000
 DELETE FROM dev_plugin WHERE id IN (990000000000001001, 990000000000001002);
 
 -- 数字工厂测试插件。
-INSERT INTO dev_plugin (id, name, description, version, author, created_by, created_on)
+INSERT INTO dev_plugin (id, name, description, version, author, created_by, created_at)
 VALUES
   (990000000000001001, 'factory-test-publish-plugin', '数字工厂发布测试插件', '1.0.0', 'factory-tester', 10001, NOW()),
   (990000000000001002, 'factory-test-upgrade-plugin', '数字工厂升级测试插件', '1.0.0', 'factory-tester', 10001, NOW());

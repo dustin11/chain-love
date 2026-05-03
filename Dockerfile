@@ -27,7 +27,7 @@ COPY --from=builder /out/senspace /app/senspace
 COPY --from=builder /src/asset /app/asset
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
-ENV SPIDER_ENV=uat
+ENV SENSPACE_ENV=uat
 
 EXPOSE 9010
 

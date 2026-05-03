@@ -119,6 +119,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		factoryRouter.POST("/publish", context.WithAppContext(factory_api.PublishPlugin))
 		factoryRouter.POST("/plugins/:pluginId/freeze-current", context.WithAppContext(factory_api.FreezeCurrentPluginReleaseAssets))
+		factoryRouter.POST("/plugins/:pluginId/clear-freeze-current", context.WithAppContext(factory_api.ClearCurrentPluginReleaseAssetsFreeze))
 		factoryRouter.POST("/plugins/:pluginId/generate-fish-data", context.WithAppContext(factory_api.GenerateFishData))
 		factoryRouter.GET("/releases/my", context.WithAppContext(factory_api.GetMyReleases))
 		factoryRouter.GET("/releases/:id", context.WithAppContext(factory_api.GetReleaseDetail))

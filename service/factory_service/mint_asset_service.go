@@ -16,10 +16,13 @@ import (
 
 	"senspace/domain/factory"
 	"senspace/pkg/app/security"
+	"senspace/pkg/setting"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+const fishTankFreezeOperatorAddress = "0xe9a51481d67ca775d19b02a220833ce6c4575f53"
 
 // 对应 asset.meta.json。
 type assetValueTemplate struct {
@@ -355,8 +358,8 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 
 // 冻结当前插件发布的资产快照与库存池。
 func FreezeCurrentPluginReleaseAssets(user security.JwtUser, pluginIdRaw string) (*FreezeReleaseAssetsResponse, error) {
-	if user.Id == 0 {
-		return nil, newParameterError("用户ID不能为空")
+	if err := requireFishTankFreezeOperator(user); err != nil {
+		return nil, err
 	}
 	pluginId := strings.TrimSpace(pluginIdRaw)
 	if pluginId == "" {
@@ -411,6 +414,204 @@ func FreezeCurrentPluginReleaseAssets(user security.JwtUser, pluginIdRaw string)
 	}
 	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
 	return response, nil
+}
+
+// 清除当前插件发布的冻结快照和库存数据。
+func ClearCurrentPluginReleaseAssetsFreeze(user security.JwtUser, pluginIdRaw string) (*ClearFreezeReleaseAssetsResponse, error) {
+	if err := requireFishTankFreezeOperator(user); err != nil {
+		return nil, err
+	}
+	pluginId := strings.TrimSpace(pluginIdRaw)
+	if pluginId == "" {
+		return nil, newParameterError("插件ID不能为空")
+	}
+	if pluginId != fishGeneratorPluginId {
+		return nil, newParameterError("当前仅支持 FishTank 清除冻结")
+	}
+
+	tx, err := db()
+	if err != nil {
+		return nil, err
+	}
+
+	var release factory.Release
+	var response *ClearFreezeReleaseAssetsResponse
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("plugin_id = ? AND current_release = ?", pluginId, true).
+			Order("published_at DESC").
+			Order("updated_at DESC").
+			First(&release).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return newNotFoundError("当前插件发布记录不存在")
+			}
+			return err
+		}
+
+		removedItems, removedPools, err := clearReleaseFreezeData(tx, &release)
+		if err != nil {
+			return err
+		}
+		response = &ClearFreezeReleaseAssetsResponse{
+			ReleaseId:    strconv.FormatInt(release.Id, 10),
+			PluginId:     release.PluginId,
+			Version:      release.Version,
+			Message:      "发布冻结已清除",
+			RemovedPools: removedPools,
+			RemovedItems: removedItems,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := removeReleaseFreezeStaticFiles(release); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func clearReleaseFreezeData(tx *gorm.DB, release *factory.Release) (int64, int64, error) {
+	existingPools, err := releaseInventoryPools(tx, *release)
+	if err != nil {
+		return 0, 0, err
+	}
+	hasMinted, err := releaseHasMintedRecords(tx, *release, existingPools)
+	if err != nil {
+		return 0, 0, err
+	}
+	if hasMinted && !isDevFactoryEnvironment() {
+		return 0, 0, newConflictError("已有铸造记录，不能清除冻结数据")
+	}
+	if hasMinted {
+		if err := clearDevReleaseMintData(tx, release); err != nil {
+			return 0, 0, err
+		}
+	}
+	return clearReleaseInventoryWithCount(tx, release.Id)
+}
+
+func isDevFactoryEnvironment() bool {
+	return setting.IsDevLikeEnv()
+}
+
+func clearDevReleaseMintData(tx *gorm.DB, release *factory.Release) error {
+	ownerKeys, err := releaseOwnerKeys(tx, release.Id)
+	if err != nil {
+		return err
+	}
+	assets, err := releaseAssets(tx, release.Id)
+	if err != nil {
+		return err
+	}
+	if err := removeMintedStaticFiles(assets, ownerKeys); err != nil {
+		return err
+	}
+	if err := clearReleaseAssetRelations(tx, assets); err != nil {
+		return err
+	}
+	if err := tx.Where("release_id = ?", release.Id).Delete(&factory.Asset{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("release_id = ?", release.Id).Delete(&factory.MintRecord{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("plugin_id = ? AND (minted_release_id = ? OR effective_release_id = ?)", release.PluginId, release.Id, release.Id).
+		Delete(&factory.UserOwnership{}).Error; err != nil {
+		return err
+	}
+	release.MintedCount = 0
+	if release.Status == factory.ReleaseStatusSoldOut {
+		release.Status = factory.ReleaseStatusPublished
+	}
+	return tx.Save(release).Error
+}
+
+func releaseOwnerKeys(tx *gorm.DB, releaseId int64) ([]string, error) {
+	var ownerKeys []string
+	if err := tx.Model(&factory.Asset{}).
+		Where("release_id = ?", releaseId).
+		Distinct("owner_key").
+		Pluck("owner_key", &ownerKeys).Error; err != nil {
+		return nil, err
+	}
+	return ownerKeys, nil
+}
+
+func releaseAssets(tx *gorm.DB, releaseId int64) ([]factory.Asset, error) {
+	var assets []factory.Asset
+	if err := tx.Where("release_id = ?", releaseId).Find(&assets).Error; err != nil {
+		return nil, err
+	}
+	return assets, nil
+}
+
+func clearReleaseAssetRelations(tx *gorm.DB, assets []factory.Asset) error {
+	assetIDs := make([]int64, 0, len(assets))
+	ownerKeys := make([]string, 0, len(assets))
+	seenOwnerKeys := map[string]struct{}{}
+	for _, asset := range assets {
+		assetIDs = append(assetIDs, asset.Id)
+		if asset.OwnerKey == "" {
+			continue
+		}
+		if _, ok := seenOwnerKeys[asset.OwnerKey]; ok {
+			continue
+		}
+		ownerKeys = append(ownerKeys, asset.OwnerKey)
+		seenOwnerKeys[asset.OwnerKey] = struct{}{}
+	}
+	if len(assetIDs) > 0 {
+		if err := tx.Where("source_asset_id IN ? OR target_asset_id IN ?", assetIDs, assetIDs).
+			Delete(&factory.AssetRelation{}).Error; err != nil {
+			return err
+		}
+	}
+	if len(ownerKeys) > 0 {
+		return tx.Where("owner_key IN ?", ownerKeys).Delete(&factory.AssetRelation{}).Error
+	}
+	return nil
+}
+
+func removeMintedStaticFiles(assets []factory.Asset, ownerKeys []string) error {
+	for _, asset := range assets {
+		if err := os.Remove(factory.AssetStaticPath(asset.PluginId, asset.Id)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		tokenId := strings.TrimSpace(asset.TokenId)
+		if tokenId != "" {
+			if err := os.Remove(factory.MetadataStaticPath(asset.PluginId, tokenId)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.Remove(factory.ProofStaticPath(asset.PluginId, tokenId)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+		if asset.AssetKind == factory.AssetKindFish && strings.TrimSpace(asset.FishId) != "" {
+			if err := os.Remove(metadataByFishStaticPath(asset.PluginId, asset.FishId)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
+	for _, ownerKey := range ownerKeys {
+		if err := os.Remove(factory.OwnerIndexStaticPath(ownerKey)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Remove(factory.OwnerCompositionStaticPath(ownerKey)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func requireFishTankFreezeOperator(user security.JwtUser) error {
+	if user.Id == 0 {
+		return newParameterError("用户ID不能为空")
+	}
+	if strings.ToLower(strings.TrimSpace(user.Addr)) != fishTankFreezeOperatorAddress {
+		return newForbiddenError("无权限操作")
+	}
+	return nil
 }
 
 func activateStagedReleaseSnapshot(release factory.Release, stagingDir string) (string, bool, error) {
@@ -588,10 +789,37 @@ func releaseHasMintedRecords(tx *gorm.DB, release factory.Release, pools []facto
 }
 
 func clearReleaseInventory(tx *gorm.DB, releaseId int64) error {
-	if err := tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryItem{}).Error; err != nil {
+	_, _, err := clearReleaseInventoryWithCount(tx, releaseId)
+	return err
+}
+
+func clearReleaseInventoryWithCount(tx *gorm.DB, releaseId int64) (int64, int64, error) {
+	itemResult := tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryItem{})
+	if itemResult.Error != nil {
+		return 0, 0, itemResult.Error
+	}
+	poolResult := tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryPool{})
+	if poolResult.Error != nil {
+		return 0, 0, poolResult.Error
+	}
+	return itemResult.RowsAffected, poolResult.RowsAffected, nil
+}
+
+func releaseInventoryPools(tx *gorm.DB, release factory.Release) ([]factory.NFTInventoryPool, error) {
+	var pools []factory.NFTInventoryPool
+	if err := tx.Where("release_id = ?", release.Id).
+		Order("collection_key ASC").
+		Find(&pools).Error; err != nil {
+		return nil, err
+	}
+	return pools, nil
+}
+
+func removeReleaseFreezeStaticFiles(release factory.Release) error {
+	if err := os.RemoveAll(factory.ReleaseStaticDir(release)); err != nil {
 		return err
 	}
-	return tx.Where("release_id = ?", releaseId).Delete(&factory.NFTInventoryPool{}).Error
+	return os.RemoveAll(factory.ReleaseStaticDir(release) + ".previous")
 }
 
 // 返回发布快照内文件的静态 URL。

@@ -39,6 +39,17 @@ func FreezeCurrentPluginReleaseAssets(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(record))
 }
 
+// @Summary 清除当前插件发布冻结资产
+// @Tags 数字工厂
+// @Param pluginId path string true "插件业务ID"
+// @Success 200 {object} e.Error
+// @Router /api/v1/factory/plugins/{pluginId}/clear-freeze-current [post]
+func ClearCurrentPluginReleaseAssetsFreeze(ctx *contextx.AppContext) {
+	record, err := factory_service.ClearCurrentPluginReleaseAssetsFreeze(*ctx.User, ctx.Gin.Param("pluginId"))
+	panicIfFactoryError(err)
+	app.Response(ctx.Gin, e.SuccessData(record))
+}
+
 // @Summary 生成 FishTank 鱼数据
 // @Tags 数字工厂
 // @Param pluginId path string true "插件业务ID"

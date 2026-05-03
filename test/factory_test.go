@@ -402,11 +402,9 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 	gin.SetMode(gin.TestMode)
 	util.Setup()
 
-	originalEnv := os.Getenv("SPIDER_ENV")
 	originalConfig := *setting.Config
 	originalDB := domain.Db
 
-	require.NoError(t, os.Setenv("SPIDER_ENV", "dev"))
 	loadFactoryDevConfig(t)
 
 	pluginRoot := t.TempDir()
@@ -452,11 +450,6 @@ func setupFactoryTestEnv(t *testing.T) *factoryTestEnv {
 		domain.Db = originalDB
 		*setting.Config = originalConfig
 		resetBuildExecutor()
-		if originalEnv == "" {
-			_ = os.Unsetenv("SPIDER_ENV")
-		} else {
-			_ = os.Setenv("SPIDER_ENV", originalEnv)
-		}
 	})
 
 	return env

@@ -76,6 +76,16 @@ type FreezeReleaseAssetsResponse struct {
 	Pools        []FreezeReleaseInventoryPool `json:"pools"`
 }
 
+// 发布资产冻结清除结果。
+type ClearFreezeReleaseAssetsResponse struct {
+	ReleaseId    string `json:"releaseId"`
+	PluginId     string `json:"pluginId"`
+	Version      string `json:"version"`
+	Message      string `json:"message"`
+	RemovedPools int64  `json:"removedPools"`
+	RemovedItems int64  `json:"removedItems"`
+}
+
 // 单个库存池冻结摘要。
 type FreezeReleaseInventoryPool struct {
 	CollectionKey  string                         `json:"collectionKey"`

@@ -25,7 +25,7 @@ var (
 )
 
 func Getenv() string {
-	env := os.Getenv("SPIDER_ENV")
+	env := os.Getenv("SENSPACE_ENV")
 	if env == "" {
 		env = "dev"
 	}

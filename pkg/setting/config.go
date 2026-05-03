@@ -98,10 +98,26 @@ func Setup() {
 	if err != nil {
 		log.Fatalf("setting.Setup, fail to parse 'asset/conf/%s.yml': %v", env, err)
 	}
+	Config.App.Env = env
 
 	//
 	//AppSetting.ImageMaxSize = AppSetting.ImageMaxSize * 1024 * 1024
 	//ServerSetting.ReadTimeout = ServerSetting.ReadTimeout * time.Second
 	//ServerSetting.WriteTimeout = ServerSetting.WriteTimeout * time.Second
 	//RedisSetting.IdleTimeout = RedisSetting.IdleTimeout * time.Second
+}
+
+// CurrentEnv 返回当前已加载配置环境。
+func CurrentEnv() string {
+	return strings.ToLower(strings.TrimSpace(Config.App.Env))
+}
+
+// IsDevLikeEnv 判断当前环境是否属于开发态环境。
+func IsDevLikeEnv() bool {
+	switch CurrentEnv() {
+	case "dev", "ldev", "wdev":
+		return true
+	default:
+		return false
+	}
 }
