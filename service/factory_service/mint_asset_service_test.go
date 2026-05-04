@@ -200,7 +200,7 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 		PluginId:     "SyncMetaPlugin",
 		AuthorId:     990000000000102,
 		Name:         "Sync Meta Plugin",
-		Version:      "1.0.0",
+		Version:      "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 		Status:       factory.ReleaseStatusPublished,
 		CurrentRelease: false,
 		ManifestSnapshot: factory.PluginManifestSnapshot{
@@ -268,6 +268,122 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 	collections = refreshedMeta["collections"].([]any)
 	firstCollection = collections[0].(map[string]any)
 	require.Equal(t, "2", firstCollection["unitPrice"])
+}
+
+func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	repoRoot := factoryServiceRepoRoot(t)
+
+	workspace := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "asset", "factory-templates", "PriceOnlyPlugin"), 0o755))
+	t.Cleanup(func() { require.NoError(t, os.Chdir(repoRoot)) })
+	require.NoError(t, os.Chdir(workspace))
+
+	assetMetaPath := filepath.Join(workspace, "asset", "factory-templates", "PriceOnlyPlugin", "asset.meta.json")
+	itemsPath := filepath.Join(workspace, "asset", "factory-templates", "PriceOnlyPlugin", "items.json")
+	require.NoError(t, os.WriteFile(itemsPath, []byte(`[
+  { "id": "item-1", "tier": "common" },
+  { "id": "item-2", "tier": "common" }
+]`), 0o644))
+	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "PriceOnlyPlugin",
+  "basePrice": "0",
+  "collections": [
+    {
+      "label": "鱼",
+      "key": "fish",
+      "assetKind": "fish",
+      "metadataRef": "items.json",
+      "tierConfig": {
+        "common": { "price": "5", "supply": 2, "mintLimit": 1 }
+      }
+    }
+  ]
+}`), 0o644))
+
+	release := factory.Release{
+		Id:             generateID(),
+		PluginId:       "PriceOnlyPlugin",
+		AuthorId:       990000000000103,
+		Name:           "Price Only Plugin",
+		Version:        "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Status:         factory.ReleaseStatusPublished,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Price Only Plugin",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       5,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+
+	freezeResponse, stagingDir, err := freezeReleaseAssets(env.db, release)
+	require.NoError(t, err)
+	require.Equal(t, "ready", freezeResponse.Status)
+	backupDir, activatedSnapshot, err := activateStagedReleaseSnapshot(release, stagingDir)
+	require.NoError(t, err)
+	require.True(t, activatedSnapshot)
+	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+
+	var beforePools []factory.NFTInventoryPool
+	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&beforePools).Error)
+	require.Len(t, beforePools, 1)
+	beforePoolID := beforePools[0].Id
+	beforeHash := beforePools[0].CollectionHash
+	beforeRoot := beforePools[0].MerkleRoot
+
+	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "PriceOnlyPlugin",
+  "basePrice": "0",
+  "collections": [
+    {
+      "label": "鱼",
+      "key": "fish",
+      "assetKind": "fish",
+      "metadataRef": "items.json",
+      "tierConfig": {
+        "common": { "price": "50", "supply": 2, "mintLimit": 9 }
+      }
+    }
+  ]
+}`), 0o644))
+
+	freezeResponse, stagingDir, err = freezeReleaseAssets(env.db, release)
+	require.NoError(t, err)
+	require.Equal(t, "unchanged", freezeResponse.Status)
+	require.Contains(t, freezeResponse.Message, "价格模板已同步")
+	require.NotEmpty(t, stagingDir)
+
+	backupDir, activatedSnapshot, err = activateStagedReleaseSnapshot(release, stagingDir)
+	require.NoError(t, err)
+	require.True(t, activatedSnapshot)
+	commitFreezeStaticSnapshot(backupDir, activatedSnapshot)
+
+	var afterPools []factory.NFTInventoryPool
+	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&afterPools).Error)
+	require.Len(t, afterPools, 1)
+	require.Equal(t, beforePoolID, afterPools[0].Id)
+	require.Equal(t, beforeHash, afterPools[0].CollectionHash)
+	require.Equal(t, beforeRoot, afterPools[0].MerkleRoot)
+
+	var refreshedMeta map[string]any
+	readJSONFileForTest(t, filepath.Join(factory.ReleaseStaticDir(release), "asset.meta.json"), &refreshedMeta)
+	collections := refreshedMeta["collections"].([]any)
+	tierConfig := collections[0].(map[string]any)["tierConfig"].(map[string]any)
+	common := tierConfig["common"].(map[string]any)
+	require.Equal(t, "50", common["price"])
+	require.EqualValues(t, 9, common["mintLimit"])
 }
 
 type mintAssetServiceTestEnv struct {

@@ -665,17 +665,26 @@ func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAs
 	}
 
 	if len(existingPools) > 0 {
-		hashes, err := collectReleaseCollectionHashes(release, valueTemplate, stagingDir)
+		// 先对比前后发布快照的库存源签名，只要元数据文件和供给结构没变，就只同步价格模板。
+		currentSignatures, err := collectReleaseInventorySourceSignatures(valueTemplate, stagingDir)
 		if err != nil {
 			return nil, stagingDir, err
 		}
-		changed, changedKeys := collectionHashesChanged(existingPools, hashes)
+		previousTemplate, err := loadReleaseMintTemplate(release)
+		if err != nil {
+			return nil, stagingDir, err
+		}
+		previousSignatures, err := collectReleaseInventorySourceSignatures(previousTemplate, factory.ReleaseStaticDir(release))
+		if err != nil {
+			return nil, stagingDir, err
+		}
+		changed, changedKeys := collectionSignatureChanged(previousSignatures, currentSignatures)
 		if !changed {
 			pools, err := collectReleaseInventoryPools(tx, release)
 			if err != nil {
 				return nil, stagingDir, err
 			}
-			return freezeReleaseResponse(release, "unchanged", "资产集合未变动，已同步发布快照", pools), stagingDir, nil
+			return freezeReleaseResponse(release, "unchanged", "价格模板已同步，库存结构未变动", pools), stagingDir, nil
 		}
 
 		hasMinted, err := releaseHasMintedRecords(tx, release, existingPools)
@@ -716,6 +725,153 @@ func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAs
 	return freezeReleaseResponse(release, status, message, pools), stagingDir, nil
 }
 
+// 用于判断库存是否需要重建的签名。
+// 只包含会影响库存内容的字段，不包含价格和 mintLimit。
+type inventorySourceSignature struct {
+	// 集合业务键。
+	CollectionKey string `json:"collectionKey"`
+	// NFT 资产类型。
+	AssetKind string `json:"assetKind"`
+	// 模板声明的 metadataRef。
+	MetadataRef string `json:"metadataRef"`
+	// 属性哈希字段名。
+	TraitHashField string `json:"traitHashField"`
+	// 库存发放策略。 对应 NFTInventoryStrategy
+	Strategy string `json:"strategy"`
+	// metadata 源文件内容聚合哈希。
+	MetadataHash string `json:"metadataHash"`
+	// 各等级的供给签名。
+	TierSupplies []inventoryTierSupplySignature `json:"tierSupplies,omitempty"`
+}
+
+// 记录 tierConfig 中会影响库存结构的供给配置。
+type inventoryTierSupplySignature struct {
+	// 等级标识。
+	Tier string `json:"tier"`
+	// 等级供给数量。
+	Supply int64 `json:"supply"`
+}
+
+// 汇总当前快照中每个 collection 的库存源签名。
+func collectReleaseInventorySourceSignatures(valueTemplate assetValueTemplate, snapshotDir string) (map[string]string, error) {
+	fileHashes := map[string]string{}
+	result := make(map[string]string, len(valueTemplate.Collections))
+	for _, collection := range valueTemplate.Collections {
+		collectionKey := strings.TrimSpace(collection.Key)
+		if collectionKey == "" {
+			return nil, newParameterError("资产集合缺少 key")
+		}
+		signature, err := buildInventorySourceSignature(collection, snapshotDir, fileHashes)
+		if err != nil {
+			return nil, err
+		}
+		signature.CollectionKey = collectionKey
+		data, err := json.Marshal(signature)
+		if err != nil {
+			return nil, err
+		}
+		result[collectionKey] = sha256Hex(data)
+	}
+	return result, nil
+}
+
+// 构建单个 collection 的库存源签名。
+func buildInventorySourceSignature(
+	collection assetValueCollection,
+	snapshotDir string,
+	fileHashes map[string]string,
+) (inventorySourceSignature, error) {
+	assetKind, err := resolveCollectionAssetKind(collection)
+	if err != nil {
+		return inventorySourceSignature{}, err
+	}
+	metadataRefs, err := resolveInventorySignatureMetadataRefs(collection)
+	if err != nil {
+		return inventorySourceSignature{}, err
+	}
+	metadataHashes := make([]string, 0, len(metadataRefs))
+	for _, metadataRef := range metadataRefs {
+		file, _, _, err := parseMetadataRef(metadataRef)
+		if err != nil {
+			return inventorySourceSignature{}, err
+		}
+		hash, err := hashInventorySignatureFile(snapshotDir, file, fileHashes)
+		if err != nil {
+			return inventorySourceSignature{}, err
+		}
+		metadataHashes = append(metadataHashes, metadataRef+"@"+hash)
+	}
+	sort.Strings(metadataHashes)
+
+	signature := inventorySourceSignature{
+		AssetKind:      string(assetKind),
+		MetadataRef:    strings.TrimSpace(collection.MetadataRef),
+		TraitHashField: strings.TrimSpace(collection.TraitHashField),
+		Strategy:       string(inventoryStrategyForCollection(collection)),
+		MetadataHash:   sha256Hex([]byte(strings.Join(metadataHashes, "|"))),
+	}
+	if len(collection.TierConfig) > 0 {
+		signature.TierSupplies = make([]inventoryTierSupplySignature, 0, len(collection.TierConfig))
+		for _, tier := range sortedTierKeys(collection.TierConfig) {
+			config := collection.TierConfig[tier]
+			signature.TierSupplies = append(signature.TierSupplies, inventoryTierSupplySignature{
+				Tier:   tier,
+				Supply: config.Supply,
+			})
+		}
+	}
+	return signature, nil
+}
+
+// 展开 collection 依赖的 metadataRef 列表。
+func resolveInventorySignatureMetadataRefs(collection assetValueCollection) ([]string, error) {
+	if len(collection.TierConfig) > 0 && strings.Contains(collection.MetadataRef, "{tier}") {
+		refs := make([]string, 0, len(collection.TierConfig))
+		for _, tier := range sortedTierKeys(collection.TierConfig) {
+			refs = append(refs, strings.ReplaceAll(strings.TrimSpace(collection.MetadataRef), "{tier}", tier))
+		}
+		return refs, nil
+	}
+	metadataRef := strings.TrimSpace(collection.MetadataRef)
+	if metadataRef == "" {
+		return nil, newParameterError(collectionDisplayName(collection) + "缺少 metadataRef")
+	}
+	return []string{metadataRef}, nil
+}
+
+// 读取并缓存 metadataRef 对应文件的字节哈希。
+func hashInventorySignatureFile(snapshotDir string, file string, fileHashes map[string]string) (string, error) {
+	if hash, ok := fileHashes[file]; ok {
+		return hash, nil
+	}
+	data, err := os.ReadFile(filepath.Join(snapshotDir, file))
+	if err != nil {
+		return "", err
+	}
+	hash := sha256Hex(data)
+	fileHashes[file] = hash
+	return hash, nil
+}
+
+// 对比前后快照的 collection 源签名。
+func collectionSignatureChanged(previous map[string]string, current map[string]string) (bool, []string) {
+	seen := map[string]struct{}{}
+	changedKeys := []string{}
+	for key, previousHash := range previous {
+		seen[key] = struct{}{}
+		if current[key] != previousHash {
+			changedKeys = append(changedKeys, key)
+		}
+	}
+	for key := range current {
+		if _, ok := seen[key]; !ok {
+			changedKeys = append(changedKeys, key)
+		}
+	}
+	sort.Strings(changedKeys)
+	return len(changedKeys) > 0, changedKeys
+}
+
 func freezeReleaseResponse(release factory.Release, status string, message string, pools []FreezeReleaseInventoryPool) *FreezeReleaseAssetsResponse {
 	return &FreezeReleaseAssetsResponse{
 		ReleaseId:    strconv.FormatInt(release.Id, 10),
@@ -727,22 +883,6 @@ func freezeReleaseResponse(release factory.Release, status string, message strin
 		AssetMetaUrl: releaseStaticFileURL(release, "asset.meta.json"),
 		Pools:        pools,
 	}
-}
-
-func collectReleaseCollectionHashes(release factory.Release, valueTemplate assetValueTemplate, snapshotDir string) (map[string]string, error) {
-	result := map[string]string{}
-	for _, collection := range valueTemplate.Collections {
-		collectionKey := strings.TrimSpace(collection.Key)
-		if collectionKey == "" {
-			return nil, newParameterError("资产集合缺少 key")
-		}
-		items, err := resolveInventoryMetadataItems(release, collection, snapshotDir)
-		if err != nil {
-			return nil, err
-		}
-		result[collectionKey] = hashInventoryCollection(items)
-	}
-	return result, nil
 }
 
 func collectionHashesChanged(existingPools []factory.NFTInventoryPool, currentHashes map[string]string) (bool, []string) {

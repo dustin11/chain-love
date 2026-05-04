@@ -60,6 +60,7 @@
 - service 查询、排序、响应映射中引用审计时间时，使用 `CreatedAt` / `UpdatedAt` 以及对应数据库列 `created_at` / `updated_at`。
 
 注释规则：
+- 类型、结构体、接口、成员定义必须加上中文简洁注释。
 - 公共接口、导出类型、枚举、复杂业务逻辑必须有中文注释, 注释风格简洁重点。
 - 注释只描述重点，避免在注释开头重复类型名、方法名、字段名或把标识符翻译一遍。
 - 注释风格优先参考 [`auth_api.go`](/f:/project/senspace/senspace/api/api_v1/auth_api/auth_api.go)。
