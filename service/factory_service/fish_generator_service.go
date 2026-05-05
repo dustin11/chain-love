@@ -14,50 +14,52 @@ import (
 	"senspace/pkg/app/security"
 )
 
-const fishGeneratorPluginId = "FishTank"
-
-// GenerateFishData 执行 FishTank 鱼数据生成器。
-func GenerateFishData(user security.JwtUser, pluginIdRaw string, req GenerateFishDataRequest) (*GenerateFishDataResponse, error) {
+// GenerateReleaseAssetData 执行插件资产生成器。
+func GenerateReleaseAssetData(user security.JwtUser, pluginIdRaw string, req GenerateReleaseAssetDataRequest) (*GenerateReleaseAssetDataResponse, error) {
 	if user.Id == 0 {
 		return nil, newParameterError("用户ID不能为空")
 	}
 	pluginId := strings.TrimSpace(pluginIdRaw)
-	if pluginId != fishGeneratorPluginId {
-		return nil, newParameterError("当前仅支持 FishTank 生成器")
+	if pluginId == "" {
+		return nil, newParameterError("插件ID不能为空")
+	}
+	generator, err := pluginAssetGenerator(pluginId)
+	if err != nil {
+		return nil, err
 	}
 
 	mode := req.Mode
 	if mode == "" {
-		mode = GenerateFishDataModeTest
+		mode = GenerateReleaseAssetDataModeTest
 	}
-	if mode != GenerateFishDataModeTest && mode != GenerateFishDataModeFormal {
+	if mode != GenerateReleaseAssetDataModeTest && mode != GenerateReleaseAssetDataModeFormal {
 		return nil, newParameterError("未知生成模式")
 	}
 
-	generatorDir, err := fishGeneratorDir()
+	generatorDir, err := pluginAssetGeneratorDir(generator)
 	if err != nil {
 		return nil, err
 	}
 	outputDir := filepath.Join(generatorDir, "generated")
-	fishDirName := "fish-test"
-	if mode == GenerateFishDataModeFormal {
-		fishDirName = "fish"
+	dataDirName := generator.TestDirName
+	if mode == GenerateReleaseAssetDataModeFormal {
+		dataDirName = generator.FormalDirName
 	}
 
 	args := []string{
 		filepath.Join("dist", "cli", "generate.js"),
 		"--output-dir", outputDir,
-		"--fish-dir-name", fishDirName,
+		"--fish-dir-name", dataDirName,
 	}
-	if mode == GenerateFishDataModeTest {
-		count := normalizeFishGenerateCount(req.Count)
+	if mode == GenerateReleaseAssetDataModeTest {
+		count := normalizeGenerateCount(req.Count)
 		args = append(args, "--limit-per-tier", strconv.Itoa(count))
-		if tier := normalizeFishGenerateTier(req.Tier); tier != "" {
+		if tier := normalizeGenerateTier(req.Tier); tier != "" {
 			args = append(args, "--tiers", tier)
 		}
 	}
 
-	stdout, stderr, err := runFishGeneratorCommand(generatorDir, args)
+	stdout, stderr, err := runAssetGeneratorCommand(generatorDir, args)
 	if err != nil {
 		message := strings.TrimSpace(stderr)
 		if message == "" {
@@ -66,27 +68,31 @@ func GenerateFishData(user security.JwtUser, pluginIdRaw string, req GenerateFis
 		return nil, newConflictError("生成数据失败：" + message)
 	}
 
-	total := parseFishGeneratorTotal(stdout)
+	total := parseGeneratorTotal(stdout)
 	message := strings.TrimSpace(stdout)
 	if message == "" {
 		message = "生成数据完成"
 	}
 
-	return &GenerateFishDataResponse{
+	return &GenerateReleaseAssetDataResponse{
 		Mode:        mode,
-		FishDirName: fishDirName,
-		OutputDir:   filepath.ToSlash(filepath.Join("generated", fishDirName)),
+		DataDirName: dataDirName,
+		OutputDir:   filepath.ToSlash(filepath.Join("generated", dataDirName)),
 		Total:       total,
 		Message:     message,
 	}, nil
 }
 
-func fishGeneratorDir() (string, error) {
-	candidates := []string{
-		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator"),
-		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank", "fish-generator"),
+func pluginAssetGenerator(pluginId string) (*pluginAssetGeneratorTooling, error) {
+	tooling, ok := pluginTooling(pluginId)
+	if !ok || tooling.Generator == nil {
+		return nil, newParameterError("当前插件未配置资产生成器")
 	}
-	for _, candidate := range candidates {
+	return tooling.Generator, nil
+}
+
+func pluginAssetGeneratorDir(generator *pluginAssetGeneratorTooling) (string, error) {
+	for _, candidate := range generator.DirCandidates {
 		absCandidate, err := filepath.Abs(candidate)
 		if err != nil {
 			continue
@@ -95,10 +101,10 @@ func fishGeneratorDir() (string, error) {
 			return absCandidate, nil
 		}
 	}
-	return "", newConflictError("FishTank 生成器目录不存在")
+	return "", newConflictError("资产生成器目录不存在")
 }
 
-func runFishGeneratorCommand(dir string, args []string) (string, string, error) {
+func runAssetGeneratorCommand(dir string, args []string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -115,7 +121,7 @@ func runFishGeneratorCommand(dir string, args []string) (string, string, error) 
 	return stdout.String(), stderr.String(), err
 }
 
-func normalizeFishGenerateCount(count int) int {
+func normalizeGenerateCount(count int) int {
 	if count <= 0 {
 		return 12
 	}
@@ -125,7 +131,7 @@ func normalizeFishGenerateCount(count int) int {
 	return count
 }
 
-func normalizeFishGenerateTier(tier string) string {
+func normalizeGenerateTier(tier string) string {
 	switch strings.TrimSpace(tier) {
 	case "common", "rare", "epic", "legendary":
 		return strings.TrimSpace(tier)
@@ -134,7 +140,7 @@ func normalizeFishGenerateTier(tier string) string {
 	}
 }
 
-func parseFishGeneratorTotal(output string) int {
+func parseGeneratorTotal(output string) int {
 	start := strings.Index(output, "完成：")
 	if start < 0 {
 		return 0

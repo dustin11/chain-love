@@ -122,30 +122,30 @@ type FreezeReleaseInventoryPool struct {
 	MerkleRoot string `json:"merkleRoot,omitempty"`
 }
 
-// FishTank 生成器数据模式。
-type GenerateFishDataMode string
+// 资产生成器数据模式。
+type GenerateReleaseAssetDataMode string
 
 const (
-	GenerateFishDataModeTest   GenerateFishDataMode = "test"
-	GenerateFishDataModeFormal GenerateFishDataMode = "formal"
+	GenerateReleaseAssetDataModeTest   GenerateReleaseAssetDataMode = "test"
+	GenerateReleaseAssetDataModeFormal GenerateReleaseAssetDataMode = "formal"
 )
 
-// FishTank 生成数据请求。
-type GenerateFishDataRequest struct {
+// 资产生成请求。
+type GenerateReleaseAssetDataRequest struct {
 	// 生成模式。
-	Mode GenerateFishDataMode `json:"mode"`
+	Mode GenerateReleaseAssetDataMode `json:"mode"`
 	// 只生成指定等级。
 	Tier string `json:"tier,omitempty"`
 	// 限制生成数量。
 	Count int `json:"count,omitempty"`
 }
 
-// FishTank 生成数据响应。
-type GenerateFishDataResponse struct {
+// 资产生成响应。
+type GenerateReleaseAssetDataResponse struct {
 	// 实际执行的模式。
-	Mode GenerateFishDataMode `json:"mode"`
-	// 生成目录名。
-	FishDirName string `json:"fishDirName"`
+	Mode GenerateReleaseAssetDataMode `json:"mode"`
+	// 生成结果子目录名。
+	DataDirName string `json:"dataDirName"`
 	// 生成输出目录。
 	OutputDir string `json:"outputDir"`
 	// 实际生成数量。

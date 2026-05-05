@@ -62,7 +62,7 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
 	require.Len(t, assets, 3)
 	require.Equal(t, int64(3), countAssetsByCollection(assets, "fish"))
-	seenTemplateIds := map[string]struct{}{}
+	seenItemIds := map[string]struct{}{}
 	for _, asset := range assets {
 		if asset.CollectionKey != "fish" {
 			continue
@@ -70,14 +70,14 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 		require.Equal(t, factory.AssetKindComponent, asset.AssetKind)
 		require.Equal(t, factory.ComponentRoleChild, asset.ComponentRole)
 		require.Equal(t, "tank", asset.ParentKey)
-		require.NotEmpty(t, asset.TemplateId)
+		require.NotEmpty(t, asset.ItemId)
 		require.NotNil(t, asset.ItemIndex)
 		require.NotEmpty(t, asset.Tier)
 		require.NotEmpty(t, asset.TraitHash)
 		require.NotEmpty(t, asset.MetadataUri)
 		require.NotEmpty(t, asset.ProofUri)
-		require.NotContains(t, seenTemplateIds, asset.TemplateId)
-		seenTemplateIds[asset.TemplateId] = struct{}{}
+		require.NotContains(t, seenItemIds, asset.ItemId)
+		seenItemIds[asset.ItemId] = struct{}{}
 	}
 	var fishPool factory.NFTInventoryPool
 	require.NoError(t, env.db.First(&fishPool, "release_id = ? AND collection_key = ?", release.Id, "fish").Error)
@@ -118,7 +118,7 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 		readJSONFileForTest(t, factory.AssetStaticPath(asset.PluginId, asset.Id), &snapshot)
 		require.Equal(t, "senspace.factory.asset.v2", snapshot["schema"])
 		require.Equal(t, string(asset.AssetKind), snapshot["assetKind"])
-		require.Equal(t, asset.TemplateId, snapshot["templateId"])
+		require.Equal(t, asset.ItemId, snapshot["itemId"])
 		require.NotContains(t, snapshot, "ownerKey")
 		var metadata map[string]any
 		readJSONFileForTest(t, factory.MetadataStaticPath(asset.PluginId, asset.TokenId), &metadata)
@@ -130,7 +130,7 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 			require.Equal(t, asset.CollectionKey, snapshot["collectionKey"])
 			require.Equal(t, string(asset.ComponentRole), snapshot["componentRole"])
 			require.Equal(t, asset.ParentKey, snapshot["parentKey"])
-			require.Equal(t, asset.TemplateId, proof["templateId"])
+			require.Equal(t, asset.ItemId, proof["itemId"])
 			require.Equal(t, asset.CollectionKey, proof["collectionKey"])
 			require.Equal(t, asset.Tier, snapshot["tier"])
 			require.Equal(t, asset.TraitHash, snapshot["traitHash"])
@@ -205,7 +205,7 @@ func TestMintReleaseAssetCreatesSimplePluginNFTWithoutAssetMeta(t *testing.T) {
 	for _, asset := range assets {
 		require.Equal(t, factory.AssetKindWhole, asset.AssetKind)
 		require.Equal(t, "release.json", asset.TemplateRef)
-		require.Equal(t, release.PluginId, asset.TemplateId)
+		require.Equal(t, release.PluginId, asset.ItemId)
 		require.NotEmpty(t, asset.MetadataUri)
 	}
 

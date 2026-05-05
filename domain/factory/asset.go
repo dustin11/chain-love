@@ -46,7 +46,7 @@ type Asset struct {
 	ComponentRole   ComponentRole      `json:"componentRole,omitempty" gorm:"type:varchar(32);index:idx_factory_asset_component_role;comment:组件角色"`
 	ParentKey       string             `json:"parentKey,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_parent_key;comment:父组件集合键"`
 	TemplateRef     string             `json:"templateRef" gorm:"type:varchar(255);not null;comment:模板引用"`
-	TemplateId      string             `json:"templateId" gorm:"type:varchar(128);not null;comment:模板项ID"`
+	ItemId          string             `json:"itemId" gorm:"column:template_id;type:varchar(128);not null;comment:库存项ID"`
 	ItemIndex       *int               `json:"itemIndex,omitempty" gorm:"index:idx_factory_asset_item_index;comment:模板项序号"`
 	Tier            string             `json:"tier,omitempty" gorm:"type:varchar(64);index:idx_factory_asset_tier;comment:资产等级"`
 	TraitHash       string             `json:"traitHash,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_trait;comment:冻结属性哈希"`

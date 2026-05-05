@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"senspace/pkg/setting"
@@ -220,15 +221,8 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 	}
 
 	templateFiles := map[string]string{}
-	if release.PluginId == "FishTank" {
-		if err := copyFishTankReleaseSnapshot(dir, release, templateFiles); err != nil {
-			return err
-		}
-	} else {
-		templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
-		if err := copyJSONTree(templateDir, dir, "", release, templateFiles); err != nil {
-			return err
-		}
+	if err := copyReleaseTemplateSnapshot(dir, release, templateFiles); err != nil {
+		return err
 	}
 
 	basePrice := strings.TrimSpace(release.MintPrice)
@@ -248,6 +242,28 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 		manifest.AssetMetaUrl = url
 	}
 	return writeJSONAtomic(filepath.Join(dir, "release.json"), manifest)
+}
+
+func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[string]string) error {
+	templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
+	if info, err := os.Stat(templateDir); err == nil && info.IsDir() {
+		return copyJSONTree(templateDir, dir, "", release, templateFiles)
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	srcRoot := pluginSourceRoot(release.PluginId)
+	if srcRoot == "" {
+		return nil
+	}
+	assetMetaPath := filepath.Join(srcRoot, "asset.meta.json")
+	if _, err := os.Stat(assetMetaPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return copyPluginSourceReleaseSnapshot(srcRoot, dir, release, templateFiles)
 }
 
 // 递归复制 JSON 模板文件，并写入发布 manifest 的模板文件索引。
@@ -290,15 +306,8 @@ func copyJSONTree(srcRoot string, dstRoot string, prefix string, release Release
 	return nil
 }
 
-// FishTank 发布快照由源码配置和前端生成数据共同组成。
-func copyFishTankReleaseSnapshot(dir string, release Release, templateFiles map[string]string) error {
-	srcRoot := firstExistingDir([]string{
-		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank"),
-		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", "FishTank"),
-	})
-	if srcRoot == "" {
-		return fmt.Errorf("FishTank source root not found")
-	}
+// 从插件源码目录收集 asset.meta.json 和它引用的 JSON 模板文件。
+func copyPluginSourceReleaseSnapshot(srcRoot string, dir string, release Release, templateFiles map[string]string) error {
 	if err := copyFile(filepath.Join(srcRoot, "asset.meta.json"), filepath.Join(dir, "asset.meta.json")); err != nil {
 		return err
 	}
@@ -308,23 +317,114 @@ func copyFishTankReleaseSnapshot(dir string, release Release, templateFiles map[
 		fmt.Sprintf("%s-%d", release.Version, release.Id),
 		"asset.meta.json",
 	)
-	if err := copyFile(filepath.Join(srcRoot, "defaultWaterMeta.json"), filepath.Join(dir, "defaultWaterMeta.json")); err != nil {
+
+	files, err := collectAssetMetaReferencedFiles(filepath.Join(srcRoot, "asset.meta.json"))
+	if err != nil {
 		return err
 	}
-	templateFiles["defaultWaterMeta.json"] = FactoryStaticURL(
+	for _, rel := range files {
+		if err := copyPluginSourceJSONFile(srcRoot, dir, rel, release, templateFiles); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type assetMetaReferenceTemplate struct {
+	Collections []assetMetaReferenceCollection `json:"collections"`
+}
+
+type assetMetaReferenceCollection struct {
+	MetadataRef string                     `json:"metadataRef"`
+	TierConfig  map[string]json.RawMessage `json:"tierConfig"`
+}
+
+func collectAssetMetaReferencedFiles(path string) ([]string, error) {
+	var template assetMetaReferenceTemplate
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &template); err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	files := make([]string, 0, len(template.Collections))
+	for _, collection := range template.Collections {
+		ref := strings.TrimSpace(collection.MetadataRef)
+		if ref == "" {
+			continue
+		}
+		if len(collection.TierConfig) > 0 && strings.Contains(ref, "{tier}") {
+			for tier := range collection.TierConfig {
+				file := assetMetaReferenceFile(strings.ReplaceAll(ref, "{tier}", strings.TrimSpace(tier)))
+				if file == "" {
+					continue
+				}
+				if _, ok := seen[file]; ok {
+					continue
+				}
+				seen[file] = struct{}{}
+				files = append(files, file)
+			}
+			continue
+		}
+		file := assetMetaReferenceFile(ref)
+		if file == "" {
+			continue
+		}
+		if _, ok := seen[file]; ok {
+			continue
+		}
+		seen[file] = struct{}{}
+		files = append(files, file)
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func assetMetaReferenceFile(ref string) string {
+	parts := strings.SplitN(strings.TrimSpace(ref), "#", 2)
+	return strings.TrimSpace(parts[0])
+}
+
+func copyPluginSourceJSONFile(srcRoot string, dstRoot string, rel string, release Release, templateFiles map[string]string) error {
+	src := firstExistingFile(pluginTemplateFileCandidates(srcRoot, rel))
+	if src == "" {
+		return fmt.Errorf("plugin template file not found: %s", rel)
+	}
+	dst := filepath.Join(dstRoot, rel)
+	if err := copyFile(src, dst); err != nil {
+		return err
+	}
+	key := filepath.ToSlash(rel)
+	templateFiles[key] = FactoryStaticURL(
 		"releases",
 		release.PluginId,
 		fmt.Sprintf("%s-%d", release.Version, release.Id),
-		"defaultWaterMeta.json",
+		key,
 	)
-	fishDir := filepath.Join(srcRoot, "fish-generator", "generated", "fish")
-	if _, err := os.Stat(fishDir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+	return nil
+}
+
+// 返回插件模板文件的候选路径。
+func pluginTemplateFileCandidates(srcRoot string, rel string) []string {
+	candidates := []string{filepath.Join(srcRoot, rel)}
+	entries, err := os.ReadDir(srcRoot)
+	if err != nil {
+		return candidates
 	}
-	return copyJSONTree(fishDir, dir, filepath.Join("generated", "fish"), release, templateFiles)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(entry.Name()))
+		if !strings.Contains(name, "generator") {
+			continue
+		}
+		candidates = append(candidates, filepath.Join(srcRoot, entry.Name(), rel))
+	}
+	return candidates
 }
 
 // 返回第一个存在的目录。
@@ -335,6 +435,23 @@ func firstExistingDir(candidates []string) string {
 		}
 	}
 	return ""
+}
+
+// 返回第一个存在的文件。
+func firstExistingFile(candidates []string) string {
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func pluginSourceRoot(pluginId string) string {
+	return firstExistingDir([]string{
+		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", pluginId),
+		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", pluginId),
+	})
 }
 
 // 原子写入 JSON。

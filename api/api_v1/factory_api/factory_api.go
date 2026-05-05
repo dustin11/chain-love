@@ -50,18 +50,18 @@ func ClearCurrentPluginReleaseAssetsFreeze(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(record))
 }
 
-// @Summary 生成 FishTank 鱼数据
+// @Summary 生成插件资产数据
 // @Tags 数字工厂
 // @Param pluginId path string true "插件业务ID"
-// @Param data body factory_service.GenerateFishDataRequest true "生成参数"
+// @Param data body factory_service.GenerateReleaseAssetDataRequest true "生成参数"
 // @Success 200 {object} e.Error
-// @Router /api/v1/factory/plugins/{pluginId}/generate-fish-data [post]
-func GenerateFishData(ctx *contextx.AppContext) {
-	var req factory_service.GenerateFishDataRequest
+// @Router /api/v1/factory/plugins/{pluginId}/generate-asset-data [post]
+func GenerateReleaseAssetData(ctx *contextx.AppContext) {
+	var req factory_service.GenerateReleaseAssetDataRequest
 	err := ctx.Gin.ShouldBindJSON(&req)
 	e.PanicParameterError(err)
 
-	record, err := factory_service.GenerateFishData(*ctx.User, ctx.Gin.Param("pluginId"), req)
+	record, err := factory_service.GenerateReleaseAssetData(*ctx.User, ctx.Gin.Param("pluginId"), req)
 	panicIfFactoryError(err)
 	app.Response(ctx.Gin, e.SuccessData(record))
 }

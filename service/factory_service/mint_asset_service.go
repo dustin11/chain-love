@@ -22,8 +22,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const fishTankFreezeOperatorAddress = "0xe9a51481d67ca775d19b02a220833ce6c4575f53"
-
 // 对应 asset.meta.json。
 type assetValueTemplate struct {
 	// 模板协议版本。
@@ -90,8 +88,8 @@ type mintSelectionItem struct {
 	InventoryItemId int64
 	// 模板项所在文件引用，例如 generated/fish/common.json。
 	TemplateRef string
-	// 模板项 ID，用于回查原始模板内容。
-	TemplateId string
+	// 库存项业务 ID，用于回查原始模板内容。
+	ItemId string
 	// 模板项在集合中的稳定序号。
 	ItemIndex *int
 	// 稀有度等级。
@@ -134,8 +132,8 @@ type mintedFactoryAsset struct {
 	ParentKey string `json:"parentKey,omitempty"`
 	// 模板项来源引用。
 	TemplateRef string `json:"templateRef"`
-	// 模板项 ID。
-	TemplateId string `json:"templateId"`
+	// 库存项业务 ID。
+	ItemId string `json:"itemId"`
 	// 模板项稳定序号。
 	ItemIndex *int `json:"itemIndex,omitempty"`
 	// 稀有度等级。
@@ -179,8 +177,8 @@ type nftProofSnapshot struct {
 	TokenId string `json:"tokenId"`
 	// 所属 collection key。
 	CollectionKey string `json:"collectionKey,omitempty"`
-	// 模板项 ID。
-	TemplateId string `json:"templateId,omitempty"`
+	// 库存项业务 ID。
+	ItemId string `json:"itemId,omitempty"`
 	// 模板项稳定序号。
 	ItemIndex *int `json:"itemIndex,omitempty"`
 	// 稀有度等级。
@@ -227,8 +225,8 @@ type ownerFactoryAssetEntry struct {
 	ParentKey string `json:"parentKey,omitempty"`
 	// 模板项来源引用。
 	TemplateRef string `json:"templateRef"`
-	// 模板项 ID。
-	TemplateId string `json:"templateId"`
+	// 库存项业务 ID。
+	ItemId string `json:"itemId"`
 	// 模板项稳定序号。
 	ItemIndex *int `json:"itemIndex,omitempty"`
 	// 稀有度等级。
@@ -352,7 +350,7 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 				ComponentRole: selected.ComponentRole,
 				ParentKey:     selected.ParentKey,
 				TemplateRef:   selected.TemplateRef,
-				TemplateId:    selected.TemplateId,
+				ItemId:        selected.ItemId,
 				ItemIndex:     selected.ItemIndex,
 				Tier:          selected.Tier,
 				TraitHash:     selected.TraitHash,
@@ -443,12 +441,12 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 
 // 冻结当前插件发布的资产快照与库存池。
 func FreezeCurrentPluginReleaseAssets(user security.JwtUser, pluginIdRaw string) (*FreezeReleaseAssetsResponse, error) {
-	if err := requireFishTankFreezeOperator(user); err != nil {
-		return nil, err
-	}
 	pluginId := strings.TrimSpace(pluginIdRaw)
 	if pluginId == "" {
 		return nil, newParameterError("插件ID不能为空")
+	}
+	if err := requireReleaseFreezeOperator(user, pluginId); err != nil {
+		return nil, err
 	}
 
 	tx, err := db()
@@ -503,15 +501,12 @@ func FreezeCurrentPluginReleaseAssets(user security.JwtUser, pluginIdRaw string)
 
 // 清除当前插件发布的冻结快照和库存数据。
 func ClearCurrentPluginReleaseAssetsFreeze(user security.JwtUser, pluginIdRaw string) (*ClearFreezeReleaseAssetsResponse, error) {
-	if err := requireFishTankFreezeOperator(user); err != nil {
-		return nil, err
-	}
 	pluginId := strings.TrimSpace(pluginIdRaw)
 	if pluginId == "" {
 		return nil, newParameterError("插件ID不能为空")
 	}
-	if pluginId != fishGeneratorPluginId {
-		return nil, newParameterError("当前仅支持 FishTank 清除冻结")
+	if err := requireReleaseFreezeOperator(user, pluginId); err != nil {
+		return nil, err
 	}
 
 	tx, err := db()
@@ -684,14 +679,21 @@ func removeMintedStaticFiles(assets []factory.Asset, ownerKeys []string) error {
 	return nil
 }
 
-func requireFishTankFreezeOperator(user security.JwtUser) error {
+func requireReleaseFreezeOperator(user security.JwtUser, pluginId string) error {
 	if user.Id == 0 {
 		return newParameterError("用户ID不能为空")
 	}
-	if strings.ToLower(strings.TrimSpace(user.Addr)) != fishTankFreezeOperatorAddress {
-		return newForbiddenError("无权限操作")
+	tooling, ok := pluginTooling(pluginId)
+	if !ok || len(tooling.FreezeOperators) == 0 {
+		return newParameterError("当前插件未配置冻结操作权限")
 	}
-	return nil
+	userAddr := strings.ToLower(strings.TrimSpace(user.Addr))
+	for _, operatorAddr := range tooling.FreezeOperators {
+		if userAddr == strings.ToLower(strings.TrimSpace(operatorAddr)) {
+			return nil
+		}
+	}
+	return newForbiddenError("无权限操作")
 }
 
 func activateStagedReleaseSnapshot(release factory.Release, stagingDir string) (string, bool, error) {
@@ -1245,15 +1247,15 @@ func resolveSimpleMintSelection(
 	total := new(big.Rat).Mul(unit, big.NewRat(count, 1))
 	items := make([]mintSelectionItem, 0, count)
 	templateRef := "release.json"
-	templateId := strings.TrimSpace(release.PluginId)
-	if templateId == "" {
-		templateId = "default"
+	itemId := strings.TrimSpace(release.PluginId)
+	if itemId == "" {
+		itemId = "default"
 	}
 	for i := int64(0); i < count; i++ {
 		items = append(items, mintSelectionItem{
 			AssetKind:   factory.AssetKindWhole,
 			TemplateRef: templateRef,
-			TemplateId:  templateId,
+			ItemId:      itemId,
 		})
 	}
 	return mintSelectionResult{
@@ -1541,15 +1543,6 @@ type inventoryMetadataItem struct {
 
 // 解析 collection 的 metadataRef 并校验 item。
 func resolveInventoryMetadataItems(release factory.Release, collection assetValueCollection, snapshotDir string) ([]inventoryMetadataItem, error) {
-	if isFishTankBuiltinTankCollection(release, collection) {
-		return normalizeInventoryMetadataItems(
-			release,
-			collection,
-			strings.TrimSpace(collection.MetadataRef),
-			[]map[string]any{{"id": "tank-1"}},
-			"",
-		)
-	}
 	if len(collection.TierConfig) > 0 && strings.Contains(collection.MetadataRef, "{tier}") {
 		return resolveTieredInventoryMetadataItems(release, collection, snapshotDir)
 	}
@@ -1558,12 +1551,6 @@ func resolveInventoryMetadataItems(release factory.Release, collection assetValu
 		return nil, err
 	}
 	return normalizeInventoryMetadataItems(release, collection, strings.TrimSpace(collection.MetadataRef), items, "")
-}
-
-func isFishTankBuiltinTankCollection(release factory.Release, collection assetValueCollection) bool {
-	return release.PluginId == "FishTank" &&
-		strings.TrimSpace(collection.Key) == "tank" &&
-		strings.TrimSpace(collection.MetadataRef) == "defaultWaterMeta.json#tanks"
 }
 
 // 按 tierConfig 展开 metadataRef。
@@ -1782,7 +1769,7 @@ func appendSelectedInventoryItems(
 			ParentKey:       strings.TrimSpace(collection.ParentKey),
 			InventoryItemId: item.Id,
 			TemplateRef:     strings.TrimSpace(item.MetadataRef),
-			TemplateId:      item.ItemId,
+			ItemId:          item.ItemId,
 			ItemIndex:       &itemIndex,
 			Tier:            item.Tier,
 			TraitHash:       item.TraitHash,
@@ -2137,7 +2124,7 @@ func rebuildOwnerFactorySnapshots(ownerKey string) error {
 			ComponentRole: asset.ComponentRole,
 			ParentKey:     asset.ParentKey,
 			TemplateRef:   asset.TemplateRef,
-			TemplateId:    asset.TemplateId,
+			ItemId:        asset.ItemId,
 			ItemIndex:     asset.ItemIndex,
 			Tier:          asset.Tier,
 			TraitHash:     asset.TraitHash,
@@ -2183,7 +2170,7 @@ func writeFactoryAssetSnapshot(asset factory.Asset) error {
 		ComponentRole: asset.ComponentRole,
 		ParentKey:     asset.ParentKey,
 		TemplateRef:   asset.TemplateRef,
-		TemplateId:    asset.TemplateId,
+		ItemId:        asset.ItemId,
 		ItemIndex:     asset.ItemIndex,
 		Tier:          asset.Tier,
 		TraitHash:     asset.TraitHash,
@@ -2222,7 +2209,7 @@ func writeNFTMetadataAndProof(asset factory.Asset, snapshot mintedFactoryAsset) 
 	leaf := strings.Join([]string{
 		tokenId,
 		asset.CollectionKey,
-		asset.TemplateId,
+		asset.ItemId,
 		strconv.Itoa(itemIndex),
 		asset.Tier,
 		asset.TraitHash,
@@ -2233,7 +2220,7 @@ func writeNFTMetadataAndProof(asset factory.Asset, snapshot mintedFactoryAsset) 
 		Schema:        "senspace.factory.nft-proof.v1",
 		TokenId:       tokenId,
 		CollectionKey: asset.CollectionKey,
-		TemplateId:    asset.TemplateId,
+		ItemId:        asset.ItemId,
 		ItemIndex:     asset.ItemIndex,
 		Tier:          asset.Tier,
 		TraitHash:     asset.TraitHash,
@@ -2249,15 +2236,15 @@ func writeNFTMetadataAndProof(asset factory.Asset, snapshot mintedFactoryAsset) 
 func buildNFTMetadata(asset factory.Asset, snapshot mintedFactoryAsset) nftMetadata {
 	templateItem := loadMintedAssetTemplateItem(asset)
 	assetId := strconv.FormatInt(asset.Id, 10)
-	name := fmt.Sprintf("%s %s", asset.PluginId, asset.TemplateId)
+	name := fmt.Sprintf("%s %s", asset.PluginId, asset.ItemId)
 	if asset.CollectionKey != "" {
-		name = fmt.Sprintf("%s %s %s", asset.PluginId, asset.CollectionKey, asset.TemplateId)
+		name = fmt.Sprintf("%s %s %s", asset.PluginId, asset.CollectionKey, asset.ItemId)
 	}
 
 	attributes := []nftMetadataAttribute{
 		{TraitType: "Asset Kind", Value: string(asset.AssetKind)},
 		{TraitType: "Collection", Value: asset.CollectionKey},
-		{TraitType: "Template ID", Value: asset.TemplateId},
+		{TraitType: "Item ID", Value: asset.ItemId},
 	}
 	if asset.ComponentRole != "" {
 		attributes = append(attributes, nftMetadataAttribute{TraitType: "Component Role", Value: string(asset.ComponentRole)})
@@ -2293,7 +2280,7 @@ func buildNFTMetadata(asset factory.Asset, snapshot mintedFactoryAsset) nftMetad
 		"componentRole": string(asset.ComponentRole),
 		"parentKey":     asset.ParentKey,
 		"templateRef":   asset.TemplateRef,
-		"templateId":    asset.TemplateId,
+		"itemId":        asset.ItemId,
 		"assetUrl":      factory.AssetStaticURL(asset.PluginId, asset.Id),
 	}
 	if asset.ItemIndex != nil {
@@ -2338,7 +2325,7 @@ func loadMintedAssetTemplateItem(asset factory.Asset) map[string]any {
 	if err != nil {
 		return nil
 	}
-	return findTemplateItemById(items, asset.TemplateId)
+	return findTemplateItemById(items, asset.ItemId)
 }
 
 // 读取根节点为数组的模板文件。
