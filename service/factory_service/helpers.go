@@ -492,6 +492,7 @@ func mapRelease(record factory.Release) PublishRecord {
 		CurrentRelease: record.CurrentRelease,
 		TotalSupply:    record.TotalSupply,
 		MintedCount:    record.MintedCount,
+		MintPer:        record.MintPer,
 		MintPrice:      trimDecimal(record.MintPrice),
 		Summary:        record.Summary,
 		Category:       record.Category,

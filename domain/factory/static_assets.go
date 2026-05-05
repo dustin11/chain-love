@@ -22,6 +22,7 @@ type ReleaseStaticManifest struct {
 	PluginId      string             `json:"pluginId"`
 	Version       string             `json:"version"`
 	RuntimeKind   ReleaseRuntimeKind `json:"runtimeKind"`
+	BasePrice     string             `json:"basePrice"`
 	AssetMetaUrl  string             `json:"assetMetaUrl,omitempty"`
 	TemplateFiles map[string]string  `json:"templateFiles,omitempty"`
 }
@@ -230,12 +231,17 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 		}
 	}
 
+	basePrice := strings.TrimSpace(release.MintPrice)
+	if basePrice == "" {
+		basePrice = "0"
+	}
 	manifest := ReleaseStaticManifest{
 		Schema:        "senspace.factory.release.v1",
 		ReleaseId:     fmt.Sprintf("%d", release.Id),
 		PluginId:      release.PluginId,
 		Version:       release.Version,
 		RuntimeKind:   release.RuntimeKind,
+		BasePrice:     basePrice,
 		TemplateFiles: templateFiles,
 	}
 	if url := templateFiles["asset.meta.json"]; url != "" {

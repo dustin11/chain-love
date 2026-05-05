@@ -26,9 +26,8 @@ const fishTankFreezeOperatorAddress = "0xe9a51481d67ca775d19b02a220833ce6c4575f5
 
 // 对应 asset.meta.json。
 type assetValueTemplate struct {
-	Schema    string `json:"schema"`
-	PluginId  string `json:"pluginId"`
-	BasePrice string `json:"basePrice"`
+	Schema   string `json:"schema"`
+	PluginId string `json:"pluginId"`
 	// 数组顺序即前端展示顺序。
 	Collections []assetValueCollection `json:"collections"`
 }
@@ -225,11 +224,16 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		if defaultBuildStatus(release.BuildStatus) != factory.BuildStatusReady {
 			return newConflictError("当前发布记录构建未完成")
 		}
-		valueTemplate, err := loadReleaseMintTemplate(release)
+		valueTemplate, hasValueTemplate, err := loadReleaseMintTemplateIfExists(release)
 		if err != nil {
 			return err
 		}
-		mintSelection, err := resolveMintSelection(tx, release, valueTemplate, req.Inputs)
+		var mintSelection mintSelectionResult
+		if hasValueTemplate {
+			mintSelection, err = resolveMintSelection(tx, release, valueTemplate, req.Inputs)
+		} else {
+			mintSelection, err = resolveSimpleMintSelection(release, req.Inputs)
+		}
 		if err != nil {
 			return err
 		}
@@ -1022,6 +1026,17 @@ func loadReleaseMintTemplate(release factory.Release) (assetValueTemplate, error
 	return loadReleaseMintTemplateFromDir(factory.ReleaseStaticDir(release))
 }
 
+func loadReleaseMintTemplateIfExists(release factory.Release) (assetValueTemplate, bool, error) {
+	valueTemplate, err := loadReleaseMintTemplate(release)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return valueTemplate, false, nil
+		}
+		return valueTemplate, false, err
+	}
+	return valueTemplate, true, nil
+}
+
 func loadReleaseMintTemplateFromDir(dir string) (assetValueTemplate, error) {
 	var valueTemplate assetValueTemplate
 	if err := readJSONFile(filepath.Join(dir, "asset.meta.json"), &valueTemplate); err != nil {
@@ -1051,12 +1066,6 @@ func resolveMintSelection(
 	}
 
 	total := new(big.Rat)
-	base, err := parsePriceRat(valueTemplate.BasePrice, "基础价格")
-	if err != nil {
-		return mintSelectionResult{}, err
-	}
-	total.Add(total, base)
-
 	var result mintSelectionResult
 	for _, collection := range valueTemplate.Collections {
 		collectionKey := strings.TrimSpace(collection.Key)
@@ -1090,6 +1099,47 @@ func resolveMintSelection(
 	}
 	result.ExpectedPaid = normalizeDecimal(total.FloatString(18))
 	return result, nil
+}
+
+func resolveSimpleMintSelection(
+	release factory.Release,
+	inputs map[string]map[string]int64,
+) (mintSelectionResult, error) {
+	count := int64(0)
+	for _, counts := range inputs {
+		for _, value := range counts {
+			count += value
+		}
+	}
+	if count <= 0 {
+		return mintSelectionResult{}, newParameterError("请选择要铸造的资产数量")
+	}
+	if count > release.MintPer {
+		return mintSelectionResult{}, newParameterError("铸造数量不能超过单次最大铸造量")
+	}
+	unit, err := parsePriceRat(release.MintPrice, "基础价格")
+	if err != nil {
+		return mintSelectionResult{}, err
+	}
+	total := new(big.Rat).Mul(unit, big.NewRat(count, 1))
+	items := make([]mintSelectionItem, 0, count)
+	templateRef := "release.json"
+	templateId := strings.TrimSpace(release.PluginId)
+	if templateId == "" {
+		templateId = "default"
+	}
+	for i := int64(0); i < count; i++ {
+		items = append(items, mintSelectionItem{
+			AssetKind:   factory.AssetKindPlugin,
+			TemplateRef: templateRef,
+			TemplateId:  templateId,
+		})
+	}
+	return mintSelectionResult{
+		Items:        items,
+		ExpectedPaid: normalizeDecimal(total.FloatString(18)),
+		TotalCount:   count,
+	}, nil
 }
 
 // 返回集合的展示名称。

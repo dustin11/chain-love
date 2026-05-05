@@ -66,37 +66,60 @@ type PublishRequest struct {
 
 // 发布资产冻结结果。
 type FreezeReleaseAssetsResponse struct {
-	ReleaseId    string                       `json:"releaseId"`
-	PluginId     string                       `json:"pluginId"`
-	Version      string                       `json:"version"`
-	Status       string                       `json:"status"`
-	Message      string                       `json:"message"`
-	ReleaseUrl   string                       `json:"releaseUrl"`
-	AssetMetaUrl string                       `json:"assetMetaUrl"`
-	Pools        []FreezeReleaseInventoryPool `json:"pools"`
+	// 发布记录 ID。
+	ReleaseId string `json:"releaseId"`
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 发布版本号。
+	Version string `json:"version"`
+	// 冻结状态。
+	Status string `json:"status"`
+	// 返回给前端的提示文案。
+	Message string `json:"message"`
+	// 发布快照入口地址。
+	ReleaseUrl string `json:"releaseUrl"`
+	// 复杂价格模板地址；简单 NFT 可为空。
+	AssetMetaUrl string `json:"assetMetaUrl"`
+	// 当前发布冻结出的库存池摘要。
+	Pools []FreezeReleaseInventoryPool `json:"pools"`
 }
 
 // 发布资产冻结清除结果。
 type ClearFreezeReleaseAssetsResponse struct {
-	ReleaseId    string `json:"releaseId"`
-	PluginId     string `json:"pluginId"`
-	Version      string `json:"version"`
-	Message      string `json:"message"`
-	RemovedPools int64  `json:"removedPools"`
-	RemovedItems int64  `json:"removedItems"`
+	// 发布记录 ID。
+	ReleaseId string `json:"releaseId"`
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 发布版本号。
+	Version string `json:"version"`
+	// 清除结果文案。
+	Message string `json:"message"`
+	// 删除的库存池数量。
+	RemovedPools int64 `json:"removedPools"`
+	// 删除的库存项数量。
+	RemovedItems int64 `json:"removedItems"`
 }
 
 // 单个库存池冻结摘要。
 type FreezeReleaseInventoryPool struct {
-	CollectionKey  string                         `json:"collectionKey"`
-	AssetKind      factory.AssetKind              `json:"assetKind"`
-	MetadataRef    string                         `json:"metadataRef"`
-	Strategy       factory.NFTInventoryStrategy   `json:"strategy"`
-	TotalSupply    int64                          `json:"totalSupply"`
-	MintedCount    int64                          `json:"mintedCount"`
-	Status         factory.NFTInventoryPoolStatus `json:"status"`
-	CollectionHash string                         `json:"collectionHash,omitempty"`
-	MerkleRoot     string                         `json:"merkleRoot,omitempty"`
+	// 集合业务键。
+	CollectionKey string `json:"collectionKey"`
+	// 资产类型。
+	AssetKind factory.AssetKind `json:"assetKind"`
+	// 元数据引用位置。
+	MetadataRef string `json:"metadataRef"`
+	// 库存发放策略。
+	Strategy factory.NFTInventoryStrategy `json:"strategy"`
+	// 当前集合总供应量。
+	TotalSupply int64 `json:"totalSupply"`
+	// 已铸造数量。
+	MintedCount int64 `json:"mintedCount"`
+	// 库存池状态。
+	Status factory.NFTInventoryPoolStatus `json:"status"`
+	// 当前集合内容签名。
+	CollectionHash string `json:"collectionHash,omitempty"`
+	// 当前集合的根哈希。
+	MerkleRoot string `json:"merkleRoot,omitempty"`
 }
 
 // FishTank 生成器数据模式。
@@ -109,152 +132,241 @@ const (
 
 // FishTank 生成数据请求。
 type GenerateFishDataRequest struct {
-	Mode  GenerateFishDataMode `json:"mode"`
-	Tier  string               `json:"tier,omitempty"`
-	Count int                  `json:"count,omitempty"`
+	// 生成模式。
+	Mode GenerateFishDataMode `json:"mode"`
+	// 只生成指定等级。
+	Tier string `json:"tier,omitempty"`
+	// 限制生成数量。
+	Count int `json:"count,omitempty"`
 }
 
 // FishTank 生成数据响应。
 type GenerateFishDataResponse struct {
-	Mode        GenerateFishDataMode `json:"mode"`
-	FishDirName string               `json:"fishDirName"`
-	OutputDir   string               `json:"outputDir"`
-	Total       int                  `json:"total"`
-	Message     string               `json:"message"`
+	// 实际执行的模式。
+	Mode GenerateFishDataMode `json:"mode"`
+	// 生成目录名。
+	FishDirName string `json:"fishDirName"`
+	// 生成输出目录。
+	OutputDir string `json:"outputDir"`
+	// 实际生成数量。
+	Total int `json:"total"`
+	// 返回给前端的提示文案。
+	Message string `json:"message"`
 }
 
 // 我的发布筛选。
 type ReleaseQuery struct {
-	PluginId    string
-	Status      string
+	// 按插件业务 ID 过滤。
+	PluginId string
+	// 按发布状态过滤。
+	Status string
+	// 是否只返回当前主推版本。
 	CurrentOnly *bool
 }
 
 // 市场筛选。
 type MarketQuery struct {
-	PluginId    string
-	Category    string
-	Tags        []string
-	Status      string
+	// 按插件业务 ID 过滤。
+	PluginId string
+	// 按市场分类过滤。
+	Category string
+	// 按标签交集过滤。
+	Tags []string
+	// 按发布状态过滤。
+	Status string
+	// 是否只返回当前主推版本。
 	CurrentOnly *bool
 }
 
 // 市场信息更新请求。
 type UpdateReleaseRequest struct {
-	Id     string                `json:"id"`
+	// 发布记录 ID。
+	Id string `json:"id"`
+	// 允许更新的市场信息。
 	Market MutableMarketMetadata `json:"market"`
 }
 
 // 价格更新请求。
 type UpdateReleasePriceRequest struct {
-	Id        string `json:"id"`
+	// 发布记录 ID。
+	Id string `json:"id"`
+	// 新铸造价格。
 	MintPrice string `json:"mintPrice"`
-	Reason    string `json:"reason,omitempty"`
+	// 调价原因。
+	Reason string `json:"reason,omitempty"`
 }
 
 // 状态更新请求。
 type UpdateReleaseStatusRequest struct {
-	Id     string                `json:"id"`
+	// 发布记录 ID。
+	Id string `json:"id"`
+	// 目标状态。
 	Status factory.ReleaseStatus `json:"status"`
-	Reason string                `json:"reason,omitempty"`
+	// 状态变更原因。
+	Reason string `json:"reason,omitempty"`
 }
 
 // 资产升级请求。
 type UpgradeOwnershipRequest struct {
-	Id          string `json:"id"`
+	// 用户持有记录 ID。
+	Id string `json:"id"`
+	// 目标发布记录 ID。
 	ToReleaseId string `json:"toReleaseId"`
 }
 
 // 铸造记录请求。
 type RecordMintRequest struct {
-	ReleaseId     string
-	UserId        uint64
+	// 发布记录 ID。
+	ReleaseId string
+	// 平台用户 ID。
+	UserId uint64
+	// 钱包地址。
 	WalletAddress string
-	Quantity      int64
-	TotalPaid     string
-	ChainId       *int64
-	TxHash        string
+	// 铸造数量。
+	Quantity int64
+	// 支付总额。
+	TotalPaid string
+	// 链 ID。
+	ChainId *int64
+	// 链上交易哈希。
+	TxHash string
 }
 
 // 按发布价值模板铸造独立 NFT。
 type MintAssetRequest struct {
 	// 按 collection.key 分组的数量输入。
-	Inputs    map[string]map[string]int64 `json:"inputs"`
-	TotalPaid string                      `json:"totalPaid"`
-	ChainId   *int64                      `json:"chainId,omitempty"`
-	TxHash    string                      `json:"txHash,omitempty"`
+	Inputs map[string]map[string]int64 `json:"inputs"`
+	// 前端计算后的总支付金额。
+	TotalPaid string `json:"totalPaid"`
+	// 链 ID。
+	ChainId *int64 `json:"chainId,omitempty"`
+	// 链上交易哈希。
+	TxHash string `json:"txHash,omitempty"`
 }
 
 // 铸造生成的单个 NFT 入口。
 type MintAssetResponseAsset struct {
-	AssetId     string            `json:"assetId"`
-	AssetKind   factory.AssetKind `json:"assetKind"`
-	AssetUrl    string            `json:"assetUrl"`
-	FishId      string            `json:"fishId,omitempty"`
-	FishIndex   *int              `json:"fishIndex,omitempty"`
-	Tier        string            `json:"tier,omitempty"`
-	TraitHash   string            `json:"traitHash,omitempty"`
-	MetadataUri string            `json:"metadataUri,omitempty"`
-	ProofUri    string            `json:"proofUri,omitempty"`
+	// 资产 ID。
+	AssetId string `json:"assetId"`
+	// 资产类型。
+	AssetKind factory.AssetKind `json:"assetKind"`
+	// 资产快照地址。
+	AssetUrl string `json:"assetUrl"`
+	// 冻结鱼 ID。
+	FishId string `json:"fishId,omitempty"`
+	// 鱼在等级内的序号。
+	FishIndex *int `json:"fishIndex,omitempty"`
+	// 稀有度等级。
+	Tier string `json:"tier,omitempty"`
+	// 属性哈希。
+	TraitHash string `json:"traitHash,omitempty"`
+	// NFT metadata 地址。
+	MetadataUri string `json:"metadataUri,omitempty"`
+	// NFT proof 地址。
+	ProofUri string `json:"proofUri,omitempty"`
 }
 
 // 铸造生成的快照入口。
 type MintAssetResponse struct {
-	Assets              []MintAssetResponseAsset `json:"assets"`
-	OwnerIndexUrl       string                   `json:"ownerIndexUrl"`
-	OwnerCompositionUrl string                   `json:"ownerCompositionUrl"`
-	TotalPaid           string                   `json:"totalPaid"`
+	// 本次生成的资产列表。
+	Assets []MintAssetResponseAsset `json:"assets"`
+	// 持有人资产索引地址。
+	OwnerIndexUrl string `json:"ownerIndexUrl"`
+	// 持有人组合关系地址。
+	OwnerCompositionUrl string `json:"ownerCompositionUrl"`
+	// 本次支付总额。
+	TotalPaid string `json:"totalPaid"`
 }
 
 // 价格历史视图。
 type PriceHistoryRecord struct {
-	Id                string `json:"id"`
-	ReleaseId         string `json:"releaseId"`
+	// 历史记录 ID。
+	Id string `json:"id"`
+	// 发布记录 ID。
+	ReleaseId string `json:"releaseId"`
+	// 调价前价格。
 	PreviousMintPrice string `json:"previousMintPrice,omitempty"`
-	NextMintPrice     string `json:"nextMintPrice"`
-	Reason            string `json:"reason,omitempty"`
-	ChangedBy         string `json:"changedBy,omitempty"`
-	ChangedAt         string `json:"changedAt"`
+	// 调价后价格。
+	NextMintPrice string `json:"nextMintPrice"`
+	// 调价原因。
+	Reason string `json:"reason,omitempty"`
+	// 操作人标识。
+	ChangedBy string `json:"changedBy,omitempty"`
+	// 变更时间。
+	ChangedAt string `json:"changedAt"`
 }
 
 // 发布记录视图。
 type PublishRecord struct {
-	Id             string                       `json:"id"`
-	PluginId       string                       `json:"pluginId"`
-	Author         AuthorProfile                `json:"author"`
-	Name           string                       `json:"name"`
-	Version        string                       `json:"version"`
-	Status         factory.ReleaseStatus        `json:"status"`
-	ReviewStatus   factory.ReviewStatus         `json:"reviewStatus,omitempty"`
-	CurrentRelease bool                         `json:"currentRelease,omitempty"`
-	TotalSupply    int64                        `json:"totalSupply"`
-	MintedCount    int64                        `json:"mintedCount"`
-	MintPrice      string                       `json:"mintPrice"`
-	Summary        string                       `json:"summary,omitempty"`
-	Category       string                       `json:"category,omitempty"`
-	Tags           []string                     `json:"tags,omitempty"`
-	CoverUrl       string                       `json:"coverUrl,omitempty"`
-	SourceHash     string                       `json:"sourceHash,omitempty"`
-	BundleHash     string                       `json:"bundleHash,omitempty"`
-	Integrity      string                       `json:"integrity,omitempty"`
-	BuildStatus    factory.BuildStatus          `json:"buildStatus,omitempty"`
-	BuildError     string                       `json:"buildError,omitempty"`
-	BuiltAt        string                       `json:"builtAt,omitempty"`
-	RuntimeKind    factory.ReleaseRuntimeKind   `json:"runtimeKind"`
-	ReleaseUrl     string                       `json:"releaseUrl,omitempty"`
-	UpgradePolicy  factory.ReleaseUpgradePolicy `json:"upgradePolicy,omitempty"`
-	UpgradePrice   string                       `json:"upgradePrice,omitempty"`
-	PublishedAt    string                       `json:"publishedAt,omitempty"`
-	PausedAt       string                       `json:"pausedAt,omitempty"`
-	ClosedAt       string                       `json:"closedAt,omitempty"`
-	UpdatedAt      string                       `json:"updatedAt,omitempty"`
+	// 发布记录 ID。
+	Id string `json:"id"`
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 作者摘要。
+	Author AuthorProfile `json:"author"`
+	// 市场展示名。
+	Name string `json:"name"`
+	// 发布版本号。
+	Version string `json:"version"`
+	// 当前发布状态。
+	Status factory.ReleaseStatus `json:"status"`
+	// 审核状态。
+	ReviewStatus factory.ReviewStatus `json:"reviewStatus,omitempty"`
+	// 是否为当前主推版本。
+	CurrentRelease bool `json:"currentRelease,omitempty"`
+	// 总发行量。
+	TotalSupply int64 `json:"totalSupply"`
+	// 已铸造数量。
+	MintedCount int64 `json:"mintedCount"`
+	// 单次最大铸造量。
+	MintPer int64 `json:"mintPer"`
+	// 铸造价格。
+	MintPrice string `json:"mintPrice"`
+	// 市场摘要。
+	Summary string `json:"summary,omitempty"`
+	// 市场分类。
+	Category string `json:"category,omitempty"`
+	// 标签列表。
+	Tags []string `json:"tags,omitempty"`
+	// 市场封面图。
+	CoverUrl string `json:"coverUrl,omitempty"`
+	// 源码哈希。
+	SourceHash string `json:"sourceHash,omitempty"`
+	// 构建包哈希。
+	BundleHash string `json:"bundleHash,omitempty"`
+	// 运行入口完整性校验值。
+	Integrity string `json:"integrity,omitempty"`
+	// 构建状态。
+	BuildStatus factory.BuildStatus `json:"buildStatus,omitempty"`
+	// 构建失败原因。
+	BuildError string `json:"buildError,omitempty"`
+	// 最近一次构建完成时间。
+	BuiltAt string `json:"builtAt,omitempty"`
+	// 运行来源类型。
+	RuntimeKind factory.ReleaseRuntimeKind `json:"runtimeKind"`
+	// 发布快照入口地址。
+	ReleaseUrl string `json:"releaseUrl,omitempty"`
+	// 升级策略。
+	UpgradePolicy factory.ReleaseUpgradePolicy `json:"upgradePolicy,omitempty"`
+	// 升级费用。
+	UpgradePrice string `json:"upgradePrice,omitempty"`
+	// 发布时间。
+	PublishedAt string `json:"publishedAt,omitempty"`
+	// 暂停时间。
+	PausedAt string `json:"pausedAt,omitempty"`
+	// 关闭时间。
+	ClosedAt string `json:"closedAt,omitempty"`
+	// 最后更新时间。
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
 // 发布详情视图。
 type PublishDetail struct {
 	PublishRecord
-	ManifestSnapshot PluginManifest       `json:"manifestSnapshot"`
-	PriceHistory     []PriceHistoryRecord `json:"priceHistory,omitempty"`
+	// 发布时锁定的 manifest 快照。
+	ManifestSnapshot PluginManifest `json:"manifestSnapshot"`
+	// 价格变更历史。
+	PriceHistory []PriceHistoryRecord `json:"priceHistory,omitempty"`
 }
 
 // 用户插件资产视图。
@@ -262,13 +374,22 @@ type UserPluginOwnershipView = factoryvo.UserPluginOwnershipView
 
 // 升级记录视图。
 type UpgradeRecord struct {
-	Id            string              `json:"id"`
-	OwnershipId   string              `json:"ownershipId"`
-	UserId        string              `json:"userId"`
-	PluginId      string              `json:"pluginId"`
-	FromReleaseId string              `json:"fromReleaseId"`
-	ToReleaseId   string              `json:"toReleaseId"`
-	UpgradeType   factory.UpgradeType `json:"upgradeType"`
-	PaidAmount    string              `json:"paidAmount,omitempty"`
-	UpgradedAt    string              `json:"upgradedAt"`
+	// 升级记录 ID。
+	Id string `json:"id"`
+	// 持有关系 ID。
+	OwnershipId string `json:"ownershipId"`
+	// 用户 ID。
+	UserId string `json:"userId"`
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 来源发布记录 ID。
+	FromReleaseId string `json:"fromReleaseId"`
+	// 目标发布记录 ID。
+	ToReleaseId string `json:"toReleaseId"`
+	// 升级方式。
+	UpgradeType factory.UpgradeType `json:"upgradeType"`
+	// 支付金额。
+	PaidAmount string `json:"paidAmount,omitempty"`
+	// 升级时间。
+	UpgradedAt string `json:"upgradedAt"`
 }

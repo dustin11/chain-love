@@ -143,6 +143,73 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 	require.ErrorContains(t, err, "暂未开放铸造")
 }
 
+func TestMintReleaseAssetCreatesSimplePluginNFTWithoutAssetMeta(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	release := factory.Release{
+		Id:             generateID(),
+		PluginId:       "SimpleBookPlugin",
+		AuthorId:       990000000000104,
+		Name:           "Simple Book",
+		Version:        "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Status:         factory.ReleaseStatusPublished,
+		CurrentRelease: true,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Simple Book",
+			Version:     "1.0.0",
+			Entry:       "BookPreview",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       3,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindBook,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+	require.NoError(t, factory.EnsureReleaseStaticSnapshot(release))
+
+	user := security.JwtUser{
+		Id:   990000000000105,
+		Addr: fmt.Sprintf("0x%040x", release.Id+1),
+	}
+	ownerKey := factory.OwnerIndexKey(user.Addr)
+	t.Cleanup(func() {
+		cleanupMintTestData(t, env.db, release.Id, user.Id, ownerKey)
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+	})
+
+	response, err := MintReleaseAsset(user, strconv.FormatInt(release.Id, 10), MintAssetRequest{
+		Inputs: map[string]map[string]int64{
+			"default": {
+				"default": 2,
+			},
+		},
+		TotalPaid: "0",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "0", response.TotalPaid)
+	require.Len(t, response.Assets, 2)
+
+	var assets []factory.Asset
+	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
+	require.Len(t, assets, 2)
+	for _, asset := range assets {
+		require.Equal(t, factory.AssetKindPlugin, asset.AssetKind)
+		require.Equal(t, "release.json", asset.TemplateRef)
+		require.Equal(t, release.PluginId, asset.TemplateId)
+		require.NotEmpty(t, asset.MetadataUri)
+	}
+
+	var manifest map[string]any
+	readJSONFileForTest(t, filepath.Join(factory.ReleaseStaticDir(release), "release.json"), &manifest)
+	require.Equal(t, "0", manifest["basePrice"])
+	require.NotContains(t, manifest, "assetMetaUrl")
+}
+
 func TestCollectionHashesChanged(t *testing.T) {
 	changed, keys := collectionHashesChanged([]factory.NFTInventoryPool{
 		{CollectionKey: "fish", CollectionHash: "fish-hash"},
@@ -180,7 +247,6 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
   "schema": "senspace.asset-meta.v2",
   "pluginId": "SyncMetaPlugin",
-  "basePrice": "0",
   "collections": [
     {
       "label": "收藏集",
@@ -196,12 +262,12 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 ]`), 0o644))
 
 	release := factory.Release{
-		Id:           generateID(),
-		PluginId:     "SyncMetaPlugin",
-		AuthorId:     990000000000102,
-		Name:         "Sync Meta Plugin",
-		Version:      "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
-		Status:       factory.ReleaseStatusPublished,
+		Id:             generateID(),
+		PluginId:       "SyncMetaPlugin",
+		AuthorId:       990000000000102,
+		Name:           "Sync Meta Plugin",
+		Version:        "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Status:         factory.ReleaseStatusPublished,
 		CurrentRelease: false,
 		ManifestSnapshot: factory.PluginManifestSnapshot{
 			Name:        "Sync Meta Plugin",
@@ -241,7 +307,6 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
   "schema": "senspace.asset-meta.v2",
   "pluginId": "SyncMetaPlugin",
-  "basePrice": "0",
   "collections": [
     {
       "label": "收藏集",
@@ -288,7 +353,6 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
   "schema": "senspace.asset-meta.v2",
   "pluginId": "PriceOnlyPlugin",
-  "basePrice": "0",
   "collections": [
     {
       "label": "鱼",
@@ -303,12 +367,12 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 }`), 0o644))
 
 	release := factory.Release{
-		Id:             generateID(),
-		PluginId:       "PriceOnlyPlugin",
-		AuthorId:       990000000000103,
-		Name:           "Price Only Plugin",
-		Version:        "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
-		Status:         factory.ReleaseStatusPublished,
+		Id:       generateID(),
+		PluginId: "PriceOnlyPlugin",
+		AuthorId: 990000000000103,
+		Name:     "Price Only Plugin",
+		Version:  "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Status:   factory.ReleaseStatusPublished,
 		ManifestSnapshot: factory.PluginManifestSnapshot{
 			Name:        "Price Only Plugin",
 			Version:     "1.0.0",
@@ -345,7 +409,6 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 	require.NoError(t, os.WriteFile(assetMetaPath, []byte(`{
   "schema": "senspace.asset-meta.v2",
   "pluginId": "PriceOnlyPlugin",
-  "basePrice": "0",
   "collections": [
     {
       "label": "鱼",

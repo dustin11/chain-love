@@ -352,7 +352,6 @@ func SavePlugin(ctx *contextx.AppContext, pluginId string, form *multipart.Form)
 		defaultAssetMeta := map[string]interface{}{
 			"schema":      "senspace.asset-meta.v1",
 			"pluginId":    newPluginIdStr,
-			"basePrice":   "0",
 			"collections": []interface{}{},
 		}
 		bytes, err := json.MarshalIndent(defaultAssetMeta, "", "  ")

@@ -6,6 +6,8 @@ import "senspace/domain"
 type AssetKind string
 
 const (
+	// 通用插件资产。
+	AssetKindPlugin AssetKind = "plugin"
 	// 鱼缸容器。
 	AssetKindTank AssetKind = "tank"
 	// 鱼。
