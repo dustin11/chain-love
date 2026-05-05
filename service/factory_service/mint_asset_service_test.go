@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 独立 Fish NFT 铸造快照。
+// 组件 NFT 铸造快照。
 func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 	env := setupMintAssetServiceTest(t)
 	release := createFishTankMintTestRelease(t, env.db)
@@ -61,21 +61,23 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 	var assets []factory.Asset
 	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
 	require.Len(t, assets, 3)
-	require.Equal(t, int64(3), countAssetsByKind(assets, factory.AssetKindFish))
-	seenFishIds := map[string]struct{}{}
+	require.Equal(t, int64(3), countAssetsByCollection(assets, "fish"))
+	seenTemplateIds := map[string]struct{}{}
 	for _, asset := range assets {
-		if asset.AssetKind != factory.AssetKindFish {
+		if asset.CollectionKey != "fish" {
 			continue
 		}
-		require.NotEmpty(t, asset.FishId)
-		require.NotNil(t, asset.FishIndex)
+		require.Equal(t, factory.AssetKindComponent, asset.AssetKind)
+		require.Equal(t, factory.ComponentRoleChild, asset.ComponentRole)
+		require.Equal(t, "tank", asset.ParentKey)
+		require.NotEmpty(t, asset.TemplateId)
+		require.NotNil(t, asset.ItemIndex)
 		require.NotEmpty(t, asset.Tier)
 		require.NotEmpty(t, asset.TraitHash)
 		require.NotEmpty(t, asset.MetadataUri)
 		require.NotEmpty(t, asset.ProofUri)
-		require.Equal(t, asset.FishId, asset.TemplateId)
-		require.NotContains(t, seenFishIds, asset.FishId)
-		seenFishIds[asset.FishId] = struct{}{}
+		require.NotContains(t, seenTemplateIds, asset.TemplateId)
+		seenTemplateIds[asset.TemplateId] = struct{}{}
 	}
 	var fishPool factory.NFTInventoryPool
 	require.NoError(t, env.db.First(&fishPool, "release_id = ? AND collection_key = ?", release.Id, "fish").Error)
@@ -124,11 +126,14 @@ func TestMintReleaseAssetCreatesFishNFTSnapshots(t *testing.T) {
 		var proof map[string]any
 		readJSONFileForTest(t, factory.ProofStaticPath(asset.PluginId, asset.TokenId), &proof)
 		require.NotEmpty(t, proof["metadataHash"])
-		if asset.AssetKind == factory.AssetKindFish {
-			require.Equal(t, asset.FishId, snapshot["fishId"])
+		if asset.CollectionKey == "fish" {
+			require.Equal(t, asset.CollectionKey, snapshot["collectionKey"])
+			require.Equal(t, string(asset.ComponentRole), snapshot["componentRole"])
+			require.Equal(t, asset.ParentKey, snapshot["parentKey"])
+			require.Equal(t, asset.TemplateId, proof["templateId"])
+			require.Equal(t, asset.CollectionKey, proof["collectionKey"])
 			require.Equal(t, asset.Tier, snapshot["tier"])
 			require.Equal(t, asset.TraitHash, snapshot["traitHash"])
-			require.Equal(t, asset.FishId, proof["fishId"])
 		}
 	}
 
@@ -198,7 +203,7 @@ func TestMintReleaseAssetCreatesSimplePluginNFTWithoutAssetMeta(t *testing.T) {
 	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
 	require.Len(t, assets, 2)
 	for _, asset := range assets {
-		require.Equal(t, factory.AssetKindPlugin, asset.AssetKind)
+		require.Equal(t, factory.AssetKindWhole, asset.AssetKind)
 		require.Equal(t, "release.json", asset.TemplateRef)
 		require.Equal(t, release.PluginId, asset.TemplateId)
 		require.NotEmpty(t, asset.MetadataUri)
@@ -251,7 +256,8 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
     {
       "label": "收藏集",
       "key": "items",
-      "assetKind": "tank",
+      "assetKind": "component",
+      "componentRole": "root",
       "metadataRef": "items.json",
       "unitPrice": "1"
     }
@@ -311,7 +317,8 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
     {
       "label": "收藏集",
       "key": "items",
-      "assetKind": "tank",
+      "assetKind": "component",
+      "componentRole": "root",
       "metadataRef": "items.json",
       "unitPrice": "2"
     }
@@ -357,7 +364,8 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
     {
       "label": "鱼",
       "key": "fish",
-      "assetKind": "fish",
+      "assetKind": "component",
+      "componentRole": "root",
       "metadataRef": "items.json",
       "tierConfig": {
         "common": { "price": "5", "supply": 2, "mintLimit": 1 }
@@ -413,7 +421,8 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
     {
       "label": "鱼",
       "key": "fish",
-      "assetKind": "fish",
+      "assetKind": "component",
+      "componentRole": "root",
       "metadataRef": "items.json",
       "tierConfig": {
         "common": { "price": "50", "supply": 2, "mintLimit": 9 }
@@ -545,11 +554,11 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
 }
 
-// 统计指定类型资产数量。
-func countAssetsByKind(assets []factory.Asset, kind factory.AssetKind) int64 {
+// 统计指定集合资产数量。
+func countAssetsByCollection(assets []factory.Asset, collectionKey string) int64 {
 	var count int64
 	for _, asset := range assets {
-		if asset.AssetKind == kind {
+		if asset.CollectionKey == collectionKey {
 			count++
 		}
 	}

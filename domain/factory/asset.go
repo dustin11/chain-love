@@ -2,16 +2,24 @@ package factory
 
 import "senspace/domain"
 
-// 独立 NFT 的业务类型。
+// 工厂 NFT 资产类型。
 type AssetKind string
 
 const (
-	// 通用插件资产。
-	AssetKindPlugin AssetKind = "plugin"
-	// 鱼缸容器。
-	AssetKindTank AssetKind = "tank"
-	// 鱼。
-	AssetKindFish AssetKind = "fish"
+	// 整件插件资产。
+	AssetKindWhole AssetKind = "whole"
+	// 组合资产中的组件。
+	AssetKindComponent AssetKind = "component"
+)
+
+// 组件资产在组合结构中的角色。
+type ComponentRole string
+
+const (
+	// 可作为组合挂载根节点。
+	ComponentRoleRoot ComponentRole = "root"
+	// 挂载到其它组件上的子节点。
+	ComponentRoleChild ComponentRole = "child"
 )
 
 // 当前资产状态。
@@ -34,10 +42,12 @@ type Asset struct {
 	Version         string             `json:"version" gorm:"type:varchar(64);not null;comment:版本号"`
 	RuntimeKind     ReleaseRuntimeKind `json:"runtimeKind" gorm:"type:varchar(32);not null;comment:运行来源类型"`
 	AssetKind       AssetKind          `json:"assetKind" gorm:"type:varchar(64);not null;index:idx_factory_asset_kind;comment:资产类型"`
+	CollectionKey   string             `json:"collectionKey,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_collection;comment:集合业务键"`
+	ComponentRole   ComponentRole      `json:"componentRole,omitempty" gorm:"type:varchar(32);index:idx_factory_asset_component_role;comment:组件角色"`
+	ParentKey       string             `json:"parentKey,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_parent_key;comment:父组件集合键"`
 	TemplateRef     string             `json:"templateRef" gorm:"type:varchar(255);not null;comment:模板引用"`
 	TemplateId      string             `json:"templateId" gorm:"type:varchar(128);not null;comment:模板项ID"`
-	FishId          string             `json:"fishId,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_fish;comment:冻结鱼ID"`
-	FishIndex       *int               `json:"fishIndex,omitempty" gorm:"index:idx_factory_asset_fish_index;comment:冻结鱼等级内序号"`
+	ItemIndex       *int               `json:"itemIndex,omitempty" gorm:"index:idx_factory_asset_item_index;comment:模板项序号"`
 	Tier            string             `json:"tier,omitempty" gorm:"type:varchar(64);index:idx_factory_asset_tier;comment:资产等级"`
 	TraitHash       string             `json:"traitHash,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_trait;comment:冻结属性哈希"`
 	OwnerAddress    string             `json:"ownerAddress" gorm:"type:varchar(255);not null;index:idx_factory_asset_owner;comment:当前钱包地址"`

@@ -250,12 +250,16 @@ type MintAssetResponseAsset struct {
 	AssetId string `json:"assetId"`
 	// 资产类型。
 	AssetKind factory.AssetKind `json:"assetKind"`
+	// 集合业务键。
+	CollectionKey string `json:"collectionKey,omitempty"`
+	// 组件角色。
+	ComponentRole factory.ComponentRole `json:"componentRole,omitempty"`
+	// 父组件集合键。
+	ParentKey string `json:"parentKey,omitempty"`
 	// 资产快照地址。
 	AssetUrl string `json:"assetUrl"`
-	// 冻结鱼 ID。
-	FishId string `json:"fishId,omitempty"`
-	// 鱼在等级内的序号。
-	FishIndex *int `json:"fishIndex,omitempty"`
+	// 模板项序号。
+	ItemIndex *int `json:"itemIndex,omitempty"`
 	// 稀有度等级。
 	Tier string `json:"tier,omitempty"`
 	// 属性哈希。

@@ -308,6 +308,15 @@ func copyFishTankReleaseSnapshot(dir string, release Release, templateFiles map[
 		fmt.Sprintf("%s-%d", release.Version, release.Id),
 		"asset.meta.json",
 	)
+	if err := copyFile(filepath.Join(srcRoot, "defaultWaterMeta.json"), filepath.Join(dir, "defaultWaterMeta.json")); err != nil {
+		return err
+	}
+	templateFiles["defaultWaterMeta.json"] = FactoryStaticURL(
+		"releases",
+		release.PluginId,
+		fmt.Sprintf("%s-%d", release.Version, release.Id),
+		"defaultWaterMeta.json",
+	)
 	fishDir := filepath.Join(srcRoot, "fish-generator", "generated", "fish")
 	if _, err := os.Stat(fishDir); err != nil {
 		if os.IsNotExist(err) {
