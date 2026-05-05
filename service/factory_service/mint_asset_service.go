@@ -1980,8 +1980,8 @@ func parsePriceRat(raw string, field string) (*big.Rat, error) {
 	return rat, nil
 }
 
-// 按字段值随机选择模板 ID。
-func pickTemplateIdsByField(templates []map[string]any, field string, value string, count int64) ([]string, error) {
+// 按字段值随机选择 itemId。
+func pickItemIdsByField(templates []map[string]any, field string, value string, count int64) ([]string, error) {
 	candidates := make([]string, 0, len(templates))
 	for _, item := range templates {
 		id, _ := item["id"].(string)
@@ -1992,11 +1992,11 @@ func pickTemplateIdsByField(templates []map[string]any, field string, value stri
 	if len(candidates) == 0 {
 		return nil, newParameterError("没有可用资产模板: " + value)
 	}
-	return pickTemplateIdsFromCandidates(candidates, count)
+	return pickItemIdsFromCandidates(candidates, count)
 }
 
-// 从所有模板中随机选择 ID。
-func pickAnyTemplateIds(templates []map[string]any, count int64) ([]string, error) {
+// 从所有模板中随机选择 itemId。
+func pickAnyItemIds(templates []map[string]any, count int64) ([]string, error) {
 	candidates := make([]string, 0, len(templates))
 	for _, item := range templates {
 		id, _ := item["id"].(string)
@@ -2007,11 +2007,11 @@ func pickAnyTemplateIds(templates []map[string]any, count int64) ([]string, erro
 	if len(candidates) == 0 {
 		return nil, newParameterError("没有可用资产模板")
 	}
-	return pickTemplateIdsFromCandidates(candidates, count)
+	return pickItemIdsFromCandidates(candidates, count)
 }
 
-// 从候选 ID 中随机抽取指定数量。
-func pickTemplateIdsFromCandidates(candidates []string, count int64) ([]string, error) {
+// 从候选 itemId 中随机抽取指定数量。
+func pickItemIdsFromCandidates(candidates []string, count int64) ([]string, error) {
 	result := make([]string, 0, count)
 	for i := int64(0); i < count; i++ {
 		index, err := secureRandomIndex(len(candidates))

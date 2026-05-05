@@ -1,6 +1,7 @@
 package factory_service
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -9,6 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"senspace/domain"
+	"senspace/domain/d_util"
+	"senspace/domain/factory"
+	"senspace/pkg/setting"
 
 	"github.com/stretchr/testify/require"
 )
@@ -92,6 +99,98 @@ func TestReadRuntimeBuildResultRejectsInvalidDependencyMode(t *testing.T) {
 	result, err := readRuntimeBuildResult(outputDir, req)
 	require.Nil(t, result)
 	require.ErrorContains(t, err, "模式非法")
+}
+
+func TestExecuteReleaseBuildWritesReleaseSnapshotForArtifactPlugin(t *testing.T) {
+	originalConfig := *setting.Config
+	originalDB := domain.Db
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+
+	repoRoot := factoryServiceRepoRoot(t)
+	require.NoError(t, os.Chdir(repoRoot))
+
+	setting.Config.Database = setting.Database{
+		Type:     "mysql",
+		User:     envOrDefault("SENSPACE_TEST_DB_USER", "root"),
+		Password: envOrDefault("SENSPACE_TEST_DB_PASSWORD", "smart@vserp"),
+		Host:     envOrDefault("SENSPACE_TEST_DB_HOST", "127.0.0.1:3307"),
+		Name:     envOrDefault("SENSPACE_TEST_DB_NAME", "senspace"),
+	}
+	setting.Config.App.FilePath.Factory = filepath.Join(t.TempDir(), "factory")
+	setting.Config.App.RuntimeRootPath = filepath.Join(t.TempDir(), "runtime")
+	require.NoError(t, d_util.EnsureDatabaseExists(setting.Config.Database.Name))
+	domain.Setup()
+	require.NotNil(t, domain.Db)
+	d_util.InitTable(domain.Db)
+
+	t.Cleanup(func() {
+		if domain.Db != nil {
+			if sqlDB, err := domain.Db.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
+		}
+		domain.Db = originalDB
+		*setting.Config = originalConfig
+		require.NoError(t, os.Chdir(originalWd))
+	})
+
+	restoreExecutor := SetPluginBuildExecutorForTest(buildExecutorStub(func(req PluginBuildRequest) (*PluginBuildResult, error) {
+		return &PluginBuildResult{
+			BundleHash: "sha256:test-bundle",
+			Integrity:  "sha384:test-integrity",
+			BuiltAt:    time.Now(),
+		}, nil
+	}))
+	defer restoreExecutor()
+
+	release := factory.Release{
+		Id:           generateID(),
+		PluginId:     "ArtifactOnlyPlugin",
+		AuthorId:     990000000000104,
+		Name:         "Artifact Only Plugin",
+		Version:      "1.0.0-" + time.Now().Format("20060102150405"),
+		Status:       factory.ReleaseStatusDraft,
+		ReviewStatus: factory.ReviewStatusApproved,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Artifact Only Plugin",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       1,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusPending,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+	}
+	require.NoError(t, domain.Db.Create(&release).Error)
+	t.Cleanup(func() {
+		require.NoError(t, domain.Db.Exec("DELETE FROM fact_release_status_history WHERE release_id = ?", release.Id).Error)
+		require.NoError(t, domain.Db.Exec("DELETE FROM fact_release_price_history WHERE release_id = ?", release.Id).Error)
+		require.NoError(t, domain.Db.Exec("DELETE FROM fact_release WHERE id = ?", release.Id).Error)
+	})
+
+	builtRelease, err := executeReleaseBuild(release)
+	require.NoError(t, err)
+	require.Equal(t, factory.BuildStatusReady, builtRelease.BuildStatus)
+
+	releaseManifestPath := filepath.Join(factory.ReleaseStaticDir(builtRelease), "release.json")
+	var manifest factory.ReleaseStaticManifest
+	readJSONFileForTest(t, releaseManifestPath, &manifest)
+	require.Equal(t, builtRelease.PluginId, manifest.PluginId)
+	require.Equal(t, builtRelease.Version, manifest.Version)
+	require.Equal(t, "0.000000000000000000", manifest.BasePrice)
+}
+
+type buildExecutorStub func(req PluginBuildRequest) (*PluginBuildResult, error)
+
+func (stub buildExecutorStub) Build(_ context.Context, req PluginBuildRequest) (*PluginBuildResult, error) {
+	return stub(req)
 }
 
 func runtimeHashes(entryContent []byte) (string, string) {

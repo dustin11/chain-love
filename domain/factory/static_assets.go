@@ -245,6 +245,16 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 }
 
 func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[string]string) error {
+	releaseSourceRoot := releasePluginSourceSnapshotRoot(release)
+	if releaseSourceRoot != "" {
+		assetMetaPath := filepath.Join(releaseSourceRoot, "asset.meta.json")
+		if _, err := os.Stat(assetMetaPath); err == nil {
+			return copyPluginSourceReleaseSnapshot(releaseSourceRoot, dir, release, templateFiles)
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
 	templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
 	if info, err := os.Stat(templateDir); err == nil && info.IsDir() {
 		return copyJSONTree(templateDir, dir, "", release, templateFiles)
@@ -452,6 +462,21 @@ func pluginSourceRoot(pluginId string) string {
 		filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", pluginId),
 		filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", pluginId),
 	})
+}
+
+func releasePluginSourceSnapshotRoot(release Release) string {
+	baseRoot := strings.TrimSpace(setting.Config.App.PluginSourceRoot)
+	if baseRoot == "" {
+		baseRoot = filepath.Join(setting.Config.App.RuntimeRootPath, "plugin-source")
+	}
+	if baseRoot == "" {
+		return ""
+	}
+	candidate := filepath.Join(baseRoot, release.PluginId, fmt.Sprintf("%d", release.Id))
+	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		return candidate
+	}
+	return ""
 }
 
 // 原子写入 JSON。

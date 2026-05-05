@@ -183,7 +183,23 @@ func executeReleaseBuild(release factory.Release) (factory.Release, error) {
 		return release, err
 	}
 
-	if hasFactoryAssetTemplate(release.PluginId) {
+	if err := factory.EnsureReleaseStaticSnapshot(release); err != nil {
+		message := truncateBuildError(err.Error())
+		updateErr := tx.Model(&factory.Release{}).
+			Where("id = ?", release.Id).
+			Updates(map[string]interface{}{
+				"build_status": factory.BuildStatusFailed,
+				"build_error":  message,
+			}).Error
+		if updateErr != nil {
+			return release, updateErr
+		}
+		release.BuildStatus = factory.BuildStatusFailed
+		release.BuildError = message
+		return release, err
+	}
+
+	if releaseHasFactoryAssetTemplate(release) {
 		var stagingDir string
 		var backupDir string
 		activatedSnapshot := false
@@ -223,6 +239,26 @@ func executeReleaseBuild(release factory.Release) (factory.Release, error) {
 	}
 
 	return release, nil
+}
+
+func releaseHasFactoryAssetTemplate(release factory.Release) bool {
+	if hasFactoryAssetTemplateInDir(getPluginSourceSnapshotRoot(release.PluginId, release.Id)) {
+		return true
+	}
+	if hasFactoryAssetTemplateInDir(filepath.Join("asset", "factory-templates", release.PluginId)) {
+		return true
+	}
+	return hasFactoryAssetTemplateInDir(filepath.Join("..", "senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", release.PluginId)) ||
+		hasFactoryAssetTemplateInDir(filepath.Join("senspace-web", "src", "components", "StarSky", "Desktop", "Plugins", release.PluginId))
+}
+
+func hasFactoryAssetTemplateInDir(dir string) bool {
+	if strings.TrimSpace(dir) == "" {
+		return false
+	}
+	assetMetaPath := filepath.Join(dir, "asset.meta.json")
+	info, err := os.Stat(assetMetaPath)
+	return err == nil && !info.IsDir()
 }
 
 func hasFactoryAssetTemplate(pluginId string) bool {
