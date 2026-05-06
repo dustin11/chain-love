@@ -292,6 +292,10 @@ func TestFreezeReleaseAssetsSyncsAssetMetaWithoutCollectionHashChange(t *testing
 		UpgradePrice:  "0",
 	}
 	require.NoError(t, env.db.Create(&release).Error)
+	t.Cleanup(func() {
+		cleanupFreezeReleaseTestData(t, env.db, release.Id)
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+	})
 
 	freezeResponse, stagingDir, err := freezeReleaseAssets(env.db, release)
 	require.NoError(t, err)
@@ -398,6 +402,10 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 		UpgradePrice:  "0",
 	}
 	require.NoError(t, env.db.Create(&release).Error)
+	t.Cleanup(func() {
+		cleanupFreezeReleaseTestData(t, env.db, release.Id)
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+	})
 
 	freezeResponse, stagingDir, err := freezeReleaseAssets(env.db, release)
 	require.NoError(t, err)
@@ -551,6 +559,20 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_user_ownership WHERE user_id = ? AND plugin_id = ?", userId, "FishTank").Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_mint_record WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
+}
+
+// 清理发布冻结测试数据。
+func cleanupFreezeReleaseTestData(t *testing.T, db *gorm.DB, releaseId int64) {
+	t.Helper()
+
+	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_item WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_pool WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_mint_record WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_release_status_history WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_release_price_history WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND biz_id = ?", "factory_release", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
 }
 

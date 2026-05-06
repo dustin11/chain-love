@@ -183,7 +183,22 @@ func executeReleaseBuild(release factory.Release) (factory.Release, error) {
 		return release, err
 	}
 
-	if err := factory.EnsureReleaseStaticSnapshot(release); err != nil {
+	if err := rebuildReleaseStaticSnapshotNow(release); err != nil {
+		message := truncateBuildError(err.Error())
+		updateErr := tx.Model(&factory.Release{}).
+			Where("id = ?", release.Id).
+			Updates(map[string]interface{}{
+				"build_status": factory.BuildStatusFailed,
+				"build_error":  message,
+			}).Error
+		if updateErr != nil {
+			return release, updateErr
+		}
+		release.BuildStatus = factory.BuildStatusFailed
+		release.BuildError = message
+		return release, err
+	}
+	if err := enqueueFactoryReleaseSnapshot(release); err != nil {
 		message := truncateBuildError(err.Error())
 		updateErr := tx.Model(&factory.Release{}).
 			Where("id = ?", release.Id).

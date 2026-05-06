@@ -23,6 +23,7 @@ type ReleaseStaticManifest struct {
 	PluginId      string             `json:"pluginId"`
 	Version       string             `json:"version"`
 	RuntimeKind   ReleaseRuntimeKind `json:"runtimeKind"`
+	// 发布时的铸造基准价格，来源于 `Release.MintPrice`，用于简单铸造和价格摘要回填。
 	BasePrice     string             `json:"basePrice"`
 	AssetMetaUrl  string             `json:"assetMetaUrl,omitempty"`
 	TemplateFiles map[string]string  `json:"templateFiles,omitempty"`

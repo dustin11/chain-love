@@ -451,6 +451,9 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 	if err := rebuildOwnerFactorySnapshots(ownerKey); err != nil {
 		return nil, err
 	}
+	if err := enqueueFactoryOwnerAssetsSnapshot(ownerKey); err != nil {
+		return nil, err
+	}
 	return &response, nil
 }
 
@@ -2092,83 +2095,6 @@ func createMintRelations(tx *gorm.DB, ownerKey string, assets []factory.Asset) e
 		childIndexByParent[asset.ParentKey] = childIndex + 1
 	}
 	return nil
-}
-
-// 重建持有人的资产索引和组合快照。
-func rebuildOwnerFactorySnapshots(ownerKey string) error {
-	tx, err := db()
-	if err != nil {
-		return err
-	}
-
-	var assets []factory.Asset
-	if err := tx.
-		Where("owner_key = ? AND status = ?", ownerKey, factory.AssetStatusActive).
-		Order("created_at DESC").
-		Find(&assets).Error; err != nil {
-		return err
-	}
-
-	var relations []factory.AssetRelation
-	if err := tx.
-		Where("owner_key = ? AND status = ?", ownerKey, factory.AssetRelationStatusActive).
-		Order("created_at ASC").
-		Find(&relations).Error; err != nil {
-		return err
-	}
-
-	now := time.Now().Format(time.RFC3339Nano)
-	index := ownerFactoryAssetIndex{
-		Schema:    "senspace.factory.owner-assets.v2",
-		OwnerKey:  ownerKey,
-		UpdatedAt: now,
-		Assets:    make([]ownerFactoryAssetEntry, 0, len(assets)),
-	}
-	for _, asset := range assets {
-		if err := writeFactoryAssetSnapshot(asset); err != nil {
-			return err
-		}
-		index.Assets = append(index.Assets, ownerFactoryAssetEntry{
-			AssetId:       strconv.FormatInt(asset.Id, 10),
-			PluginId:      asset.PluginId,
-			ReleaseId:     strconv.FormatInt(asset.ReleaseId, 10),
-			Version:       asset.Version,
-			RuntimeKind:   defaultRuntimeKind(asset.RuntimeKind),
-			AssetKind:     asset.AssetKind,
-			CollectionKey: asset.CollectionKey,
-			ComponentRole: asset.ComponentRole,
-			ParentKey:     asset.ParentKey,
-			TemplateRef:   asset.TemplateRef,
-			ItemId:        asset.ItemId,
-			ItemIndex:     asset.ItemIndex,
-			PluginOptions: decodePluginOptions(asset.PluginOptions),
-			Tier:          asset.Tier,
-			TraitHash:     asset.TraitHash,
-			AssetUrl:      factory.AssetStaticURL(asset.PluginId, asset.Id),
-			ReleaseUrl:    releaseStaticURLFromAsset(asset),
-			MintedAt:      asset.CreatedAt.Format(time.RFC3339Nano),
-		})
-	}
-	if err := factory.WriteJSONAtomic(factory.OwnerIndexStaticPath(ownerKey), index); err != nil {
-		return err
-	}
-
-	composition := ownerFactoryAssetComposition{
-		Schema:    "senspace.factory.owner-composition.v1",
-		OwnerKey:  ownerKey,
-		UpdatedAt: now,
-		Relations: make([]ownerFactoryAssetCompositionEdge, 0, len(relations)),
-	}
-	for _, relation := range relations {
-		composition.Relations = append(composition.Relations, ownerFactoryAssetCompositionEdge{
-			Id:            strconv.FormatInt(relation.Id, 10),
-			RelationType:  relation.RelationType,
-			SourceAssetId: strconv.FormatInt(relation.SourceAssetId, 10),
-			TargetAssetId: strconv.FormatInt(relation.TargetAssetId, 10),
-			Metadata:      decodeRelationMetadata(relation.MetadataJson),
-		})
-	}
-	return factory.WriteJSONAtomic(factory.OwnerCompositionStaticPath(ownerKey), composition)
 }
 
 // 写入单个资产静态快照。

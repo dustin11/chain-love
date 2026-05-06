@@ -11,6 +11,7 @@ import (
 	"senspace/pkg/setting/consts"
 	"senspace/pkg/util"
 	"senspace/routers"
+	"senspace/service/task_service"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,7 @@ func init() {
 	}
 	d_util.InitTable(domain.Db)
 	util.Setup()
+	task_service.StartWorker()
 }
 
 //	@title						Senspace API

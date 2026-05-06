@@ -6,6 +6,7 @@ import (
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
+	"senspace/api/api_v1/task_api"
 	"senspace/api/api_v1/sys_api"
 	"senspace/middleware"
 	context "senspace/pkg/app/contextx"
@@ -129,6 +130,11 @@ func SetupApiV1Router(router *gin.Engine) {
 		factoryRouter.PATCH("/releases/:id/status", context.WithAppContext(factory_api.UpdateReleaseStatus))
 		factoryRouter.GET("/ownership/my", context.WithAppContext(factory_api.GetMyOwnerships))
 		factoryRouter.POST("/ownership/:id/upgrade", context.WithAppContext(factory_api.UpgradeOwnership))
+	}
+	taskRouter := apiRouter.Group("/task")
+	{
+		taskRouter.GET("/list", context.WithAppContext(task_api.ListTasks))
+		taskRouter.POST("/:id/retry", context.WithAppContext(task_api.RetryTask))
 	}
 
 }
