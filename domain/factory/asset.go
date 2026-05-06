@@ -48,6 +48,7 @@ type Asset struct {
 	TemplateRef     string             `json:"templateRef" gorm:"type:varchar(255);not null;comment:模板引用"`
 	ItemId          string             `json:"itemId" gorm:"column:template_id;type:varchar(128);not null;comment:库存项ID"`
 	ItemIndex       *int               `json:"itemIndex,omitempty" gorm:"index:idx_factory_asset_item_index;comment:模板项序号"`
+	PluginOptions   string             `json:"pluginOptions,omitempty" gorm:"type:json;comment:插件属性面板参数"`
 	Tier            string             `json:"tier,omitempty" gorm:"type:varchar(64);index:idx_factory_asset_tier;comment:资产等级"`
 	TraitHash       string             `json:"traitHash,omitempty" gorm:"type:varchar(128);index:idx_factory_asset_trait;comment:冻结属性哈希"`
 	OwnerAddress    string             `json:"ownerAddress" gorm:"type:varchar(255);not null;index:idx_factory_asset_owner;comment:当前钱包地址"`

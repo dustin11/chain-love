@@ -106,6 +106,12 @@ type templateItemMatch struct {
 	Index int
 }
 
+// 归一化后的插件属性面板参数 JSON。
+type normalizedPluginOptions struct {
+	Raw  string
+	Data map[string]any
+}
+
 // 静态目录中的单个 NFT 快照。
 type mintedFactoryAsset struct {
 	// 快照协议版本。
@@ -136,6 +142,8 @@ type mintedFactoryAsset struct {
 	ItemId string `json:"itemId"`
 	// 模板项稳定序号。
 	ItemIndex *int `json:"itemIndex,omitempty"`
+	// 插件属性面板参数。
+	PluginOptions map[string]any `json:"pluginOptions,omitempty"`
 	// 稀有度等级。
 	Tier string `json:"tier,omitempty"`
 	// 冻结后的属性哈希。
@@ -229,6 +237,8 @@ type ownerFactoryAssetEntry struct {
 	ItemId string `json:"itemId"`
 	// 模板项稳定序号。
 	ItemIndex *int `json:"itemIndex,omitempty"`
+	// 插件属性面板参数。
+	PluginOptions map[string]any `json:"pluginOptions,omitempty"`
 	// 稀有度等级。
 	Tier string `json:"tier,omitempty"`
 	// 冻结后的属性哈希。
@@ -277,6 +287,10 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		return nil, err
 	}
 	req.TotalPaid = totalPaid
+	pluginOptions, err := normalizePluginOptions(req.PluginOptions)
+	if err != nil {
+		return nil, err
+	}
 
 	tx, err := db()
 	if err != nil {
@@ -352,6 +366,7 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 				TemplateRef:   selected.TemplateRef,
 				ItemId:        selected.ItemId,
 				ItemIndex:     selected.ItemIndex,
+				PluginOptions: pluginOptions.Raw,
 				Tier:          selected.Tier,
 				TraitHash:     selected.TraitHash,
 				OwnerAddress:  walletAddress,
@@ -2126,6 +2141,7 @@ func rebuildOwnerFactorySnapshots(ownerKey string) error {
 			TemplateRef:   asset.TemplateRef,
 			ItemId:        asset.ItemId,
 			ItemIndex:     asset.ItemIndex,
+			PluginOptions: decodePluginOptions(asset.PluginOptions),
 			Tier:          asset.Tier,
 			TraitHash:     asset.TraitHash,
 			AssetUrl:      factory.AssetStaticURL(asset.PluginId, asset.Id),
@@ -2172,6 +2188,7 @@ func writeFactoryAssetSnapshot(asset factory.Asset) error {
 		TemplateRef:   asset.TemplateRef,
 		ItemId:        asset.ItemId,
 		ItemIndex:     asset.ItemIndex,
+		PluginOptions: decodePluginOptions(asset.PluginOptions),
 		Tier:          asset.Tier,
 		TraitHash:     asset.TraitHash,
 		ReleaseUrl:    releaseStaticURLFromAsset(asset),
@@ -2283,6 +2300,9 @@ func buildNFTMetadata(asset factory.Asset, snapshot mintedFactoryAsset) nftMetad
 		"itemId":        asset.ItemId,
 		"assetUrl":      factory.AssetStaticURL(asset.PluginId, asset.Id),
 	}
+	if options := decodePluginOptions(asset.PluginOptions); len(options) > 0 {
+		properties["pluginOptions"] = options
+	}
 	if asset.ItemIndex != nil {
 		properties["itemIndex"] = *asset.ItemIndex
 	}
@@ -2371,6 +2391,52 @@ func decodeRelationMetadata(raw string) any {
 	}
 	var value any
 	if err := json.Unmarshal([]byte(trimmed), &value); err != nil {
+		return nil
+	}
+	return value
+}
+
+func normalizePluginOptions(input map[string]any) (normalizedPluginOptions, error) {
+	if len(input) == 0 {
+		return normalizedPluginOptions{
+			Raw:  "",
+			Data: nil,
+		}, nil
+	}
+	data, err := json.Marshal(input)
+	if err != nil {
+		return normalizedPluginOptions{}, newParameterError("插件属性参数格式错误")
+	}
+	normalized := map[string]any{}
+	if err := json.Unmarshal(data, &normalized); err != nil {
+		return normalizedPluginOptions{}, newParameterError("插件属性参数格式错误")
+	}
+	if len(normalized) == 0 {
+		return normalizedPluginOptions{
+			Raw:  "",
+			Data: nil,
+		}, nil
+	}
+	normalizedData, err := json.Marshal(normalized)
+	if err != nil {
+		return normalizedPluginOptions{}, newParameterError("插件属性参数格式错误")
+	}
+	return normalizedPluginOptions{
+		Raw:  string(normalizedData),
+		Data: normalized,
+	}, nil
+}
+
+func decodePluginOptions(raw string) map[string]any {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "{}" {
+		return nil
+	}
+	var value map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &value); err != nil {
+		return nil
+	}
+	if len(value) == 0 {
 		return nil
 	}
 	return value

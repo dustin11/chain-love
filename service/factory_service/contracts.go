@@ -236,6 +236,8 @@ type RecordMintRequest struct {
 type MintAssetRequest struct {
 	// 按 collection.key 分组的数量输入。
 	Inputs map[string]map[string]int64 `json:"inputs"`
+	// 插件属性面板参数。
+	PluginOptions map[string]any `json:"pluginOptions,omitempty"`
 	// 前端计算后的总支付金额。
 	TotalPaid string `json:"totalPaid"`
 	// 链 ID。
