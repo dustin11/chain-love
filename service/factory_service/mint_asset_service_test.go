@@ -553,13 +553,44 @@ func createFishTankMintTestRelease(t *testing.T, db *gorm.DB) factory.Release {
 func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint64, ownerKey string) {
 	t.Helper()
 
+	var release factory.Release
+	_ = db.First(&release, "id = ?", releaseId).Error
+
+	var assets []factory.Asset
+	require.NoError(t, db.Where("release_id = ?", releaseId).Find(&assets).Error)
+
 	require.NoError(t, db.Exec("DELETE FROM fact_asset_relation WHERE owner_key = ?", ownerKey).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_item WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_pool WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_user_ownership WHERE user_id = ? AND plugin_id = ?", userId, "FishTank").Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_mint_record WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND task_key = ?", staticTaskBizTypeFactoryOwner, "owner:"+ownerKey).Error)
+	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND biz_id = ?", staticTaskBizTypeFactoryRelease, releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
+
+	for _, asset := range assets {
+		if err := os.Remove(factory.AssetStaticPath(asset.PluginId, asset.Id)); err != nil && !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+		if err := os.Remove(factory.MetadataStaticPath(asset.PluginId, asset.TokenId)); err != nil && !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+		if err := os.Remove(factory.ProofStaticPath(asset.PluginId, asset.TokenId)); err != nil && !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+	}
+
+	ownerDir := filepath.Dir(factory.OwnerIndexStaticPath(ownerKey))
+	require.NoError(t, os.RemoveAll(ownerDir))
+	require.NoError(t, os.RemoveAll(ownerDir+".staging"))
+	require.NoError(t, os.RemoveAll(ownerDir+".previous"))
+
+	if release.Id != 0 {
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticStagingDir(release)))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release) + ".previous"))
+	}
 }
 
 // 清理发布冻结测试数据。

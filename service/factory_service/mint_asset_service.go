@@ -268,6 +268,15 @@ type ownerFactoryAssetCompositionEdge struct {
 	Metadata      any    `json:"metadata,omitempty"`
 }
 
+// 已提交但仍需补偿回滚的铸造上下文。
+type committedMintContext struct {
+	ReleaseId    int64
+	PluginId     string
+	MintRecordId int64
+	UserId       uint64
+	OwnerKey     string
+}
+
 // 按发布快照生成独立 NFT，并用 DB 保持权威状态。
 func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetRequest) (*MintAssetResponse, error) {
 	releaseId, err := parseID(releaseIdRaw, "发布记录ID")
@@ -299,6 +308,7 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 
 	var response MintAssetResponse
 	var ownerKey string
+	var committedMint committedMintContext
 	err = tx.Transaction(func(tx *gorm.DB) error {
 		var release factory.Release
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&release, "id = ?", releaseId).Error; err != nil {
@@ -347,6 +357,13 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		}
 		if err := tx.Create(&record).Error; err != nil {
 			return err
+		}
+		committedMint = committedMintContext{
+			ReleaseId:    release.Id,
+			PluginId:     release.PluginId,
+			MintRecordId: record.Id,
+			UserId:       user.Id,
+			OwnerKey:     ownerKey,
 		}
 
 		var createdAssets []factory.Asset
@@ -449,9 +466,15 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 		return nil, err
 	}
 	if err := rebuildOwnerFactorySnapshots(ownerKey); err != nil {
+		if rollbackErr := rollbackCommittedMintArtifacts(committedMint); rollbackErr != nil {
+			return nil, fmt.Errorf("铸造静态快照生成失败: %w；补偿回滚失败: %v", err, rollbackErr)
+		}
 		return nil, err
 	}
 	if err := enqueueFactoryOwnerAssetsSnapshot(ownerKey); err != nil {
+		if rollbackErr := rollbackCommittedMintArtifacts(committedMint); rollbackErr != nil {
+			return nil, fmt.Errorf("铸造后续任务创建失败: %w；补偿回滚失败: %v", err, rollbackErr)
+		}
 		return nil, err
 	}
 	return &response, nil
@@ -602,7 +625,7 @@ func clearDevReleaseMintData(tx *gorm.DB, release *factory.Release) error {
 	if err != nil {
 		return err
 	}
-	if err := removeMintedStaticFiles(assets, ownerKeys); err != nil {
+	if err := removeMintedStaticFiles(assets); err != nil {
 		return err
 	}
 	if err := clearReleaseAssetRelations(tx, assets); err != nil {
@@ -616,6 +639,9 @@ func clearDevReleaseMintData(tx *gorm.DB, release *factory.Release) error {
 	}
 	if err := tx.Where("plugin_id = ? AND (minted_release_id = ? OR effective_release_id = ?)", release.PluginId, release.Id, release.Id).
 		Delete(&factory.UserOwnership{}).Error; err != nil {
+		return err
+	}
+	if err := cleanupOwnerFactoryArtifacts(tx, ownerKeys); err != nil {
 		return err
 	}
 	release.MintedCount = 0
@@ -671,7 +697,7 @@ func clearReleaseAssetRelations(tx *gorm.DB, assets []factory.Asset) error {
 	return nil
 }
 
-func removeMintedStaticFiles(assets []factory.Asset, ownerKeys []string) error {
+func removeMintedStaticFiles(assets []factory.Asset) error {
 	for _, asset := range assets {
 		if err := os.Remove(factory.AssetStaticPath(asset.PluginId, asset.Id)); err != nil && !os.IsNotExist(err) {
 			return err
@@ -686,13 +712,210 @@ func removeMintedStaticFiles(assets []factory.Asset, ownerKeys []string) error {
 			}
 		}
 	}
+	return nil
+}
+
+func cleanupOwnerFactoryArtifacts(tx *gorm.DB, ownerKeys []string) error {
+	normalizedOwnerKeys := normalizeOwnerKeys(ownerKeys)
+	if len(normalizedOwnerKeys) == 0 {
+		return nil
+	}
+	for _, ownerKey := range normalizedOwnerKeys {
+		var assets []factory.Asset
+		if err := tx.Where("owner_key = ? AND status = ?", ownerKey, factory.AssetStatusActive).
+			Order("created_at DESC").
+			Find(&assets).Error; err != nil {
+			return err
+		}
+		var relations []factory.AssetRelation
+		if err := tx.Where("owner_key = ? AND status = ?", ownerKey, factory.AssetRelationStatusActive).
+			Order("created_at ASC").
+			Find(&relations).Error; err != nil {
+			return err
+		}
+		if len(assets) == 0 && len(relations) == 0 {
+			if err := removeOwnerFactorySnapshotArtifacts(ownerKey); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := removeOwnerFactoryTransientArtifacts(ownerKey); err != nil {
+			return err
+		}
+		stageDir, err := stageOwnerFactorySnapshots(ownerKey, assets, relations)
+		if err != nil {
+			return err
+		}
+		if err := activateOwnerFactorySnapshots(ownerKey, stageDir); err != nil {
+			_ = os.RemoveAll(stageDir)
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeOwnerKeys(ownerKeys []string) []string {
+	normalized := make([]string, 0, len(ownerKeys))
+	seen := map[string]struct{}{}
 	for _, ownerKey := range ownerKeys {
-		if err := os.Remove(factory.OwnerIndexStaticPath(ownerKey)); err != nil && !os.IsNotExist(err) {
+		trimmed := strings.TrimSpace(ownerKey)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
+}
+
+// 回滚已提交但后置静态步骤失败的单次铸造。
+func rollbackCommittedMintArtifacts(ctx committedMintContext) error {
+	if ctx.ReleaseId == 0 || ctx.MintRecordId == 0 {
+		return nil
+	}
+
+	tx, err := db()
+	if err != nil {
+		return err
+	}
+
+	var mintedAssets []factory.Asset
+	removeOwnerSnapshots := false
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		var release factory.Release
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&release, "id = ?", ctx.ReleaseId).Error; err != nil {
 			return err
 		}
-		if err := os.Remove(factory.OwnerCompositionStaticPath(ownerKey)); err != nil && !os.IsNotExist(err) {
+		if err := tx.Where("mint_record_id = ?", ctx.MintRecordId).Find(&mintedAssets).Error; err != nil {
 			return err
 		}
+		if err := clearReleaseAssetRelations(tx, mintedAssets); err != nil {
+			return err
+		}
+
+		collectionCounts := map[string]int64{}
+		for _, asset := range mintedAssets {
+			if err := tx.Model(&factory.NFTInventoryItem{}).
+				Where("asset_id = ?", asset.Id).
+				Updates(map[string]any{
+					"status":         factory.NFTInventoryItemStatusAvailable,
+					"asset_id":       nil,
+					"token_id":       "",
+					"mint_record_id": nil,
+					"owner_key":      "",
+					"minted_at":      nil,
+					"metadata_uri":   "",
+					"proof_uri":      "",
+				}).Error; err != nil {
+				return err
+			}
+			if asset.CollectionKey != "" {
+				collectionCounts[asset.CollectionKey] += 1
+			}
+		}
+		for collectionKey, count := range collectionCounts {
+			if err := tx.Model(&factory.NFTInventoryPool{}).
+				Where("release_id = ? AND collection_key = ?", ctx.ReleaseId, collectionKey).
+				UpdateColumn("minted_count", gorm.Expr("GREATEST(minted_count - ?, 0)", count)).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("mint_record_id = ?", ctx.MintRecordId).Delete(&factory.Asset{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&factory.MintRecord{}, "id = ?", ctx.MintRecordId).Error; err != nil {
+			return err
+		}
+
+		var remainingPluginAssets int64
+		if err := tx.Model(&factory.Asset{}).
+			Where("owner_key = ? AND plugin_id = ? AND status = ?", ctx.OwnerKey, ctx.PluginId, factory.AssetStatusActive).
+			Count(&remainingPluginAssets).Error; err != nil {
+			return err
+		}
+		if remainingPluginAssets == 0 {
+			if err := tx.Where("user_id = ? AND plugin_id = ?", ctx.UserId, ctx.PluginId).
+				Delete(&factory.UserOwnership{}).Error; err != nil {
+				return err
+			}
+		}
+
+		rolledBackCount := int64(len(mintedAssets))
+		if release.MintedCount >= rolledBackCount {
+			release.MintedCount -= rolledBackCount
+		} else {
+			release.MintedCount = 0
+		}
+		if release.Status == factory.ReleaseStatusSoldOut && release.MintedCount < release.TotalSupply {
+			release.Status = factory.ReleaseStatusPublished
+		}
+		if err := tx.Save(&release).Error; err != nil {
+			return err
+		}
+		var remainingOwnerAssets int64
+		if err := tx.Model(&factory.Asset{}).
+			Where("owner_key = ? AND status = ?", ctx.OwnerKey, factory.AssetStatusActive).
+			Count(&remainingOwnerAssets).Error; err != nil {
+			return err
+		}
+		var remainingOwnerRelations int64
+		if err := tx.Model(&factory.AssetRelation{}).
+			Where("owner_key = ? AND status = ?", ctx.OwnerKey, factory.AssetRelationStatusActive).
+			Count(&remainingOwnerRelations).Error; err != nil {
+			return err
+		}
+		removeOwnerSnapshots = remainingOwnerAssets == 0 && remainingOwnerRelations == 0
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := removeMintedStaticFiles(mintedAssets); err != nil {
+		return err
+	}
+	if removeOwnerSnapshots {
+		return removeOwnerFactorySnapshotArtifacts(ctx.OwnerKey)
+	}
+	if err := removeOwnerFactoryTransientArtifacts(ctx.OwnerKey); err != nil {
+		return err
+	}
+	return rebuildOwnerFactorySnapshots(ctx.OwnerKey)
+}
+
+func removeOwnerFactorySnapshotArtifacts(ownerKey string) error {
+	finalDir := filepath.Dir(factory.OwnerIndexStaticPath(ownerKey))
+	legacyStageDir := factory.OwnerIndexStaticPath(ownerKey) + ".staging"
+	if err := os.RemoveAll(finalDir); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(finalDir + ".staging"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(finalDir + ".previous"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(legacyStageDir); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func removeOwnerFactoryTransientArtifacts(ownerKey string) error {
+	finalDir := filepath.Dir(factory.OwnerIndexStaticPath(ownerKey))
+	legacyStageDir := factory.OwnerIndexStaticPath(ownerKey) + ".staging"
+	if err := os.RemoveAll(finalDir + ".staging"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(finalDir + ".previous"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(legacyStageDir); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }
@@ -2325,7 +2548,7 @@ func decodeRelationMetadata(raw string) any {
 func normalizePluginOptions(input map[string]any) (normalizedPluginOptions, error) {
 	if len(input) == 0 {
 		return normalizedPluginOptions{
-			Raw:  "",
+			Raw:  "{}",
 			Data: nil,
 		}, nil
 	}
@@ -2339,7 +2562,7 @@ func normalizePluginOptions(input map[string]any) (normalizedPluginOptions, erro
 	}
 	if len(normalized) == 0 {
 		return normalizedPluginOptions{
-			Raw:  "",
+			Raw:  "{}",
 			Data: nil,
 		}, nil
 	}

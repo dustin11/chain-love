@@ -69,7 +69,7 @@ func stageOwnerFactorySnapshots(
 	assets []factory.Asset,
 	relations []factory.AssetRelation,
 ) (string, error) {
-	stageDir := factory.OwnerIndexStaticPath(ownerKey) + ".staging"
+	stageDir := filepath.Dir(factory.OwnerIndexStaticPath(ownerKey)) + ".staging"
 	if err := os.RemoveAll(stageDir); err != nil {
 		return "", err
 	}

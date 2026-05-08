@@ -86,6 +86,7 @@ func Enqueue(req EnqueueRequest) (*task.AsyncTask, error) {
 				Priority:      normalized.Priority,
 				MaxRetry:      normalized.MaxRetry,
 				PayloadJson:   normalized.PayloadJson,
+				ResultJson:    "{}",
 				DedupeKey:     normalized.DedupeKey,
 				SourceVersion: normalized.SourceVersion,
 			}
@@ -222,6 +223,9 @@ func markTaskSuccess(id int64, result string) error {
 		return err
 	}
 	now := time.Now()
+	if strings.TrimSpace(result) == "" {
+		result = "{}"
+	}
 	return tx.Model(&task.AsyncTask{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
@@ -292,7 +296,7 @@ func normalizeEnqueueRequest(req EnqueueRequest) (normalizedEnqueueRequest, erro
 	if dedupeKey == "" {
 		dedupeKey = fmt.Sprintf("%s:%s", taskType, taskKey)
 	}
-	payloadJson := ""
+	payloadJson := "{}"
 	if req.Payload != nil {
 		data, err := json.Marshal(req.Payload)
 		if err != nil {
