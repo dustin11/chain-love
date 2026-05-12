@@ -156,6 +156,23 @@ func boolHeader(v bool) string {
 
 // 清除 Cookie
 func clearAuthCookies(c *gin.Context) {
-	c.SetCookie(consts.ACCESS_TOKEN, "", -1, "/", "", false, true)
-	c.SetCookie(consts.REFRESH_TOKEN, "", -1, "/api/v1/auth", "", false, true)
+	secure, sameSite := cookieSecurity(c)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     consts.ACCESS_TOKEN,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   -1,
+	})
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     consts.REFRESH_TOKEN,
+		Value:    "",
+		Path:     "/api/v1/auth",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   -1,
+	})
 }

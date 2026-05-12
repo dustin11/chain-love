@@ -3,6 +3,7 @@ package routers
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"senspace/asset"
 	"senspace/domain/factory"
 	"senspace/middleware"
@@ -41,12 +42,14 @@ func SetupRouter() *gin.Engine {
 	}
 
 	corsCfg := cors.Config{
-		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,           // 必须启用，浏览器才能发送/接收带凭证的跨域 Cookie
 		MaxAge:           12 * time.Hour, // 预检请求的缓存时间
+	}
+	corsCfg.AllowOriginWithContextFunc = func(c *gin.Context, origin string) bool {
+		return isAllowedOrigin(c, origin, allowedOrigins, setting.IsDevLikeEnv())
 	}
 
 	router.Use(middleware.Logger(), gin.Recovery(), middleware.ErrHandler(), cors.New(corsCfg)) //middleware.Cors()
@@ -96,4 +99,59 @@ func htmlAssets() {
 
 func helloGinAndMethod(ctx *gin.Context) {
 	ctx.String(http.StatusOK, "hello gin "+strings.ToLower(ctx.Request.Method)+" method")
+}
+
+// isAllowedOrigin 优先使用显式白名单；仅在开发态环境下，额外允许“请求 Host 与 Origin 完全一致”的局域网访问，
+// 方便通过 192.168.x.x 这类地址从其他设备调试。生产环境不走该兜底。
+func isAllowedOrigin(ctx *gin.Context, origin string, allowedOrigins []string, allowDevHostFallback bool) bool {
+	normalizedOrigin := strings.TrimSpace(strings.ToLower(origin))
+	if normalizedOrigin == "" {
+		return true
+	}
+
+	// 第一优先级：显式配置的 CORS 白名单。
+	for _, allowed := range allowedOrigins {
+		if normalizedOrigin == strings.TrimSpace(strings.ToLower(allowed)) {
+			return true
+		}
+	}
+
+	// 第二优先级：仅开发环境启用的同源兜底。
+	// 当页面就是从当前服务地址打开的，比如 http://192.168.1.107:8081，
+	// 即使没有手动写进 allowedCORSOrigins，也允许通过。
+	if !allowDevHostFallback {
+		return false
+	}
+
+	requestOrigin := requestOriginFromContext(ctx)
+	return requestOrigin != "" && normalizedOrigin == requestOrigin
+}
+
+// requestOriginFromContext 基于当前请求推导服务自身的 origin，用于开发环境下的同源兜底匹配。
+// 这里会结合 TLS / X-Forwarded-Proto 判断 http 或 https，避免代理场景下协议判断错误。
+func requestOriginFromContext(ctx *gin.Context) string {
+	if ctx == nil || ctx.Request == nil {
+		return ""
+	}
+
+	scheme := "http"
+	if ctx.Request.TLS != nil || strings.EqualFold(ctx.GetHeader("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+
+	// 优先使用代理透传的 X-Forwarded-Host，保留浏览器访问时的原始 host:port。
+	// 例如从另一台电脑访问 http://192.168.1.107:8081 时，需要保留 :8081，
+	// 否则会错误地还原成 http://192.168.1.107，和浏览器 Origin 不一致。
+	host := strings.TrimSpace(ctx.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(ctx.Request.Host)
+	}
+	if host == "" {
+		return ""
+	}
+
+	return strings.ToLower((&url.URL{
+		Scheme: scheme,
+		Host:   host,
+	}).String())
 }
