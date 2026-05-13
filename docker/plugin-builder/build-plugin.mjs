@@ -70,6 +70,12 @@ function normalizeFactory(entry) {
       lazyCreate(context, options) {
         return candidate.lazyCreate(context, options);
       },
+      getPluginOptionsDefinition() {
+        if (typeof candidate.getPluginOptionsDefinition !== 'function') {
+          return null;
+        }
+        return candidate.getPluginOptionsDefinition();
+      },
     };
   }
 
@@ -80,6 +86,12 @@ function normalizeFactory(entry) {
         lazyCreate(context, options) {
           return candidate.lazyCreate(context, options);
         },
+        getPluginOptionsDefinition() {
+          if (typeof candidate.getPluginOptionsDefinition !== 'function') {
+            return null;
+          }
+          return candidate.getPluginOptionsDefinition();
+        },
       };
     }
 
@@ -87,6 +99,12 @@ function normalizeFactory(entry) {
       pluginId: defaultPluginId,
       async lazyCreate(context, options) {
         return new candidate(context, options);
+      },
+      getPluginOptionsDefinition() {
+        if (typeof candidate.getPluginOptionsDefinition !== 'function') {
+          return null;
+        }
+        return candidate.getPluginOptionsDefinition();
       },
     };
   }
