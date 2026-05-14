@@ -466,6 +466,80 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 	require.EqualValues(t, 9, common["mintLimit"])
 }
 
+func TestClearReleaseRemovesPublishedArtifactDirectories(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	setting.Config.App.Env = "ldev"
+
+	now := time.Now()
+	release := factory.Release{
+		Id:             generateID(),
+		PluginId:       "ClearReleasePlugin",
+		AuthorId:       990000000000106,
+		Name:           "Clear Release Plugin",
+		Version:        "1.0.0",
+		Status:         factory.ReleaseStatusPublished,
+		CurrentRelease: false,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Clear Release Plugin",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       2,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+		PublishedAt:   &now,
+		BuiltAt:       &now,
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+	t.Cleanup(func() {
+		_ = env.db.Exec("DELETE FROM fact_release WHERE id = ?", release.Id).Error
+	})
+
+	sourceDir := getPluginSourceSnapshotRoot(release.PluginId, release.Id)
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "manifest.snapshot.json"), []byte(`{}`), 0o644))
+
+	runtimeDir := getPluginRuntimeReleaseRoot(release.PluginId, release.Version, release.Id)
+	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "runtime-manifest.json"), []byte(`{}`), 0o644))
+
+	releaseDir := factory.ReleaseStaticDir(release)
+	require.NoError(t, os.MkdirAll(releaseDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(releaseDir, "release.json"), []byte(`{}`), 0o644))
+
+	releaseStagingDir := factory.ReleaseStaticStagingDir(release)
+	require.NoError(t, os.MkdirAll(releaseStagingDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(releaseStagingDir, "release.json"), []byte(`{}`), 0o644))
+
+	releasePreviousDir := factory.ReleaseStaticDir(release) + ".previous"
+	require.NoError(t, os.MkdirAll(releasePreviousDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(releasePreviousDir, "release.json"), []byte(`{}`), 0o644))
+
+	_, err := ClearRelease(security.JwtUser{Id: release.AuthorId}, strconv.FormatInt(release.Id, 10))
+	require.NoError(t, err)
+
+	var remaining factory.Release
+	require.ErrorIs(t, env.db.First(&remaining, "id = ?", release.Id).Error, gorm.ErrRecordNotFound)
+
+	require.NoDirExists(t, sourceDir)
+	require.NoDirExists(t, runtimeDir)
+	require.NoDirExists(t, releaseDir)
+	require.NoDirExists(t, releaseStagingDir)
+	require.NoDirExists(t, releasePreviousDir)
+
+	require.NoDirExists(t, filepath.Dir(sourceDir))
+	require.NoDirExists(t, filepath.Dir(runtimeDir))
+	require.NoDirExists(t, filepath.Dir(releaseDir))
+	require.NoDirExists(t, filepath.Dir(releaseStagingDir))
+}
+
 type mintAssetServiceTestEnv struct {
 	db *gorm.DB
 }
@@ -589,7 +663,7 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 	if release.Id != 0 {
 		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
 		require.NoError(t, os.RemoveAll(factory.ReleaseStaticStagingDir(release)))
-		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release) + ".previous"))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)+".previous"))
 	}
 }
 

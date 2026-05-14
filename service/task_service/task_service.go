@@ -32,6 +32,8 @@ type EnqueueRequest struct {
 	BizType string
 	// 业务主键。
 	BizId int64
+	// 业务名称。
+	BizName string
 	// 去重键。
 	DedupeKey string
 	// 任务依据版本。
@@ -47,7 +49,15 @@ type EnqueueRequest struct {
 // Handler 任务执行函数。
 type Handler func(*task.AsyncTask) error
 
+// DeleteHandler 任务删除时的清理函数。
+type DeleteHandler func(*task.AsyncTask) error
+
+// AccessChecker 校验当前用户是否可操作任务。
+type AccessChecker func(*task.AsyncTask, uint64) error
+
 var handlers = map[task.Type]Handler{}
+var deleteHandlers = map[task.Type]DeleteHandler{}
+var accessCheckers = map[task.Type]AccessChecker{}
 
 // RegisterHandler 注册任务执行器。
 func RegisterHandler(taskType task.Type, handler Handler) {
@@ -55,6 +65,22 @@ func RegisterHandler(taskType task.Type, handler Handler) {
 		return
 	}
 	handlers[taskType] = handler
+}
+
+// RegisterDeleteHandler 注册任务删除清理器。
+func RegisterDeleteHandler(taskType task.Type, handler DeleteHandler) {
+	if handler == nil {
+		return
+	}
+	deleteHandlers[taskType] = handler
+}
+
+// RegisterAccessChecker 注册任务访问校验器。
+func RegisterAccessChecker(taskType task.Type, checker AccessChecker) {
+	if checker == nil {
+		return
+	}
+	accessCheckers[taskType] = checker
 }
 
 // Enqueue 幂等入队。
@@ -82,6 +108,7 @@ func Enqueue(req EnqueueRequest) (*task.AsyncTask, error) {
 				TaskKey:       normalized.TaskKey,
 				BizType:       normalized.BizType,
 				BizId:         normalized.BizId,
+				BizName:       normalized.BizName,
 				Status:        task.StatusPending,
 				Priority:      normalized.Priority,
 				MaxRetry:      normalized.MaxRetry,
@@ -98,6 +125,7 @@ func Enqueue(req EnqueueRequest) (*task.AsyncTask, error) {
 			"task_key":         normalized.TaskKey,
 			"biz_type":         normalized.BizType,
 			"biz_id":           normalized.BizId,
+			"biz_name":         normalized.BizName,
 			"payload_json":     normalized.PayloadJson,
 			"priority":         normalized.Priority,
 			"max_retry":        normalized.MaxRetry,
@@ -116,6 +144,7 @@ func Enqueue(req EnqueueRequest) (*task.AsyncTask, error) {
 		current.TaskKey = normalized.TaskKey
 		current.BizType = normalized.BizType
 		current.BizId = normalized.BizId
+		current.BizName = normalized.BizName
 		current.PayloadJson = normalized.PayloadJson
 		current.Priority = normalized.Priority
 		current.MaxRetry = normalized.MaxRetry
@@ -261,13 +290,13 @@ func markTaskFailed(id int64, message string, allowRetry bool) error {
 	return tx.Model(&task.AsyncTask{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
-			"status":            nextStatus,
-			"retry_count":       retryCount,
-			"last_error":        truncateError(message),
-			"lease_owner":       "",
-			"lease_expires_at":  nil,
-			"finished_at":       now,
-			"next_retry_at":     nextRetryAt,
+			"status":           nextStatus,
+			"retry_count":      retryCount,
+			"last_error":       truncateError(message),
+			"lease_owner":      "",
+			"lease_expires_at": nil,
+			"finished_at":      now,
+			"next_retry_at":    nextRetryAt,
 		}).Error
 }
 
@@ -276,6 +305,7 @@ type normalizedEnqueueRequest struct {
 	TaskKey       string
 	BizType       string
 	BizId         int64
+	BizName       string
 	DedupeKey     string
 	SourceVersion string
 	PayloadJson   string
@@ -317,6 +347,7 @@ func normalizeEnqueueRequest(req EnqueueRequest) (normalizedEnqueueRequest, erro
 		TaskKey:       taskKey,
 		BizType:       strings.TrimSpace(req.BizType),
 		BizId:         req.BizId,
+		BizName:       strings.TrimSpace(req.BizName),
 		DedupeKey:     dedupeKey,
 		SourceVersion: strings.TrimSpace(req.SourceVersion),
 		PayloadJson:   payloadJson,

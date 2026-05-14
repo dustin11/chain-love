@@ -56,6 +56,10 @@ func rebuildOwnerFactorySnapshotsNow(ownerKey string) error {
 		Find(&relations).Error; err != nil {
 		return err
 	}
+	// owner 已无有效资产与关系时，直接清理空快照目录。
+	if len(assets) == 0 && len(relations) == 0 {
+		return removeOwnerFactorySnapshotArtifacts(ownerKey)
+	}
 
 	stageDir, err := stageOwnerFactorySnapshots(ownerKey, assets, relations)
 	if err != nil {

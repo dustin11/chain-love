@@ -100,6 +100,18 @@ type ClearFreezeReleaseAssetsResponse struct {
 	RemovedItems int64 `json:"removedItems"`
 }
 
+// 发布清除结果。
+type ClearReleaseResponse struct {
+	// 发布记录 ID。
+	ReleaseId string `json:"releaseId"`
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 发布版本号。
+	Version string `json:"version"`
+	// 清除结果文案。
+	Message string `json:"message"`
+}
+
 // 单个库存池冻结摘要。
 type FreezeReleaseInventoryPool struct {
 	// 集合业务键。

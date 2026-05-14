@@ -8,7 +8,7 @@ type Query struct {
 	TaskType string
 	// 任务状态。
 	Status string
-	// 关键字，匹配 taskKey / bizType / lastError。
+	// 关键字，匹配 taskKey / bizType / bizName / lastError。
 	Keyword string
 	// 页码，从 1 开始。
 	Page int
@@ -24,23 +24,24 @@ type RetryRequest struct {
 
 // TaskView 前端展示视图。
 type TaskView struct {
-	Id             string      `json:"id"`
-	TaskType       task.Type   `json:"taskType"`
-	TaskKey        string      `json:"taskKey"`
-	BizType        string      `json:"bizType,omitempty"`
-	BizId          string      `json:"bizId,omitempty"`
-	Status         task.Status `json:"status"`
-	Priority       int         `json:"priority"`
-	RetryCount     int         `json:"retryCount"`
-	MaxRetry       int         `json:"maxRetry"`
-	LastError      string      `json:"lastError,omitempty"`
-	SourceVersion  string      `json:"sourceVersion,omitempty"`
-	LeaseOwner     string      `json:"leaseOwner,omitempty"`
-	StartedAt      string      `json:"startedAt,omitempty"`
-	FinishedAt     string      `json:"finishedAt,omitempty"`
-	NextRetryAt    string      `json:"nextRetryAt,omitempty"`
-	CreatedAt      string      `json:"createdAt,omitempty"`
-	UpdatedAt      string      `json:"updatedAt,omitempty"`
+	Id            string      `json:"id"`
+	TaskType      task.Type   `json:"taskType"`
+	TaskKey       string      `json:"taskKey"`
+	BizType       string      `json:"bizType,omitempty"`
+	BizId         string      `json:"bizId,omitempty"`
+	BizName       string      `json:"bizName,omitempty"`
+	Status        task.Status `json:"status"`
+	Priority      int         `json:"priority"`
+	RetryCount    int         `json:"retryCount"`
+	MaxRetry      int         `json:"maxRetry"`
+	LastError     string      `json:"lastError,omitempty"`
+	SourceVersion string      `json:"sourceVersion,omitempty"`
+	LeaseOwner    string      `json:"leaseOwner,omitempty"`
+	StartedAt     string      `json:"startedAt,omitempty"`
+	FinishedAt    string      `json:"finishedAt,omitempty"`
+	NextRetryAt   string      `json:"nextRetryAt,omitempty"`
+	CreatedAt     string      `json:"createdAt,omitempty"`
+	UpdatedAt     string      `json:"updatedAt,omitempty"`
 }
 
 // TaskListResult 任务分页结果。

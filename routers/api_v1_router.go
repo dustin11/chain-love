@@ -6,8 +6,8 @@ import (
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
-	"senspace/api/api_v1/task_api"
 	"senspace/api/api_v1/sys_api"
+	"senspace/api/api_v1/task_api"
 	"senspace/middleware"
 	context "senspace/pkg/app/contextx"
 
@@ -125,6 +125,7 @@ func SetupApiV1Router(router *gin.Engine) {
 		factoryRouter.GET("/releases/my", context.WithAppContext(factory_api.GetMyReleases))
 		factoryRouter.GET("/releases/:id", context.WithAppContext(factory_api.GetReleaseDetail))
 		factoryRouter.POST("/releases/:id/mint", context.WithAppContext(factory_api.MintReleaseAsset))
+		factoryRouter.POST("/releases/:id/clear", context.WithAppContext(factory_api.ClearRelease))
 		factoryRouter.PATCH("/releases/:id", context.WithAppContext(factory_api.UpdateRelease))
 		factoryRouter.PATCH("/releases/:id/price", context.WithAppContext(factory_api.UpdateReleasePrice))
 		factoryRouter.PATCH("/releases/:id/status", context.WithAppContext(factory_api.UpdateReleaseStatus))
@@ -134,7 +135,9 @@ func SetupApiV1Router(router *gin.Engine) {
 	taskRouter := apiRouter.Group("/task")
 	{
 		taskRouter.GET("/list", context.WithAppContext(task_api.ListTasks))
+		taskRouter.POST("/purge-all", context.WithAppContext(task_api.PurgeAllTasks))
 		taskRouter.POST("/:id/retry", context.WithAppContext(task_api.RetryTask))
+		taskRouter.DELETE("/:id", context.WithAppContext(task_api.DeleteTask))
 	}
 
 }

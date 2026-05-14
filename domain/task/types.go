@@ -20,8 +20,8 @@ const (
 type Type string
 
 const (
-	// 工厂发布静态快照。
-	TypeFactoryReleaseSnapshot Type = "factory_release_static_snapshot"
-	// 工厂持有人资产快照。
-	TypeFactoryOwnerAssetsSnapshot Type = "factory_owner_assets_snapshot"
+	// 发布任务。
+	TypePublish Type = "publish"
+	// 铸造任务。
+	TypeMint Type = "mint"
 )

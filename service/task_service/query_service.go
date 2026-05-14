@@ -1,11 +1,15 @@
 package task_service
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"senspace/domain/task"
+	"senspace/pkg/setting"
+
+	"gorm.io/gorm"
 )
 
 // ListTasks 查询任务列表。
@@ -36,7 +40,8 @@ func ListTasks(query Query) (*TaskListResult, error) {
 	if keyword := strings.TrimSpace(query.Keyword); keyword != "" {
 		like := "%" + keyword + "%"
 		dbq = dbq.Where(
-			"task_key LIKE ? OR biz_type LIKE ? OR last_error LIKE ?",
+			"task_key LIKE ? OR biz_type LIKE ? OR biz_name LIKE ? OR last_error LIKE ?",
+			like,
 			like,
 			like,
 			like,
@@ -70,10 +75,10 @@ func ListTasks(query Query) (*TaskListResult, error) {
 }
 
 // RetryTaskNow 手动重试任务。
-func RetryTaskNow(idRaw string) (*TaskView, error) {
+func RetryTaskNow(idRaw string, userId uint64) (*TaskView, error) {
 	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
 	if err != nil || id <= 0 {
-		return nil, err
+		return nil, errors.New("任务ID无效")
 	}
 	tx, err := db()
 	if err != nil {
@@ -81,6 +86,12 @@ func RetryTaskNow(idRaw string) (*TaskView, error) {
 	}
 	var item task.AsyncTask
 	if err := tx.First(&item, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在")
+		}
+		return nil, err
+	}
+	if err := ensureTaskAccess(&item, userId); err != nil {
 		return nil, err
 	}
 	if err := tx.Model(&task.AsyncTask{}).
@@ -104,6 +115,71 @@ func RetryTaskNow(idRaw string) (*TaskView, error) {
 	return toTaskViewPtr(item), nil
 }
 
+// DeleteTask 删除任务及其关联清理数据。
+func DeleteTask(idRaw string, userId uint64) error {
+	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
+	if err != nil || id <= 0 {
+		return errors.New("任务ID无效")
+	}
+	tx, err := db()
+	if err != nil {
+		return err
+	}
+
+	var item task.AsyncTask
+	if err := tx.First(&item, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("任务不存在")
+		}
+		return err
+	}
+	if err := ensureTaskAccess(&item, userId); err != nil {
+		if !isIgnorableDeleteDependencyError(err) {
+			return err
+		}
+	}
+	if !setting.IsDevLikeEnv() {
+		if item.Status == task.StatusBuilding {
+			return errors.New("执行中的任务不能删除")
+		}
+		if item.Status != task.StatusFailed && item.Status != task.StatusDead {
+			return errors.New("仅支持删除失败任务")
+		}
+	}
+
+	if handler := deleteHandlers[item.TaskType]; handler != nil {
+		if err := handler(&item); err != nil {
+			if !isIgnorableDeleteDependencyError(err) {
+				return err
+			}
+		}
+	}
+	return tx.Delete(&task.AsyncTask{}, "id = ?", id).Error
+}
+
+func ensureTaskAccess(item *task.AsyncTask, userId uint64) error {
+	if item == nil {
+		return errors.New("任务不存在")
+	}
+	if userId == 0 {
+		return errors.New("无权操作该任务")
+	}
+	if checker := accessCheckers[item.TaskType]; checker != nil {
+		return checker(item, userId)
+	}
+	return nil
+}
+
+func isIgnorableDeleteDependencyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true
+	}
+	return strings.Contains(err.Error(), "关联发布记录不存在")
+}
+
 func mapTaskView(item task.AsyncTask) TaskView {
 	return TaskView{
 		Id:            strconv.FormatInt(item.Id, 10),
@@ -111,6 +187,7 @@ func mapTaskView(item task.AsyncTask) TaskView {
 		TaskKey:       item.TaskKey,
 		BizType:       item.BizType,
 		BizId:         formatTaskBizId(item.BizId),
+		BizName:       strings.TrimSpace(item.BizName),
 		Status:        item.Status,
 		Priority:      item.Priority,
 		RetryCount:    item.RetryCount,
