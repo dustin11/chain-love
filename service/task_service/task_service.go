@@ -16,7 +16,9 @@ import (
 
 const (
 	// 默认最大重试次数。
-	defaultMaxRetry = 2
+	defaultMaxRetry = 3
+	// 自动重试最多连续失败次数。
+	defaultAutoRetryLimit = 3
 	// 默认优先级。
 	defaultPriority = 100
 	// 默认租约时长。
@@ -285,10 +287,10 @@ func markTaskFailed(id int64, message string, allowRetry bool) error {
 	nextStatus := task.StatusDead
 	nextRetryAt := any(nil)
 	retryCount := item.RetryCount
-	if allowRetry && retryCount < item.MaxRetry {
+	if allowRetry && retryCount < defaultAutoRetryLimit {
 		retryCount += 1
 		nextStatus = task.StatusFailed
-		delay := time.Duration(retryCount*retryCount) * time.Second
+		delay := time.Duration(retryCount*retryCount*retryCount) * time.Second
 		nextRetryAt = time.Now().Add(delay)
 	}
 	now := time.Now()

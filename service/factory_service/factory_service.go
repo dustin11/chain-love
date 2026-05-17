@@ -55,14 +55,18 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 	var created factory.Release
 	err = tx.Transaction(func(tx *gorm.DB) error {
 		// 事务内再次校验版本唯一性，避免并发创建重复记录。
-		var duplicate int64
-		if err := tx.Model(&factory.Release{}).
-			Where("plugin_id = ? AND version = ?", req.PluginId, req.Manifest.Version).
-			Count(&duplicate).Error; err != nil {
-			return err
-		}
-		if duplicate > 0 {
+		var duplicate factory.Release
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&duplicate, "plugin_id = ? AND version = ?", req.PluginId, req.Manifest.Version).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		} else if duplicate.Status == factory.ReleaseStatusPublished && defaultBuildStatus(duplicate.BuildStatus) == factory.BuildStatusReady {
 			return newConflictError("此版本已发布！")
+		} else {
+			if err := tx.Delete(&factory.Release{}, "id = ?", duplicate.Id).Error; err != nil {
+				return err
+			}
 		}
 
 		created = factory.Release{
@@ -94,6 +98,14 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 		return tx.Create(&created).Error
 	})
 	if err != nil {
+		cleanupErr := removeReleaseBuildArtifactFiles(factory.Release{
+			Id:       releaseID,
+			PluginId: req.PluginId,
+			Version:  req.Manifest.Version,
+		})
+		if cleanupErr != nil {
+			return nil, cleanupErr
+		}
 		return nil, err
 	}
 
@@ -557,96 +569,6 @@ func ListMyOwnerships(userId uint64) ([]UserPluginOwnershipView, error) {
 		result = append(result, view)
 	}
 	return result, nil
-}
-
-// 升级资产。
-func UpgradeOwnership(userId uint64, req UpgradeOwnershipRequest) (*UpgradeRecord, error) {
-	ownershipId, err := parseID(req.Id, "资产记录ID")
-	if err != nil {
-		return nil, err
-	}
-	targetReleaseId, err := parseID(req.ToReleaseId, "目标发布记录ID")
-	if err != nil {
-		return nil, err
-	}
-
-	tx, err := db()
-	if err != nil {
-		return nil, err
-	}
-
-	var upgraded factory.UpgradeRecord
-	err = tx.Transaction(func(tx *gorm.DB) error {
-		// 锁定资产记录，避免并发升级覆盖 effectiveReleaseId。
-		var ownership factory.UserOwnership
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&ownership, "id = ?", ownershipId).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return newNotFoundError("资产记录不存在")
-			}
-			return err
-		}
-		if ownership.UserId != userId {
-			return newForbiddenError("无权升级该资产")
-		}
-
-		var currentRelease factory.Release
-		if err := tx.First(&currentRelease, "id = ?", ownership.EffectiveReleaseId).Error; err != nil {
-			return err
-		}
-		var targetRelease factory.Release
-		if err := tx.First(&targetRelease, "id = ?", targetReleaseId).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return newNotFoundError("目标发布记录不存在")
-			}
-			return err
-		}
-		if targetRelease.PluginId != ownership.PluginId {
-			return newConflictError("目标发布记录与资产插件不匹配")
-		}
-		if compareVersions(targetRelease.Version, currentRelease.Version) <= 0 {
-			return newConflictError("只能升级到更高版本")
-		}
-		switch targetRelease.Status {
-		case factory.ReleaseStatusPublished, factory.ReleaseStatusPaused, factory.ReleaseStatusSoldOut:
-		default:
-			return newConflictError("目标发布记录当前不可升级")
-		}
-		if defaultBuildStatus(targetRelease.BuildStatus) != factory.BuildStatusReady {
-			return newConflictError("目标发布记录构建未完成")
-		}
-
-		upgradeType, paidAmount, allowed := releaseAllowsUpgrade(currentRelease.Version, targetRelease)
-		if !allowed {
-			return newConflictError("当前版本不允许升级到该目标版本")
-		}
-
-		now := time.Now()
-		// 升级后只更新 effectiveReleaseId，保留 mintedReleaseId 作为原始铸造事实。
-		ownership.EffectiveReleaseId = targetRelease.Id
-		ownership.UpgradedAt = nowPtr(now)
-		if err := tx.Save(&ownership).Error; err != nil {
-			return err
-		}
-
-		upgraded = factory.UpgradeRecord{
-			Id:            generateID(),
-			OwnershipId:   ownership.Id,
-			UserId:        ownership.UserId,
-			PluginId:      ownership.PluginId,
-			FromReleaseId: currentRelease.Id,
-			ToReleaseId:   targetRelease.Id,
-			UpgradeType:   upgradeType,
-			PaidAmount:    paidAmount,
-			UpgradedAt:    now,
-		}
-		return tx.Create(&upgraded).Error
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	record := mapUpgradeRecord(upgraded)
-	return &record, nil
 }
 
 // 组装资产视图。

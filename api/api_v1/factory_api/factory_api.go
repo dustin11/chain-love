@@ -208,27 +208,6 @@ func GetMyOwnerships(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(records))
 }
 
-// @Summary 升级已持有插件资产
-// @Tags 数字工厂
-// @Param id path string true "资产记录ID"
-// @Param data body factory_service.UpgradeOwnershipRequest true "升级请求"
-// @Success 200 {object} e.Error
-// @Router /api/v1/factory/ownership/{id}/upgrade [post]
-func UpgradeOwnership(ctx *contextx.AppContext) {
-	var req struct {
-		ToReleaseId string `json:"toReleaseId"`
-	}
-	err := ctx.Gin.ShouldBindJSON(&req)
-	e.PanicParameterError(err)
-
-	record, err := factory_service.UpgradeOwnership(ctx.User.Id, factory_service.UpgradeOwnershipRequest{
-		Id:          ctx.Gin.Param("id"),
-		ToReleaseId: req.ToReleaseId,
-	})
-	panicIfFactoryError(err)
-	app.Response(ctx.Gin, e.SuccessData(record))
-}
-
 // 转换服务层错误。
 func panicIfFactoryError(err error) {
 	if err == nil {

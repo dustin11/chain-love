@@ -647,10 +647,6 @@ func ClearRelease(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResp
 				return err
 			}
 		}
-		if err := tx.Where("from_release_id = ? OR to_release_id = ?", release.Id, release.Id).
-			Delete(&factory.UpgradeRecord{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("release_id = ?", release.Id).Delete(&factory.ReleaseStatusHistory{}).Error; err != nil {
 			return err
 		}
@@ -755,6 +751,9 @@ func purgeReleaseGeneratedArtifactsByID(releaseId int64) error {
 		if err := removeReleaseFreezeStaticFiles(release); err != nil {
 			return err
 		}
+		if err := removeReleaseBuildArtifactFiles(release); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -845,6 +844,7 @@ func clearReleaseAssetRelations(tx *gorm.DB, assets []factory.Asset) error {
 }
 
 func removeMintedStaticFiles(assets []factory.Asset) error {
+	pluginIDs := map[string]struct{}{}
 	for _, asset := range assets {
 		if err := os.Remove(factory.AssetStaticPath(asset.PluginId, asset.Id)); err != nil && !os.IsNotExist(err) {
 			return err
@@ -857,6 +857,22 @@ func removeMintedStaticFiles(assets []factory.Asset) error {
 			if err := os.Remove(factory.ProofStaticPath(asset.PluginId, tokenId)); err != nil && !os.IsNotExist(err) {
 				return err
 			}
+		}
+		pluginID := strings.TrimSpace(asset.PluginId)
+		if pluginID != "" {
+			pluginIDs[pluginID] = struct{}{}
+		}
+	}
+
+	for pluginID := range pluginIDs {
+		if err := os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "assets", pluginID)); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "metadata", pluginID)); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "proofs", pluginID)); err != nil {
+			return err
 		}
 	}
 	return nil

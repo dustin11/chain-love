@@ -500,6 +500,13 @@ func TestClearReleaseRemovesPublishedArtifactDirectories(t *testing.T) {
 	require.NoError(t, env.db.Create(&release).Error)
 	t.Cleanup(func() {
 		_ = env.db.Exec("DELETE FROM fact_release WHERE id = ?", release.Id).Error
+		_ = os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "assets", release.PluginId))
+		_ = os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "metadata", release.PluginId))
+		_ = os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "proofs", release.PluginId))
+		_ = os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "owners"))
+		_ = os.RemoveAll(factory.ReleaseStaticDir(release))
+		_ = os.RemoveAll(factory.ReleaseStaticStagingDir(release))
+		_ = os.RemoveAll(factory.ReleaseStaticDir(release) + ".previous")
 	})
 
 	sourceDir := getPluginSourceSnapshotRoot(release.PluginId, release.Id)
@@ -561,7 +568,7 @@ func setupMintAssetServiceTest(t *testing.T) mintAssetServiceTestEnv {
 		User:     envOrDefault("SENSPACE_TEST_DB_USER", "root"),
 		Password: envOrDefault("SENSPACE_TEST_DB_PASSWORD", "smart@vserp"),
 		Host:     envOrDefault("SENSPACE_TEST_DB_HOST", "127.0.0.1:3307"),
-		Name:     envOrDefault("SENSPACE_TEST_DB_NAME", "senspace"),
+		Name:     envOrDefault("SENSPACE_TEST_DB_NAME", "senspace_factory_test"),
 	}
 	setting.Config.App.FilePath.Factory = filepath.Join(t.TempDir(), "factory")
 	setting.Config.App.RuntimeRootPath = filepath.Join(t.TempDir(), "runtime")
@@ -629,6 +636,7 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 
 	var release factory.Release
 	_ = db.First(&release, "id = ?", releaseId).Error
+	pluginId := release.PluginId
 
 	var assets []factory.Asset
 	require.NoError(t, db.Where("release_id = ?", releaseId).Find(&assets).Error)
@@ -637,8 +645,9 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_item WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_pool WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
-	require.NoError(t, db.Exec("DELETE FROM fact_user_ownership WHERE user_id = ? AND plugin_id = ?", userId, "FishTank").Error)
+	require.NoError(t, db.Exec("DELETE FROM fact_user_ownership WHERE user_id = ? AND plugin_id = ?", userId, pluginId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_mint_record WHERE release_id = ?", releaseId).Error)
+	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND biz_id = ?", staticTaskBizTypeFactoryOwner, releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND task_key = ?", staticTaskBizTypeFactoryOwner, "owner:"+ownerKey).Error)
 	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND biz_id = ?", staticTaskBizTypeFactoryRelease, releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
@@ -665,12 +674,20 @@ func cleanupMintTestData(t *testing.T, db *gorm.DB, releaseId int64, userId uint
 		require.NoError(t, os.RemoveAll(factory.ReleaseStaticStagingDir(release)))
 		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)+".previous"))
 	}
+	if pluginId != "" {
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "assets", pluginId)))
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "metadata", pluginId)))
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "proofs", pluginId)))
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "owners", ownerKey)))
+	}
 }
 
 // 清理发布冻结测试数据。
 func cleanupFreezeReleaseTestData(t *testing.T, db *gorm.DB, releaseId int64) {
 	t.Helper()
 
+	var release factory.Release
+	_ = db.First(&release, "id = ?", releaseId).Error
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_item WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_nft_inventory_pool WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_asset WHERE release_id = ?", releaseId).Error)
@@ -679,6 +696,14 @@ func cleanupFreezeReleaseTestData(t *testing.T, db *gorm.DB, releaseId int64) {
 	require.NoError(t, db.Exec("DELETE FROM fact_release_price_history WHERE release_id = ?", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM sys_async_task WHERE biz_type = ? AND biz_id = ?", "factory_release", releaseId).Error)
 	require.NoError(t, db.Exec("DELETE FROM fact_release WHERE id = ?", releaseId).Error)
+	if release.PluginId != "" {
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "assets", release.PluginId)))
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "metadata", release.PluginId)))
+		require.NoError(t, os.RemoveAll(filepath.Join(factory.FactoryStaticRoot(), "proofs", release.PluginId)))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticStagingDir(release)))
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)+".previous"))
+	}
 }
 
 // 统计指定集合资产数量。

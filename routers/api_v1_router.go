@@ -131,7 +131,6 @@ func SetupApiV1Router(router *gin.Engine) {
 		factoryRouter.PATCH("/releases/:id/price", context.WithAppContext(factory_api.UpdateReleasePrice))
 		factoryRouter.PATCH("/releases/:id/status", context.WithAppContext(factory_api.UpdateReleaseStatus))
 		factoryRouter.GET("/ownership/my", context.WithAppContext(factory_api.GetMyOwnerships))
-		factoryRouter.POST("/ownership/:id/upgrade", context.WithAppContext(factory_api.UpgradeOwnership))
 	}
 	taskRouter := apiRouter.Group("/task")
 	{

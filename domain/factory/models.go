@@ -12,6 +12,5 @@ func Tables() []interface{} {
 		&NFTInventoryPool{},
 		&NFTInventoryItem{},
 		&UserOwnership{},
-		&UpgradeRecord{},
 	}
 }

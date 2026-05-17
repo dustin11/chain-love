@@ -600,20 +600,6 @@ func mapOwnership(
 }
 
 // 映射升级记录。
-func mapUpgradeRecord(record factory.UpgradeRecord) UpgradeRecord {
-	return UpgradeRecord{
-		Id:            strconv.FormatInt(record.Id, 10),
-		OwnershipId:   strconv.FormatInt(record.OwnershipId, 10),
-		UserId:        strconv.FormatUint(record.UserId, 10),
-		PluginId:      record.PluginId,
-		FromReleaseId: strconv.FormatInt(record.FromReleaseId, 10),
-		ToReleaseId:   strconv.FormatInt(record.ToReleaseId, 10),
-		UpgradeType:   record.UpgradeType,
-		PaidAmount:    trimDecimal(record.PaidAmount),
-		UpgradedAt:    record.UpgradedAt.Format(time.RFC3339Nano),
-	}
-}
-
 // 格式化时间。
 func formatTime(value *time.Time) string {
 	if value == nil || value.IsZero() {

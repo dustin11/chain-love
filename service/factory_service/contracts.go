@@ -218,14 +218,6 @@ type UpdateReleaseStatusRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// 资产升级请求。
-type UpgradeOwnershipRequest struct {
-	// 用户持有记录 ID。
-	Id string `json:"id"`
-	// 目标发布记录 ID。
-	ToReleaseId string `json:"toReleaseId"`
-}
-
 // 铸造记录请求。
 type RecordMintRequest struct {
 	// 发布记录 ID。
@@ -404,25 +396,3 @@ type PublishDetail struct {
 
 // 用户插件资产视图。
 type UserPluginOwnershipView = factoryvo.UserPluginOwnershipView
-
-// 升级记录视图。
-type UpgradeRecord struct {
-	// 升级记录 ID。
-	Id string `json:"id"`
-	// 持有关系 ID。
-	OwnershipId string `json:"ownershipId"`
-	// 用户 ID。
-	UserId string `json:"userId"`
-	// 插件业务 ID。
-	PluginId string `json:"pluginId"`
-	// 来源发布记录 ID。
-	FromReleaseId string `json:"fromReleaseId"`
-	// 目标发布记录 ID。
-	ToReleaseId string `json:"toReleaseId"`
-	// 升级方式。
-	UpgradeType factory.UpgradeType `json:"upgradeType"`
-	// 支付金额。
-	PaidAmount string `json:"paidAmount,omitempty"`
-	// 升级时间。
-	UpgradedAt string `json:"upgradedAt"`
-}
