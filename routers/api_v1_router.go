@@ -101,6 +101,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	pluginRouter := apiRouter.Group("/plugin")
 	{
 		pluginRouter.GET("/list", dev_api.GetPluginList)
+		pluginRouter.GET("/versions/:pluginId", dev_api.GetPluginVersions)
 		pluginRouter.GET("/tree/:pluginId", dev_api.GetPluginTree)
 		pluginRouter.POST("/file/upload", dev_api.UploadFile)
 		pluginRouter.POST("/folder/add", dev_api.AddFolder)

@@ -139,6 +139,9 @@ func runFactoryReleaseSnapshotTask(item *task.AsyncTask) error {
 	}
 	var release factory.Release
 	if err := tx.First(&release, "id = ?", releaseId).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: 发布记录不存在", task_service.ErrPermanentFailure)
+		}
 		return err
 	}
 	return rebuildReleaseStaticSnapshotNow(release)

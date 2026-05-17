@@ -1,6 +1,7 @@
 package task_service
 
 import (
+	"errors"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 const (
 	// 默认最大重试次数。
-	defaultMaxRetry = 6
+	defaultMaxRetry = 2
 	// 默认优先级。
 	defaultPriority = 100
 	// 默认租约时长。
@@ -197,7 +198,11 @@ func runTask(item *task.AsyncTask) {
 		return
 	}
 	if err := handler(item); err != nil {
-		_ = markTaskFailed(item.Id, err.Error(), true)
+		allowRetry := true
+		if errors.Is(err, ErrPermanentFailure) {
+			allowRetry = false
+		}
+		_ = markTaskFailed(item.Id, err.Error(), allowRetry)
 		return
 	}
 	_ = markTaskSuccess(item.Id, "")
@@ -370,6 +375,9 @@ func db() (*gorm.DB, error) {
 	}
 	return domain.Db, nil
 }
+
+// ErrPermanentFailure 表示无需自动重试的永久性失败。
+var ErrPermanentFailure = errors.New("task permanent failure")
 
 func generateTaskID() int64 {
 	return time.Now().UnixNano()

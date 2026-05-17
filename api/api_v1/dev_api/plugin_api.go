@@ -25,9 +25,17 @@ func GetPluginList(c *gin.Context) {
 	app.Response(c, e.SuccessData(list))
 }
 
+func GetPluginVersions(c *gin.Context) {
+	pluginId := c.Param("pluginId")
+	versions, err := dev_service.ListPluginVersions(pluginId)
+	e.PanicServerErr(err)
+	app.Response(c, e.SuccessData(versions))
+}
+
 func GetPluginTree(c *gin.Context) {
 	pluginId := c.Param("pluginId")
-	tree, err := dev_service.GetPluginTree(pluginId)
+	version := c.Query("version")
+	tree, err := dev_service.GetPluginTree(pluginId, version)
 	e.PanicServerErr(err)
 	app.Response(c, e.SuccessData(tree))
 }

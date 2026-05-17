@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -37,28 +38,46 @@ func compareVersions(v1, v2 string) int {
 }
 
 func GetLatestVersion(pluginId string) string {
+	versions, err := ListPluginVersions(pluginId)
+	if err != nil || len(versions) == 0 {
+		return "1.0.0"
+	}
+	return versions[0]
+}
+
+func ListPluginVersions(pluginId string) ([]string, error) {
 	rootPath := getPluginRoot(pluginId)
 	entries, err := os.ReadDir(rootPath)
 	if err != nil {
-		return "1.0.0"
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
 	}
-	var maxVer string
+
+	versions := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
-			v := entry.Name()
-			if maxVer == "" || compareVersions(v, maxVer) > 0 {
-				maxVer = v
-			}
+			versions = append(versions, entry.Name())
 		}
 	}
-	if maxVer == "" {
-		return "1.0.0"
-	}
-	return maxVer
+
+	sort.Slice(versions, func(i, j int) bool {
+		return compareVersions(versions[i], versions[j]) > 0
+	})
+	return versions, nil
 }
 
 func getLatestPluginRoot(pluginId string) string {
 	return filepath.Join(getPluginRoot(pluginId), GetLatestVersion(pluginId))
+}
+
+func getPluginVersionRoot(pluginId, version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return getLatestPluginRoot(pluginId)
+	}
+	return filepath.Join(getPluginRoot(pluginId), version)
 }
 
 func checkFileExt(filename string) error {
@@ -93,8 +112,8 @@ func cleanAndCheckPath(baseDir, userInputPath string) (string, error) {
 	return fullPath, nil
 }
 
-func GetPluginTree(pluginId string) (*vo.PluginFileNode, error) {
-	rootPath := getLatestPluginRoot(pluginId)
+func GetPluginTree(pluginId string, version string) (*vo.PluginFileNode, error) {
+	rootPath := getPluginVersionRoot(pluginId, version)
 
 	var pluginName string
 	if id, err := strconv.ParseInt(pluginId, 10, 64); err == nil {

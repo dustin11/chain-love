@@ -2,6 +2,7 @@ package factory_service
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,12 +30,12 @@ func PublishPlugin(author security.JwtUser, req PublishRequest) (*PublishRecord,
 		return nil, err
 	}
 
-	repoVersion, versionRoot, err := resolveLatestPluginVersionRoot(req.PluginId)
+	_, versionRoot, err := resolvePluginVersionRoot(
+		req.PluginId,
+		req.Manifest.Version,
+	)
 	if err != nil {
 		return nil, err
-	}
-	if repoVersion != req.Manifest.Version {
-		return nil, newConflictError("请求版本不是当前插件仓库的最新版本")
 	}
 
 	repoManifest, err := loadManifestFromDir(versionRoot)
@@ -120,7 +121,9 @@ func ListMyReleases(authorId uint64, query ReleaseQuery) ([]PublishRecord, error
 		dbq = dbq.Where("status = ?", strings.TrimSpace(query.Status))
 	}
 	if query.CurrentOnly != nil {
-		dbq = dbq.Where("current_release = ?", *query.CurrentOnly)
+		if *query.CurrentOnly {
+			dbq = dbq.Where("current_release = ?", true)
+		}
 	}
 
 	var releases []factory.Release
@@ -136,7 +139,7 @@ func ListMyReleases(authorId uint64, query ReleaseQuery) ([]PublishRecord, error
 }
 
 // 查询市场发布。
-func ListMarketReleases(query MarketQuery) ([]PublishRecord, error) {
+func ListMarketReleases(query MarketQuery) ([]MarketPluginCard, error) {
 	tx, err := db()
 	if err != nil {
 		return nil, err
@@ -174,13 +177,48 @@ func ListMarketReleases(query MarketQuery) ([]PublishRecord, error) {
 	}
 
 	filterTags := normalizeTags(query.Tags)
-	result := make([]PublishRecord, 0, len(releases))
+	grouped := make(map[string][]PublishRecord)
 	for _, item := range releases {
 		if len(filterTags) > 0 && !containsAllTags([]string(item.Tags), filterTags) {
 			continue
 		}
-		result = append(result, mapRelease(item))
+		record := mapRelease(item)
+		grouped[record.PluginId] = append(grouped[record.PluginId], record)
 	}
+
+	result := make([]MarketPluginCard, 0, len(grouped))
+	for pluginId, items := range grouped {
+		sort.Slice(items, func(i, j int) bool {
+			return compareVersions(items[i].Version, items[j].Version) > 0
+		})
+		versions := make([]MarketReleaseVersion, 0, len(items))
+		for _, item := range items {
+			versions = append(versions, MarketReleaseVersion{PublishRecord: item})
+		}
+		result = append(result, MarketPluginCard{
+			PluginId:       pluginId,
+			CurrentVersion: items[0].Version,
+			Versions:       versions,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		left := result[i]
+		right := result[j]
+		leftTime := ""
+		rightTime := ""
+		if len(left.Versions) > 0 {
+			leftTime = left.Versions[0].PublishedAt
+		}
+		if len(right.Versions) > 0 {
+			rightTime = right.Versions[0].PublishedAt
+		}
+		if leftTime == rightTime {
+			return left.PluginId < right.PluginId
+		}
+		return leftTime > rightTime
+	})
+
 	return result, nil
 }
 

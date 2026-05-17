@@ -378,6 +378,21 @@ type PublishRecord struct {
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
+// 聚合后的版本候选。
+type MarketReleaseVersion struct {
+	PublishRecord
+}
+
+// 市场聚合卡片。
+type MarketPluginCard struct {
+	// 插件业务 ID。
+	PluginId string `json:"pluginId"`
+	// 当前默认展示版本。
+	CurrentVersion string `json:"currentVersion"`
+	// 可切换的版本列表，按版本号从大到小排序。
+	Versions []MarketReleaseVersion `json:"versions"`
+}
+
 // 发布详情视图。
 type PublishDetail struct {
 	PublishRecord

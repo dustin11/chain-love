@@ -7,12 +7,14 @@ const externalDependencies = [
   'three',
   '@senspace/plugin-core',
   '@senspace/plugin-framework',
+  '@senspace/plugin-workbench',
 ];
 
 const externalModuleMap = {
   three: '/plugin-host/three.module.js',
   '@senspace/plugin-core': '/plugin-host/plugin-core.js',
   '@senspace/plugin-framework': '/plugin-host/plugin-framework.js',
+  '@senspace/plugin-workbench': '/plugin-host/plugin-workbench.js',
 };
 
 const sandboxEntry = 'runtime/sandbox-entry.js';
@@ -178,6 +180,29 @@ function createDirectRuntimeExternalPlugin() {
   };
 }
 
+function createSandboxRuntimeAliasPlugin() {
+  return {
+    name: 'senspace-plugin-sandbox-alias',
+    setup(pluginBuild) {
+      for (const [dependencyName, externalPath] of Object.entries(
+        externalModuleMap
+      )) {
+        pluginBuild.onResolve(
+          {
+            filter: new RegExp(
+              `^${dependencyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`
+            ),
+          },
+          () => ({
+            path: externalPath,
+            external: true,
+          })
+        );
+      }
+    },
+  };
+}
+
 // 创建沙箱产物的 external 映射，让 Worker 内的受控 require 接管平台模块。
 function createSandboxRuntimeExternalPlugin() {
   return {
@@ -295,7 +320,8 @@ async function main() {
   });
 
   const sandboxBuildResult = await build({
-    plugins: [createSandboxRuntimeExternalPlugin()],
+    external: externalDependencies,
+    plugins: [createSandboxRuntimeAliasPlugin(), createSandboxRuntimeExternalPlugin()],
     stdin: {
       contents: createFactoryWrapper({
         entryImportPath,

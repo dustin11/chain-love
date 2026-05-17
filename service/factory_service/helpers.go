@@ -253,6 +253,28 @@ func resolveLatestPluginVersionRoot(pluginId string) (string, string, error) {
 	return latestVersion, filepath.Join(root, latestVersion), nil
 }
 
+// 指定版本目录。
+func resolvePluginVersionRoot(pluginId string, version string) (string, string, error) {
+	root := getPluginRoot(pluginId)
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return resolveLatestPluginVersionRoot(pluginId)
+	}
+
+	versionRoot := filepath.Join(root, version)
+	info, err := os.Stat(versionRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", newNotFoundError("指定插件源码版本不存在")
+		}
+		return "", "", err
+	}
+	if !info.IsDir() {
+		return "", "", newNotFoundError("指定插件源码版本不存在")
+	}
+	return version, versionRoot, nil
+}
+
 // 读取 manifest。
 func loadManifestFromDir(versionRoot string) (PluginManifest, error) {
 	manifestPath := filepath.Join(versionRoot, "manifest.json")
