@@ -596,7 +596,7 @@ func ClearCurrentPluginReleaseAssetsFreeze(user security.JwtUser, pluginIdRaw st
 }
 
 // 清除单个发布记录及其生成产物；仅开发环境允许。
-func ClearRelease(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResponse, error) {
+func ClearReleaseDev(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResponse, error) {
 	if !isDevFactoryEnvironment() {
 		return nil, newForbiddenError("仅开发环境允许清除发布")
 	}
@@ -623,6 +623,85 @@ func ClearRelease(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResp
 		}
 		if release.AuthorId != 0 && release.AuthorId != user.Id {
 			return newForbiddenError("无权清除该发布记录")
+		}
+
+		response = &ClearReleaseResponse{
+			ReleaseId: strconv.FormatInt(release.Id, 10),
+			PluginId:  release.PluginId,
+			Version:   release.Version,
+			Message:   "发布已清除",
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := purgeReleaseGeneratedArtifactsByID(releaseId); err != nil {
+		return nil, err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if release.CurrentRelease {
+			if err := promoteFallbackCurrentRelease(tx, release.PluginId, release.Id); err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("release_id = ?", release.Id).Delete(&factory.ReleaseStatusHistory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("release_id = ?", release.Id).Delete(&factory.ReleasePriceHistory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("biz_type = ? AND biz_id = ?", staticTaskBizTypeFactoryRelease, release.Id).
+			Delete(&task.AsyncTask{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&factory.Release{}, "id = ?", release.Id).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := removeReleaseBuildArtifactFiles(release); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func ClearRelease(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResponse, error) {
+	releaseId, err := parseID(releaseIdRaw, "发布记录ID")
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := db()
+	if err != nil {
+		return nil, err
+	}
+
+	var release factory.Release
+	var response *ClearReleaseResponse
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&release, "id = ?", releaseId).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return newNotFoundError("发布记录不存在")
+			}
+			return err
+		}
+		if release.AuthorId != 0 && release.AuthorId != user.Id {
+			return newForbiddenError("无权清除该发布记录")
+		}
+		hasMinted, err := releaseHasMintedRecords(tx, release, nil)
+		if err != nil {
+			return err
+		}
+		if hasMinted || release.MintedCount > 0 {
+			return newConflictError("已有铸造记录，不能清除该发布")
 		}
 
 		response = &ClearReleaseResponse{
@@ -1119,7 +1198,7 @@ func rollbackFreezeStaticSnapshot(release factory.Release, stagingDir string, ba
 		_ = factory.RollbackActivatedReleaseStaticSnapshot(release, backupDir)
 	}
 	if stagingDir != "" {
-		_ = os.RemoveAll(stagingDir)
+		_ = factory.CleanupReleaseStaticStagingDir(stagingDir)
 	}
 }
 
@@ -1181,7 +1260,7 @@ func freezeReleaseAssets(tx *gorm.DB, release factory.Release) (*FreezeReleaseAs
 			return nil, stagingDir, err
 		}
 		if hasMinted {
-			_ = os.RemoveAll(stagingDir)
+			_ = factory.CleanupReleaseStaticStagingDir(stagingDir)
 			pools, err := collectReleaseInventoryPools(tx, release)
 			if err != nil {
 				return nil, "", err

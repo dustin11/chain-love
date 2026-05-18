@@ -20,7 +20,7 @@ func rebuildReleaseStaticSnapshotNow(release factory.Release) error {
 
 	backupDir, err := factory.ActivateReleaseStaticSnapshot(release, stageDir)
 	if err != nil {
-		_ = os.RemoveAll(stageDir)
+		_ = factory.CleanupReleaseStaticStagingDir(stageDir)
 		return err
 	}
 

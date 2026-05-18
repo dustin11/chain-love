@@ -50,6 +50,30 @@ func TestActivateReleaseStaticSnapshotCanRollbackAndCommit(t *testing.T) {
 	require.NoError(t, CommitActivatedReleaseStaticSnapshot(backupDir))
 	require.FileExists(t, filepath.Join(finalDir, "new.json"))
 	require.NoDirExists(t, backupDir)
+	require.NoDirExists(t, filepath.Dir(stagingDir))
+}
+
+func TestCleanupReleaseStaticStagingDirPrunesEmptyPluginDir(t *testing.T) {
+	oldFactoryRoot := setting.Config.App.FilePath.Factory
+	oldRuntimeRoot := setting.Config.App.RuntimeRootPath
+	setting.Config.App.FilePath.Factory = t.TempDir()
+	setting.Config.App.RuntimeRootPath = ""
+	t.Cleanup(func() {
+		setting.Config.App.FilePath.Factory = oldFactoryRoot
+		setting.Config.App.RuntimeRootPath = oldRuntimeRoot
+	})
+
+	release := Release{
+		Id:       123,
+		PluginId: "TestPlugin",
+		Version:  "1.0.0",
+	}
+	stagingDir := ReleaseStaticStagingDir(release)
+	stagingPluginDir := filepath.Dir(stagingDir)
+	require.NoError(t, os.MkdirAll(stagingPluginDir, 0755))
+
+	require.NoError(t, CleanupReleaseStaticStagingDir(stagingDir))
+	require.NoDirExists(t, stagingPluginDir)
 }
 
 func TestEnsureFishTankReleaseStaticSnapshotCopiesRootTemplateFiles(t *testing.T) {

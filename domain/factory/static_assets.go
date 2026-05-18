@@ -18,15 +18,15 @@ const factoryOwnerHashSalt = "senspace-owner-v1:"
 
 // 发布快照入口清单。
 type ReleaseStaticManifest struct {
-	Schema        string             `json:"schema"`
-	ReleaseId     string             `json:"releaseId"`
-	PluginId      string             `json:"pluginId"`
-	Version       string             `json:"version"`
-	RuntimeKind   ReleaseRuntimeKind `json:"runtimeKind"`
+	Schema      string             `json:"schema"`
+	ReleaseId   string             `json:"releaseId"`
+	PluginId    string             `json:"pluginId"`
+	Version     string             `json:"version"`
+	RuntimeKind ReleaseRuntimeKind `json:"runtimeKind"`
 	// 发布时的铸造基准价格，来源于 `Release.MintPrice`，用于简单铸造和价格摘要回填。
-	BasePrice     string             `json:"basePrice"`
-	AssetMetaUrl  string             `json:"assetMetaUrl,omitempty"`
-	TemplateFiles map[string]string  `json:"templateFiles,omitempty"`
+	BasePrice     string            `json:"basePrice"`
+	AssetMetaUrl  string            `json:"assetMetaUrl,omitempty"`
+	TemplateFiles map[string]string `json:"templateFiles,omitempty"`
 }
 
 // 静态快照根目录。
@@ -147,11 +147,11 @@ func EnsureReleaseStaticSnapshot(release Release) error {
 // 在 staging 目录中构建发布快照；调用方确认成功后再激活为正式快照。
 func StageReleaseStaticSnapshot(release Release) (string, error) {
 	dir := ReleaseStaticStagingDir(release)
-	if err := os.RemoveAll(dir); err != nil {
+	if err := CleanupReleaseStaticStagingDir(dir); err != nil {
 		return "", err
 	}
 	if err := buildReleaseStaticSnapshot(release, dir); err != nil {
-		_ = os.RemoveAll(dir)
+		_ = CleanupReleaseStaticStagingDir(dir)
 		return "", err
 	}
 	return dir, nil
@@ -161,6 +161,8 @@ func StageReleaseStaticSnapshot(release Release) (string, error) {
 func ActivateReleaseStaticSnapshot(release Release, stagingDir string) (string, error) {
 	finalDir := ReleaseStaticDir(release)
 	backupDir := finalDir + ".previous"
+	stagingParentDir := filepath.Dir(stagingDir)
+	stagingRootDir := filepath.Join(FactoryStaticRoot(), "releases", ".staging")
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0755); err != nil {
 		return "", err
 	}
@@ -186,6 +188,9 @@ func ActivateReleaseStaticSnapshot(release Release, stagingDir string) (string, 
 	}
 	if !hasFinal {
 		backupDir = ""
+	}
+	if err := pruneEmptyDirs(stagingParentDir, stagingRootDir); err != nil {
+		return "", err
 	}
 	return backupDir, nil
 }
@@ -216,6 +221,20 @@ func RollbackActivatedReleaseStaticSnapshot(release Release, backupDir string) e
 	return os.Rename(backupDir, finalDir)
 }
 
+// 清理发布 staging 目录，并在目录清空后继续修剪空的插件级 staging 目录。
+func CleanupReleaseStaticStagingDir(stagingDir string) error {
+	if strings.TrimSpace(stagingDir) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(stagingDir); err != nil {
+		return err
+	}
+	return pruneEmptyDirs(
+		filepath.Dir(stagingDir),
+		filepath.Join(FactoryStaticRoot(), "releases", ".staging"),
+	)
+}
+
 func buildReleaseStaticSnapshot(release Release, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -243,6 +262,36 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 		manifest.AssetMetaUrl = url
 	}
 	return writeJSONAtomic(filepath.Join(dir, "release.json"), manifest)
+}
+
+func pruneEmptyDirs(startDir string, stopDir string) error {
+	current := filepath.Clean(startDir)
+	stop := filepath.Clean(stopDir)
+
+	for current != stop {
+		entries, err := os.ReadDir(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if len(entries) > 0 {
+			return nil
+		}
+		if err := os.Remove(current); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return nil
+		}
+		current = parent
+	}
+	return nil
 }
 
 func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[string]string) error {

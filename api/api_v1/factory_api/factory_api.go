@@ -50,6 +50,17 @@ func ClearCurrentPluginReleaseAssetsFreeze(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(record))
 }
 
+// @Summary 清除单个发布记录（dev）
+// @Tags 数字工厂
+// @Param id path string true "发布记录ID"
+// @Success 200 {object} e.Error
+// @Router /api/v1/factory/releases/{id}/clear [post]
+func ClearReleaseDev(ctx *contextx.AppContext) {
+	record, err := factory_service.ClearReleaseDev(*ctx.User, ctx.Gin.Param("id"))
+	panicIfFactoryError(err)
+	app.Response(ctx.Gin, e.SuccessData(record))
+}
+
 // @Summary 清除单个发布记录
 // @Tags 数字工厂
 // @Param id path string true "发布记录ID"

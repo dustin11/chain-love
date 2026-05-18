@@ -466,7 +466,7 @@ func TestFreezeReleaseAssetsSkipsInventoryRebuildForPriceOnlyTemplateChange(t *t
 	require.EqualValues(t, 9, common["mintLimit"])
 }
 
-func TestClearReleaseRemovesPublishedArtifactDirectories(t *testing.T) {
+func TestClearReleaseDevRemovesPublishedArtifactDirectories(t *testing.T) {
 	env := setupMintAssetServiceTest(t)
 	setting.Config.App.Env = "ldev"
 
@@ -529,7 +529,7 @@ func TestClearReleaseRemovesPublishedArtifactDirectories(t *testing.T) {
 	require.NoError(t, os.MkdirAll(releasePreviousDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(releasePreviousDir, "release.json"), []byte(`{}`), 0o644))
 
-	_, err := ClearRelease(security.JwtUser{Id: release.AuthorId}, strconv.FormatInt(release.Id, 10))
+	_, err := ClearReleaseDev(security.JwtUser{Id: release.AuthorId}, strconv.FormatInt(release.Id, 10))
 	require.NoError(t, err)
 
 	var remaining factory.Release
@@ -545,6 +545,45 @@ func TestClearReleaseRemovesPublishedArtifactDirectories(t *testing.T) {
 	require.NoDirExists(t, filepath.Dir(runtimeDir))
 	require.NoDirExists(t, filepath.Dir(releaseDir))
 	require.NoDirExists(t, filepath.Dir(releaseStagingDir))
+}
+
+func TestClearReleaseRejectsMintedRelease(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	setting.Config.App.Env = "ldev"
+
+	release := factory.Release{
+		Id:             generateID(),
+		PluginId:       "ClearReleaseLockedPlugin",
+		AuthorId:       990000000000107,
+		Name:           "Clear Release Locked Plugin",
+		Version:        "1.0.0",
+		Status:         factory.ReleaseStatusPublished,
+		CurrentRelease: false,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Clear Release Locked Plugin",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       2,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+		MintedCount:   1,
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+	t.Cleanup(func() {
+		_ = env.db.Exec("DELETE FROM fact_release WHERE id = ?", release.Id).Error
+	})
+
+	_, err := ClearRelease(security.JwtUser{Id: release.AuthorId}, strconv.FormatInt(release.Id, 10))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "已有铸造记录")
 }
 
 type mintAssetServiceTestEnv struct {
