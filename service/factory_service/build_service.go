@@ -273,13 +273,28 @@ func hasFactoryAssetTemplateInDir(dir string) bool {
 	}
 	assetMetaPath := filepath.Join(dir, "asset.meta.json")
 	info, err := os.Stat(assetMetaPath)
-	return err == nil && !info.IsDir()
+	if err != nil || info.IsDir() {
+		return false
+	}
+	hasCollections, err := factory.AssetMetaHasCollections(assetMetaPath)
+	if err != nil {
+		// 模板存在但内容异常时，仍按“存在模板”处理，让后续冻结阶段报出真实错误。
+		return true
+	}
+	return hasCollections
 }
 
 func hasFactoryAssetTemplate(pluginId string) bool {
 	assetMetaPath := filepath.Join("asset", "factory-templates", pluginId, "asset.meta.json")
 	info, err := os.Stat(assetMetaPath)
-	return err == nil && !info.IsDir()
+	if err != nil || info.IsDir() {
+		return false
+	}
+	hasCollections, err := factory.AssetMetaHasCollections(assetMetaPath)
+	if err != nil {
+		return true
+	}
+	return hasCollections
 }
 
 func (dockerPluginBuildExecutor) Build(ctx context.Context, req PluginBuildRequest) (*PluginBuildResult, error) {

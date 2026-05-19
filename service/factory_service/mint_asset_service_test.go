@@ -211,8 +211,72 @@ func TestMintReleaseAssetCreatesSimplePluginNFTWithoutAssetMeta(t *testing.T) {
 
 	var manifest map[string]any
 	readJSONFileForTest(t, filepath.Join(factory.ReleaseStaticDir(release), "release.json"), &manifest)
+	require.Equal(t, "0", manifest["mintPrice"])
+	require.EqualValues(t, 10, manifest["totalSupply"])
+	require.EqualValues(t, 3, manifest["mintPer"])
 	require.Equal(t, "0", manifest["basePrice"])
 	require.NotContains(t, manifest, "assetMetaUrl")
+}
+
+func TestMintReleaseAssetTreatsEmptyAssetMetaAsSimpleMode(t *testing.T) {
+	env := setupMintAssetServiceTest(t)
+	release := factory.Release{
+		Id:             generateID(),
+		PluginId:       "SimpleCubePlugin",
+		AuthorId:       990000000000204,
+		Name:           "Simple Cube",
+		Version:        "1.0.0-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+		Status:         factory.ReleaseStatusPublished,
+		CurrentRelease: true,
+		ManifestSnapshot: factory.PluginManifestSnapshot{
+			Name:        "Simple Cube",
+			Version:     "1.0.0",
+			Entry:       "src/index.ts",
+			Description: "test",
+		},
+		Summary:       "test",
+		Category:      "test",
+		TotalSupply:   10,
+		MintPer:       2,
+		MintPrice:     "0",
+		BuildStatus:   factory.BuildStatusReady,
+		RuntimeKind:   factory.ReleaseRuntimeKindArtifact,
+		UpgradePolicy: factory.ReleaseUpgradePolicyNone,
+		UpgradePrice:  "0",
+	}
+	require.NoError(t, env.db.Create(&release).Error)
+	require.NoError(t, factory.EnsureReleaseStaticSnapshot(release))
+	require.NoError(t, os.WriteFile(filepath.Join(factory.ReleaseStaticDir(release), "asset.meta.json"), []byte("{\n  \"collections\": [],\n  \"pluginId\": \"SimpleCubePlugin\",\n  \"schema\": \"senspace.asset-meta.v1\"\n}\n"), 0644))
+
+	user := security.JwtUser{
+		Id:   990000000000205,
+		Addr: fmt.Sprintf("0x%040x", release.Id+1),
+	}
+	ownerKey := factory.OwnerIndexKey(user.Addr)
+	t.Cleanup(func() {
+		cleanupMintTestData(t, env.db, release.Id, user.Id, ownerKey)
+		require.NoError(t, os.RemoveAll(factory.ReleaseStaticDir(release)))
+	})
+
+	response, err := MintReleaseAsset(user, strconv.FormatInt(release.Id, 10), MintAssetRequest{
+		Inputs: map[string]map[string]int64{
+			"default": {
+				"default": 2,
+			},
+		},
+		TotalPaid: "0",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "0", response.TotalPaid)
+	require.Len(t, response.Assets, 2)
+
+	var assets []factory.Asset
+	require.NoError(t, env.db.Where("release_id = ?", release.Id).Find(&assets).Error)
+	require.Len(t, assets, 2)
+	for _, asset := range assets {
+		require.Equal(t, factory.AssetKindWhole, asset.AssetKind)
+		require.Equal(t, "release.json", asset.TemplateRef)
+	}
 }
 
 func TestCollectionHashesChanged(t *testing.T) {

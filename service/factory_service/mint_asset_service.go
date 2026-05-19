@@ -1669,6 +1669,9 @@ func loadReleaseMintTemplateIfExists(release factory.Release) (assetValueTemplat
 		}
 		return valueTemplate, false, err
 	}
+	if len(valueTemplate.Collections) == 0 {
+		return valueTemplate, false, nil
+	}
 	return valueTemplate, true, nil
 }
 

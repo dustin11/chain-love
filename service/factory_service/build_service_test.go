@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"senspace/domain"
-	"senspace/domain/dev"
 	"senspace/domain/d_util"
+	"senspace/domain/dev"
 	"senspace/domain/factory"
 	"senspace/pkg/app/security"
 	"senspace/pkg/setting"
@@ -187,6 +187,9 @@ func TestExecuteReleaseBuildWritesReleaseSnapshotForArtifactPlugin(t *testing.T)
 	readJSONFileForTest(t, releaseManifestPath, &manifest)
 	require.Equal(t, builtRelease.PluginId, manifest.PluginId)
 	require.Equal(t, builtRelease.Version, manifest.Version)
+	require.EqualValues(t, builtRelease.TotalSupply, manifest.TotalSupply)
+	require.EqualValues(t, builtRelease.MintPer, manifest.MintPer)
+	require.Equal(t, builtRelease.MintPrice, manifest.MintPrice)
 	require.Equal(t, "0.000000000000000000", manifest.BasePrice)
 }
 

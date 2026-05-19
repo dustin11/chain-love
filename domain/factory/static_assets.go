@@ -23,10 +23,20 @@ type ReleaseStaticManifest struct {
 	PluginId    string             `json:"pluginId"`
 	Version     string             `json:"version"`
 	RuntimeKind ReleaseRuntimeKind `json:"runtimeKind"`
-	// 发布时的铸造基准价格，来源于 `Release.MintPrice`，用于简单铸造和价格摘要回填。
+	// 发布时的铸造价格，来源于发布弹窗表单。
+	MintPrice string `json:"mintPrice"`
+	// 发布时的总发行量，来源于发布弹窗表单。
+	TotalSupply int64 `json:"totalSupply"`
+	// 发布时的单次最大铸造量，来源于发布弹窗表单。
+	MintPer int64 `json:"mintPer"`
+	// 兼容旧前端的简单铸造价格别名，值与 MintPrice 保持一致。
 	BasePrice     string            `json:"basePrice"`
 	AssetMetaUrl  string            `json:"assetMetaUrl,omitempty"`
 	TemplateFiles map[string]string `json:"templateFiles,omitempty"`
+}
+
+type assetMetaTemplateProbe struct {
+	Collections []json.RawMessage `json:"collections"`
 }
 
 // 静态快照根目录。
@@ -255,6 +265,9 @@ func buildReleaseStaticSnapshot(release Release, dir string) error {
 		PluginId:      release.PluginId,
 		Version:       release.Version,
 		RuntimeKind:   release.RuntimeKind,
+		MintPrice:     basePrice,
+		TotalSupply:   release.TotalSupply,
+		MintPer:       release.MintPer,
 		BasePrice:     basePrice,
 		TemplateFiles: templateFiles,
 	}
@@ -299,7 +312,13 @@ func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[
 	if releaseSourceRoot != "" {
 		assetMetaPath := filepath.Join(releaseSourceRoot, "asset.meta.json")
 		if _, err := os.Stat(assetMetaPath); err == nil {
-			return copyPluginSourceReleaseSnapshot(releaseSourceRoot, dir, release, templateFiles)
+			hasCollections, err := AssetMetaHasCollections(assetMetaPath)
+			if err != nil {
+				return err
+			}
+			if hasCollections {
+				return copyPluginSourceReleaseSnapshot(releaseSourceRoot, dir, release, templateFiles)
+			}
 		} else if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -307,7 +326,13 @@ func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[
 
 	templateDir := filepath.Join("asset", "factory-templates", release.PluginId)
 	if info, err := os.Stat(templateDir); err == nil && info.IsDir() {
-		return copyJSONTree(templateDir, dir, "", release, templateFiles)
+		hasCollections, err := AssetMetaHasCollections(filepath.Join(templateDir, "asset.meta.json"))
+		if err != nil {
+			return err
+		}
+		if hasCollections {
+			return copyJSONTree(templateDir, dir, "", release, templateFiles)
+		}
 	} else if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -323,7 +348,14 @@ func copyReleaseTemplateSnapshot(dir string, release Release, templateFiles map[
 		}
 		return err
 	}
-	return copyPluginSourceReleaseSnapshot(srcRoot, dir, release, templateFiles)
+	hasCollections, err := AssetMetaHasCollections(assetMetaPath)
+	if err != nil {
+		return err
+	}
+	if hasCollections {
+		return copyPluginSourceReleaseSnapshot(srcRoot, dir, release, templateFiles)
+	}
+	return nil
 }
 
 // 递归复制 JSON 模板文件，并写入发布 manifest 的模板文件索引。
@@ -465,6 +497,19 @@ func copyPluginSourceJSONFile(srcRoot string, dstRoot string, rel string, releas
 		key,
 	)
 	return nil
+}
+
+// AssetMetaHasCollections 返回 asset.meta.json 是否声明了至少一个 collection。
+func AssetMetaHasCollections(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	var probe assetMetaTemplateProbe
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false, err
+	}
+	return len(probe.Collections) > 0, nil
 }
 
 // 返回插件模板文件的候选路径。

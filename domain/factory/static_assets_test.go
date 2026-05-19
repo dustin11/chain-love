@@ -95,6 +95,8 @@ func TestEnsureFishTankReleaseStaticSnapshotCopiesRootTemplateFiles(t *testing.T
 		PluginId:    "FishTank",
 		Version:     "1.0.0",
 		RuntimeKind: ReleaseRuntimeKindBuiltin,
+		TotalSupply: 10000,
+		MintPer:     1,
 		MintPrice:   "0",
 	}
 	require.NoError(t, EnsureReleaseStaticSnapshot(release))
@@ -108,8 +110,52 @@ func TestEnsureFishTankReleaseStaticSnapshotCopiesRootTemplateFiles(t *testing.T
 	require.NoError(t, err)
 	var manifest ReleaseStaticManifest
 	require.NoError(t, json.Unmarshal(data, &manifest))
+	require.Equal(t, "0", manifest.MintPrice)
+	require.EqualValues(t, 10000, manifest.TotalSupply)
+	require.EqualValues(t, 1, manifest.MintPer)
 	require.Contains(t, manifest.TemplateFiles, "defaultWaterMeta.json")
 	require.NotEmpty(t, manifest.TemplateFiles["defaultWaterMeta.json"])
+}
+
+func TestEnsureReleaseStaticSnapshotSkipsEmptyAssetMetaTemplate(t *testing.T) {
+	oldFactoryRoot := setting.Config.App.FilePath.Factory
+	oldRuntimeRoot := setting.Config.App.RuntimeRootPath
+	oldPluginSourceRoot := setting.Config.App.PluginSourceRoot
+	setting.Config.App.FilePath.Factory = t.TempDir()
+	setting.Config.App.RuntimeRootPath = ""
+	setting.Config.App.PluginSourceRoot = filepath.Join(t.TempDir(), "plugin-source")
+	t.Cleanup(func() {
+		setting.Config.App.FilePath.Factory = oldFactoryRoot
+		setting.Config.App.RuntimeRootPath = oldRuntimeRoot
+		setting.Config.App.PluginSourceRoot = oldPluginSourceRoot
+	})
+
+	release := Release{
+		Id:          62756290892320,
+		PluginId:    "62711292247584",
+		Version:     "1.0.0",
+		RuntimeKind: ReleaseRuntimeKindArtifact,
+		TotalSupply: 1000,
+		MintPer:     2,
+		MintPrice:   "0",
+	}
+	sourceDir := filepath.Join(setting.Config.App.PluginSourceRoot, release.PluginId, "62756290892320")
+	require.NoError(t, os.MkdirAll(sourceDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "asset.meta.json"), []byte("{\n  \"collections\": [],\n  \"pluginId\": \"62711292247584\",\n  \"schema\": \"senspace.asset-meta.v1\"\n}\n"), 0644))
+
+	require.NoError(t, EnsureReleaseStaticSnapshot(release))
+
+	finalDir := ReleaseStaticDir(release)
+	require.NoFileExists(t, filepath.Join(finalDir, "asset.meta.json"))
+
+	data, err := os.ReadFile(filepath.Join(finalDir, "release.json"))
+	require.NoError(t, err)
+	var manifest ReleaseStaticManifest
+	require.NoError(t, json.Unmarshal(data, &manifest))
+	require.Empty(t, manifest.AssetMetaUrl)
+	require.NotContains(t, manifest.TemplateFiles, "asset.meta.json")
+	require.EqualValues(t, 1000, manifest.TotalSupply)
+	require.EqualValues(t, 2, manifest.MintPer)
 }
 
 func findRepoRootWithWeb(t *testing.T) string {
