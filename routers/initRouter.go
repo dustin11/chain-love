@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"senspace/asset"
+	"senspace/domain/ds"
 	"senspace/domain/factory"
 	"senspace/middleware"
 	"senspace/pkg/e"
@@ -74,6 +75,8 @@ func SetupRouter() *gin.Engine {
 	router.StaticFS("/avatar", http.Dir(util.RootPath()+"avatar/"))
 	// 将磁盘目录挂到 /static/images 下（请求示例 /static/images/1001/xxx.jpg）
 	router.StaticFS("/static/images", gin.Dir(setting.Config.App.FilePath.Image, false))
+	// 用户插件实例资源：上传文件、实例状态与运行快照。
+	router.StaticFS("/static/plugin-assets", gin.Dir(ds.PluginAssetsRoot(), false))
 	// 数字工厂静态资产：发布模板、铸造 NFT 元数据、owner hash 索引。
 	router.StaticFS("/static/factory", gin.Dir(factory.FactoryStaticRoot(), false))
 	//swagger

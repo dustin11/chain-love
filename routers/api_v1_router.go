@@ -85,6 +85,14 @@ func SetupApiV1Router(router *gin.Engine) {
 		imageRouter.POST("/save", context.WithAppContext(ds_api.ImageSave))
 		imageRouter.DELETE("/del/:id", context.WithAppContext(ds_api.ImageDel))
 	}
+	// 插件实例资源
+	pluginAssetRouter := apiRouter.Group("/plugin-assets")
+	{
+		pluginAssetRouter.POST("/:factAssetId/upload", context.WithAppContext(ds_api.PluginAssetUpload))
+		pluginAssetRouter.PUT("/:factAssetId/state", context.WithAppContext(ds_api.PluginAssetSaveState))
+		pluginAssetRouter.DELETE("/:factAssetId/assets/:assetId", context.WithAppContext(ds_api.PluginAssetDelete))
+		pluginAssetRouter.POST("/:factAssetId/snapshot/rebuild", context.WithAppContext(ds_api.PluginAssetRebuildSnapshot))
+	}
 	// 互动-需鉴权
 	activeRouter := apiRouter.Group("/active")
 	{

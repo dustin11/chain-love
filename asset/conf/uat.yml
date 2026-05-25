@@ -29,6 +29,7 @@ app:
     image: /usr/local/app/senspace/runtime/image
     plugin: /usr/local/app/senspace/runtime/plugin
     factory: /usr/local/app/senspace/runtime/factory
+    pluginAssets: /usr/local/app/senspace/runtime/plugin-assets
 server:
   runmode: debug
   port: 9010

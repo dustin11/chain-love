@@ -26,6 +26,7 @@ app:
     image: ../runtime/ldev/image
     plugin: ../runtime/ldev/plugin
     factory: ../runtime/ldev/factory
+    pluginAssets: ../runtime/ldev/plugin-assets
 server:
   runmode: debug
   port: 9010

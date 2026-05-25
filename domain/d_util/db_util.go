@@ -9,8 +9,8 @@ import (
 	"senspace/domain/dev"
 	"senspace/domain/ds"
 	"senspace/domain/factory"
-	"senspace/domain/task"
 	"senspace/domain/sys"
+	"senspace/domain/task"
 	"senspace/pkg/setting"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -25,6 +25,9 @@ var tables = []interface{}{
 	&ds.Book{},
 	&ds.Image{},
 	&ds.Note{},
+	&ds.PluginAsset{},
+	&ds.PluginAssetBinding{},
+	&ds.PluginInstanceState{},
 
 	&active.Like{},
 

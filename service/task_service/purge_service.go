@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"senspace/domain/ds"
 	"senspace/domain/factory"
 	"senspace/domain/task"
 	"senspace/pkg/setting"
@@ -24,6 +25,15 @@ func PurgeAllMintData() error {
 
 	if err := tx.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM fact_asset_relation").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM ds_plugin_asset_binding").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM ds_plugin_asset").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM ds_plugin_instance_state").Error; err != nil {
 			return err
 		}
 		if err := tx.Exec("DELETE FROM fact_asset").Error; err != nil {
@@ -53,7 +63,10 @@ func PurgeAllMintData() error {
 		return err
 	}
 
-	return purgeFactoryStaticFiles()
+	if err := purgeFactoryStaticFiles(); err != nil {
+		return err
+	}
+	return os.RemoveAll(ds.PluginAssetsRoot())
 }
 
 // purgeFactoryStaticFiles 清空工厂静态目录下的铸造产物，不影响发布快照。
