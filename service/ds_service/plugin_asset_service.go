@@ -26,6 +26,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"senspace/domain"
+	"senspace/domain/dev"
 	"senspace/domain/ds"
 	"senspace/domain/factory"
 	"senspace/pkg/app/security"
@@ -58,11 +59,10 @@ type PluginInstanceStateInput struct {
 
 // 静态快照返回信息。
 type PluginAssetSnapshot struct {
-	OwnerKey    string `json:"ownerKey"`    // 钱包索引键。
-	FactAssetId string `json:"factAssetId"` // 插件资产实例ID。
-	ManifestUrl string `json:"manifestUrl"` // 资源清单地址。
-	StateUrl    string `json:"stateUrl"`    // 实例状态地址。
-	Revision    int64  `json:"revision"`    // 状态版本号。
+	Scope       ds.PluginAssetScope `json:"scope"`       // 资源空间。
+	ManifestUrl string              `json:"manifestUrl"` // 资源清单地址。
+	StateUrl    string              `json:"stateUrl"`    // 实例状态地址。
+	Revision    int64               `json:"revision"`    // 状态版本号。
 }
 
 // 上传资源返回信息。
@@ -86,11 +86,10 @@ type pluginAssetJSON struct {
 
 // 资源清单静态文件。
 type pluginAssetManifestJSON struct {
-	Schema      string            `json:"schema"`      // 协议版本。
-	OwnerKey    string            `json:"ownerKey"`    // 钱包索引键。
-	FactAssetId string            `json:"factAssetId"` // 插件资产实例ID。
-	UpdatedAt   string            `json:"updatedAt"`   // 更新时间。
-	Assets      []pluginAssetJSON `json:"assets"`      // 资源列表。
+	Schema    string              `json:"schema"`    // 协议版本。
+	Scope     ds.PluginAssetScope `json:"scope"`     // 资源空间。
+	UpdatedAt string              `json:"updatedAt"` // 更新时间。
+	Assets    []pluginAssetJSON   `json:"assets"`    // 资源列表。
 }
 
 // 状态快照中的资源绑定。
@@ -103,8 +102,7 @@ type pluginAssetBindingJSON struct {
 // 插件实例状态静态文件。
 type pluginInstanceStateJSON struct {
 	Schema      string                              `json:"schema"`      // 协议版本。
-	OwnerKey    string                              `json:"ownerKey"`    // 钱包索引键。
-	FactAssetId string                              `json:"factAssetId"` // 插件资产实例ID。
+	Scope       ds.PluginAssetScope                 `json:"scope"`       // 资源空间。
 	Revision    int64                               `json:"revision"`    // 状态版本号。
 	UpdatedAt   string                              `json:"updatedAt"`   // 更新时间。
 	State       interface{}                         `json:"state"`       // 插件整体状态。
@@ -122,19 +120,59 @@ type processedPluginImage struct {
 	Height   int    // 图片高度。
 }
 
+// ResolveFactPluginAssetScope 校验并返回 fact 资源空间。
+func ResolveFactPluginAssetScope(user security.JwtUser, factAssetId int64) (ds.PluginAssetScope, error) {
+	asset, err := resolveOwnedFactoryAsset(domain.Db, user, factAssetId)
+	if err != nil {
+		return ds.PluginAssetScope{}, err
+	}
+	return buildFactPluginAssetScope(*asset), nil
+}
+
+// ResolveDevPluginAssetScope 校验并返回 dev 资源空间。
+func ResolveDevPluginAssetScope(user security.JwtUser, pluginId string, version string) (ds.PluginAssetScope, error) {
+	walletAddress := strings.TrimSpace(user.Addr)
+	if walletAddress == "" {
+		return ds.PluginAssetScope{}, errors.New("请先登录钱包")
+	}
+	pluginId = strings.TrimSpace(pluginId)
+	if pluginId == "" {
+		return ds.PluginAssetScope{}, errors.New("pluginId不能为空")
+	}
+	resolvedVersion, manifestVersion, err := resolveDevPluginWorkspaceVersion(pluginId, version)
+	if err != nil {
+		return ds.PluginAssetScope{}, err
+	}
+	if err := verifyDevPluginWorkspaceAccess(user, pluginId); err != nil {
+		return ds.PluginAssetScope{}, err
+	}
+	scope := ds.PluginAssetScope{
+		Kind:          ds.PluginAssetScopeDev,
+		OwnerKey:      factory.OwnerIndexKey(walletAddress),
+		OwnerAddress:  walletAddress,
+		PluginId:      pluginId,
+		PluginVersion: firstNonEmpty(manifestVersion, resolvedVersion, strings.TrimSpace(version)),
+	}
+	return scope, scope.Validate()
+}
+
 // UploadPluginAsset 上传并绑定插件实例资源。
 func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey string, fileHeader *multipart.FileHeader) (*PluginAssetUploadResult, error) {
+	scope, err := ResolveFactPluginAssetScope(user, factAssetId)
+	if err != nil {
+		return nil, err
+	}
+	return UploadPluginAssetInScope(user, scope, collectionKey, fileHeader)
+}
+
+// UploadPluginAssetInScope 上传并绑定指定资源空间下的插件实例资源。
+func UploadPluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, fileHeader *multipart.FileHeader) (*PluginAssetUploadResult, error) {
 	collectionKey = normalizeCollectionKey(collectionKey)
-	if factAssetId <= 0 {
-		return nil, errors.New("插件资产实例不能为空")
+	if err := scope.Validate(); err != nil {
+		return nil, err
 	}
 	if fileHeader == nil {
 		return nil, errors.New("上传文件不能为空")
-	}
-
-	assetOwner, err := resolveOwnedFactoryAsset(domain.Db, user, factAssetId)
-	if err != nil {
-		return nil, err
 	}
 	processed, err := processUploadedPluginImage(fileHeader)
 	if err != nil {
@@ -142,11 +180,11 @@ func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey s
 	}
 
 	assetID := generatePluginAssetID()
-	assetDir := ds.PluginAssetDir(assetOwner.OwnerKey, factAssetId, assetID)
+	assetDir := ds.PluginAssetDir(scope, assetID)
 	originalName := "original" + processed.Ext
 	thumbName := "thumb" + processed.Ext
-	publicURL := ds.PluginAssetStaticURL(assetOwner.OwnerKey, strconv.FormatInt(factAssetId, 10), "assets", strconv.FormatUint(assetID, 10), originalName)
-	thumbURL := ds.PluginAssetStaticURL(assetOwner.OwnerKey, strconv.FormatInt(factAssetId, 10), "assets", strconv.FormatUint(assetID, 10), thumbName)
+	publicURL := ds.PluginAssetStaticURL(append(scope.StaticPathParts(), "assets", strconv.FormatUint(assetID, 10), originalName)...)
+	thumbURL := ds.PluginAssetStaticURL(append(scope.StaticPathParts(), "assets", strconv.FormatUint(assetID, 10), thumbName)...)
 	storagePath := filepath.Join(assetDir, originalName)
 	if err := writeUploadedPluginImageFiles(assetDir, originalName, thumbName, processed); err != nil {
 		return nil, err
@@ -155,35 +193,40 @@ func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey s
 	var createdAsset ds.PluginAsset
 	err = domain.Db.Transaction(func(tx *gorm.DB) error {
 		createdAsset = ds.PluginAsset{
-			Id:           assetID,
-			OwnerKey:     assetOwner.OwnerKey,
-			OwnerAddress: assetOwner.OwnerAddress,
-			FactAssetId:  factAssetId,
-			PluginId:     assetOwner.PluginId,
-			ReleaseId:    assetOwner.ReleaseId,
-			Kind:         defaultImageKind,
-			Mime:         processed.Mime,
-			Hash:         processed.Hash,
-			SizeBytes:    int64(len(processed.Original)),
-			Width:        processed.Width,
-			Height:       processed.Height,
-			StoragePath:  storagePath,
-			PublicUrl:    publicURL,
-			ThumbUrl:     thumbURL,
-			Status:       ds.PluginAssetStatusActive,
+			Id:            assetID,
+			ScopeKind:     scope.Kind,
+			OwnerKey:      scope.OwnerKey,
+			OwnerAddress:  scope.OwnerAddress,
+			FactAssetId:   nullableInt64(scope.FactAssetId),
+			PluginId:      scope.PluginId,
+			PluginVersion: scope.PluginVersion,
+			ReleaseId:     nullableInt64(scope.ReleaseId),
+			Kind:          defaultImageKind,
+			Mime:          processed.Mime,
+			Hash:          processed.Hash,
+			SizeBytes:     int64(len(processed.Original)),
+			Width:         processed.Width,
+			Height:        processed.Height,
+			StoragePath:   storagePath,
+			PublicUrl:     publicURL,
+			ThumbUrl:      thumbURL,
+			Status:        ds.PluginAssetStatusActive,
 		}
 		createdAsset.CreatedBy = user.Id
 		createdAsset.UpdatedBy = user.Id
 		if err := tx.Create(&createdAsset).Error; err != nil {
 			return err
 		}
-		sortOrder, err := nextPluginAssetSortOrder(tx, factAssetId, collectionKey)
+		sortOrder, err := nextPluginAssetSortOrder(tx, scope, collectionKey)
 		if err != nil {
 			return err
 		}
 		binding := ds.PluginAssetBinding{
-			OwnerKey:      assetOwner.OwnerKey,
-			FactAssetId:   factAssetId,
+			ScopeKind:     scope.Kind,
+			OwnerKey:      scope.OwnerKey,
+			FactAssetId:   nullableInt64(scope.FactAssetId),
+			PluginId:      scope.PluginId,
+			PluginVersion: scope.PluginVersion,
 			AssetId:       assetID,
 			CollectionKey: collectionKey,
 			SortOrder:     sortOrder,
@@ -195,13 +238,13 @@ func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey s
 		if err := tx.Create(&binding).Error; err != nil {
 			return err
 		}
-		return bumpPluginInstanceState(tx, user.Id, assetOwner.OwnerKey, factAssetId)
+		return bumpPluginInstanceState(tx, user.Id, scope)
 	})
 	if err != nil {
 		_ = os.RemoveAll(assetDir)
 		return nil, err
 	}
-	snapshot, err := RebuildPluginAssetSnapshot(assetOwner.OwnerKey, factAssetId)
+	snapshot, err := RebuildPluginAssetSnapshot(scope)
 	if err != nil {
 		return nil, err
 	}
@@ -211,15 +254,20 @@ func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey s
 
 // SavePluginInstanceState 保存插件实例状态并刷新静态快照。
 func SavePluginInstanceState(user security.JwtUser, factAssetId int64, input PluginInstanceStateInput) (*PluginAssetSnapshot, error) {
-	if factAssetId <= 0 {
-		return nil, errors.New("插件资产实例不能为空")
-	}
-	assetOwner, err := resolveOwnedFactoryAsset(domain.Db, user, factAssetId)
+	scope, err := ResolveFactPluginAssetScope(user, factAssetId)
 	if err != nil {
 		return nil, err
 	}
-	err = domain.Db.Transaction(func(tx *gorm.DB) error {
-		state, err := lockPluginInstanceState(tx, assetOwner.OwnerKey, factAssetId)
+	return SavePluginInstanceStateInScope(user, scope, input)
+}
+
+// SavePluginInstanceStateInScope 保存指定空间下的插件实例状态并刷新静态快照。
+func SavePluginInstanceStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input PluginInstanceStateInput) (*PluginAssetSnapshot, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	err := domain.Db.Transaction(func(tx *gorm.DB) error {
+		state, err := lockPluginInstanceState(tx, scope)
 		if err != nil {
 			return err
 		}
@@ -227,12 +275,11 @@ func SavePluginInstanceState(user security.JwtUser, factAssetId int64, input Plu
 			return fmt.Errorf("状态版本已变化，请刷新后重试")
 		}
 		if input.Bindings != nil {
-			if err := replacePluginAssetBindings(tx, user.Id, assetOwner.OwnerKey, factAssetId, input.Bindings); err != nil {
+			if err := replacePluginAssetBindings(tx, user.Id, scope, input.Bindings); err != nil {
 				return err
 			}
 		}
-		state.OwnerKey = assetOwner.OwnerKey
-		state.FactAssetId = factAssetId
+		applyScopeToPluginInstanceState(&state, scope)
 		if input.State != nil {
 			state.StateJson = encodeJSONOrEmpty(input.State)
 		}
@@ -250,7 +297,7 @@ func SavePluginInstanceState(user security.JwtUser, factAssetId int64, input Plu
 	if err != nil {
 		return nil, err
 	}
-	return RebuildPluginAssetSnapshot(assetOwner.OwnerKey, factAssetId)
+	return RebuildPluginAssetSnapshot(scope)
 }
 
 // DeletePluginAsset 删除插件资源绑定并刷新静态快照。
@@ -258,13 +305,24 @@ func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64)
 	if factAssetId <= 0 || assetID == 0 {
 		return nil, errors.New("插件资产实例或资源不能为空")
 	}
-	assetOwner, err := resolveOwnedFactoryAsset(domain.Db, user, factAssetId)
+	scope, err := ResolveFactPluginAssetScope(user, factAssetId)
 	if err != nil {
 		return nil, err
 	}
-	err = domain.Db.Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&ds.PluginAsset{}).
-			Where("id = ? AND owner_key = ? AND fact_asset_id = ?", assetID, assetOwner.OwnerKey, factAssetId).
+	return DeletePluginAssetInScope(user, scope, assetID)
+}
+
+// DeletePluginAssetInScope 删除指定空间下的插件资源绑定并刷新静态快照。
+func DeletePluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, assetID uint64) (*PluginAssetSnapshot, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	if assetID == 0 {
+		return nil, errors.New("资源不能为空")
+	}
+	err := domain.Db.Transaction(func(tx *gorm.DB) error {
+		result := applyScopeFilter(tx.Model(&ds.PluginAsset{}), scope).
+			Where("id = ?", assetID).
 			Updates(map[string]interface{}{
 				"status":     ds.PluginAssetStatusDeleted,
 				"updated_by": user.Id,
@@ -275,43 +333,45 @@ func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64)
 		if result.RowsAffected == 0 {
 			return errors.New("资源不存在或无权删除")
 		}
-		if err := tx.Model(&ds.PluginAssetBinding{}).
-			Where("asset_id = ? AND owner_key = ? AND fact_asset_id = ?", assetID, assetOwner.OwnerKey, factAssetId).
+		if err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
+			Where("asset_id = ?", assetID).
 			Updates(map[string]interface{}{
 				"status":     ds.PluginAssetBindingStatusDeleted,
 				"updated_by": user.Id,
 			}).Error; err != nil {
 			return err
 		}
-		return bumpPluginInstanceState(tx, user.Id, assetOwner.OwnerKey, factAssetId)
+		return bumpPluginInstanceState(tx, user.Id, scope)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return RebuildPluginAssetSnapshot(assetOwner.OwnerKey, factAssetId)
+	return RebuildPluginAssetSnapshot(scope)
 }
 
 // RebuildPluginAssetSnapshot 重建插件实例资源静态快照。
-func RebuildPluginAssetSnapshot(ownerKey string, factAssetId int64) (*PluginAssetSnapshot, error) {
-	manifest, state, revision, err := buildPluginAssetSnapshotPayload(domain.Db, ownerKey, factAssetId)
+func RebuildPluginAssetSnapshot(scope ds.PluginAssetScope) (*PluginAssetSnapshot, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	manifest, state, revision, err := buildPluginAssetSnapshotPayload(domain.Db, scope)
 	if err != nil {
 		return nil, err
 	}
-	instanceDir := ds.PluginAssetInstanceDir(ownerKey, factAssetId)
+	instanceDir := ds.PluginAssetInstanceDir(scope)
 	if err := os.MkdirAll(instanceDir, os.ModePerm); err != nil {
 		return nil, err
 	}
-	if err := writeJSONFileAtomic(ds.PluginAssetManifestPath(ownerKey, factAssetId), manifest); err != nil {
+	if err := writeJSONFileAtomic(ds.PluginAssetManifestPath(scope), manifest); err != nil {
 		return nil, err
 	}
-	if err := writeJSONFileAtomic(ds.PluginAssetStatePath(ownerKey, factAssetId), state); err != nil {
+	if err := writeJSONFileAtomic(ds.PluginAssetStatePath(scope), state); err != nil {
 		return nil, err
 	}
 	return &PluginAssetSnapshot{
-		OwnerKey:    ownerKey,
-		FactAssetId: strconv.FormatInt(factAssetId, 10),
-		ManifestUrl: ds.PluginAssetManifestURL(ownerKey, factAssetId),
-		StateUrl:    ds.PluginAssetStateURL(ownerKey, factAssetId),
+		Scope:       scope,
+		ManifestUrl: ds.PluginAssetManifestURL(scope),
+		StateUrl:    ds.PluginAssetStateURL(scope),
 		Revision:    revision,
 	}, nil
 }
@@ -319,6 +379,18 @@ func RebuildPluginAssetSnapshot(ownerKey string, factAssetId int64) (*PluginAsse
 // ResolvePluginAssetOwner 校验并返回当前用户拥有的插件资产实例。
 func ResolvePluginAssetOwner(user security.JwtUser, factAssetId int64) (*factory.Asset, error) {
 	return resolveOwnedFactoryAsset(domain.Db, user, factAssetId)
+}
+
+func buildFactPluginAssetScope(asset factory.Asset) ds.PluginAssetScope {
+	return ds.PluginAssetScope{
+		Kind:          ds.PluginAssetScopeFact,
+		OwnerKey:      asset.OwnerKey,
+		OwnerAddress:  asset.OwnerAddress,
+		FactAssetId:   asset.Id,
+		PluginId:      asset.PluginId,
+		PluginVersion: asset.Version,
+		ReleaseId:     asset.ReleaseId,
+	}
 }
 
 func resolveOwnedFactoryAsset(db *gorm.DB, user security.JwtUser, factAssetId int64) (*factory.Asset, error) {
@@ -414,9 +486,9 @@ func writeUploadedPluginImageFiles(assetDir string, originalName string, thumbNa
 	return writeFileAtomic(filepath.Join(assetDir, thumbName), processed.Thumb)
 }
 
-func replacePluginAssetBindings(tx *gorm.DB, userID uint64, ownerKey string, factAssetId int64, bindings []PluginAssetBindingInput) error {
-	if err := tx.Model(&ds.PluginAssetBinding{}).
-		Where("owner_key = ? AND fact_asset_id = ? AND status = ?", ownerKey, factAssetId, ds.PluginAssetBindingStatusActive).
+func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAssetScope, bindings []PluginAssetBindingInput) error {
+	if err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
+		Where("status = ?", ds.PluginAssetBindingStatusActive).
 		Updates(map[string]interface{}{
 			"status":     ds.PluginAssetBindingStatusDeleted,
 			"updated_by": userID,
@@ -426,8 +498,8 @@ func replacePluginAssetBindings(tx *gorm.DB, userID uint64, ownerKey string, fac
 	for _, input := range bindings {
 		collectionKey := normalizeCollectionKey(input.CollectionKey)
 		var count int64
-		if err := tx.Model(&ds.PluginAsset{}).
-			Where("id = ? AND owner_key = ? AND fact_asset_id = ? AND status = ?", input.AssetId, ownerKey, factAssetId, ds.PluginAssetStatusActive).
+		if err := applyScopeFilter(tx.Model(&ds.PluginAsset{}), scope).
+			Where("id = ? AND status = ?", input.AssetId, ds.PluginAssetStatusActive).
 			Count(&count).Error; err != nil {
 			return err
 		}
@@ -435,8 +507,11 @@ func replacePluginAssetBindings(tx *gorm.DB, userID uint64, ownerKey string, fac
 			return fmt.Errorf("资源 %d 不存在或已删除", input.AssetId)
 		}
 		binding := ds.PluginAssetBinding{
-			OwnerKey:      ownerKey,
-			FactAssetId:   factAssetId,
+			ScopeKind:     scope.Kind,
+			OwnerKey:      scope.OwnerKey,
+			FactAssetId:   nullableInt64(scope.FactAssetId),
+			PluginId:      scope.PluginId,
+			PluginVersion: scope.PluginVersion,
 			AssetId:       input.AssetId,
 			CollectionKey: collectionKey,
 			SortOrder:     input.SortOrder,
@@ -452,13 +527,12 @@ func replacePluginAssetBindings(tx *gorm.DB, userID uint64, ownerKey string, fac
 	return nil
 }
 
-func bumpPluginInstanceState(tx *gorm.DB, userID uint64, ownerKey string, factAssetId int64) error {
-	state, err := lockPluginInstanceState(tx, ownerKey, factAssetId)
+func bumpPluginInstanceState(tx *gorm.DB, userID uint64, scope ds.PluginAssetScope) error {
+	state, err := lockPluginInstanceState(tx, scope)
 	if err != nil {
 		return err
 	}
-	state.OwnerKey = ownerKey
-	state.FactAssetId = factAssetId
+	applyScopeToPluginInstanceState(&state, scope)
 	state.Revision += 1
 	state.UpdatedBy = userID
 	if state.Id == 0 {
@@ -469,49 +543,51 @@ func bumpPluginInstanceState(tx *gorm.DB, userID uint64, ownerKey string, factAs
 	return tx.Save(&state).Error
 }
 
-func lockPluginInstanceState(tx *gorm.DB, ownerKey string, factAssetId int64) (ds.PluginInstanceState, error) {
+func lockPluginInstanceState(tx *gorm.DB, scope ds.PluginAssetScope) (ds.PluginInstanceState, error) {
 	var state ds.PluginInstanceState
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("owner_key = ? AND fact_asset_id = ?", ownerKey, factAssetId).
+	err := applyScopeFilter(tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&ds.PluginInstanceState{}), scope).
 		First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ds.PluginInstanceState{
-			OwnerKey:    ownerKey,
-			FactAssetId: factAssetId,
-			StateJson:   "{}",
-			PoseJson:    "{}",
-			Revision:    0,
-		}, nil
+		state = ds.PluginInstanceState{
+			StateJson: "{}",
+			PoseJson:  "{}",
+			Revision:  0,
+		}
+		applyScopeToPluginInstanceState(&state, scope)
+		return state, nil
 	}
 	return state, err
 }
 
-func nextPluginAssetSortOrder(tx *gorm.DB, factAssetId int64, collectionKey string) (int, error) {
+func nextPluginAssetSortOrder(tx *gorm.DB, scope ds.PluginAssetScope, collectionKey string) (int, error) {
 	var maxOrder int
-	err := tx.Model(&ds.PluginAssetBinding{}).
-		Where("fact_asset_id = ? AND collection_key = ? AND status = ?", factAssetId, collectionKey, ds.PluginAssetBindingStatusActive).
+	err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
+		Where("collection_key = ? AND status = ?", collectionKey, ds.PluginAssetBindingStatusActive).
 		Select("COALESCE(MAX(sort_order), 0)").
 		Scan(&maxOrder).Error
 	return maxOrder + 10, err
 }
 
-func buildPluginAssetSnapshotPayload(db *gorm.DB, ownerKey string, factAssetId int64) (*pluginAssetManifestJSON, *pluginInstanceStateJSON, int64, error) {
+func buildPluginAssetSnapshotPayload(db *gorm.DB, scope ds.PluginAssetScope) (*pluginAssetManifestJSON, *pluginInstanceStateJSON, int64, error) {
 	var assets []ds.PluginAsset
-	if err := db.Where("owner_key = ? AND fact_asset_id = ? AND status = ?", ownerKey, factAssetId, ds.PluginAssetStatusActive).
+	if err := applyScopeFilter(db.Model(&ds.PluginAsset{}), scope).
+		Where("status = ?", ds.PluginAssetStatusActive).
 		Order("id ASC").
 		Find(&assets).Error; err != nil {
 		return nil, nil, 0, err
 	}
 	var bindings []ds.PluginAssetBinding
-	if err := db.Where("owner_key = ? AND fact_asset_id = ? AND status = ?", ownerKey, factAssetId, ds.PluginAssetBindingStatusActive).
+	if err := applyScopeFilter(db.Model(&ds.PluginAssetBinding{}), scope).
+		Where("status = ?", ds.PluginAssetBindingStatusActive).
 		Order("collection_key ASC, sort_order ASC, id ASC").
 		Find(&bindings).Error; err != nil {
 		return nil, nil, 0, err
 	}
 	var state ds.PluginInstanceState
-	err := db.Where("owner_key = ? AND fact_asset_id = ?", ownerKey, factAssetId).First(&state).Error
+	err := applyScopeFilter(db.Model(&ds.PluginInstanceState{}), scope).First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		state = ds.PluginInstanceState{OwnerKey: ownerKey, FactAssetId: factAssetId, StateJson: "{}", Revision: 0}
+		state = ds.PluginInstanceState{StateJson: "{}", PoseJson: "{}", Revision: 0}
+		applyScopeToPluginInstanceState(&state, scope)
 	} else if err != nil {
 		return nil, nil, 0, err
 	}
@@ -536,16 +612,14 @@ func buildPluginAssetSnapshotPayload(db *gorm.DB, ownerKey string, factAssetId i
 		})
 	}
 	manifest := &pluginAssetManifestJSON{
-		Schema:      pluginAssetSchema,
-		OwnerKey:    ownerKey,
-		FactAssetId: strconv.FormatInt(factAssetId, 10),
-		UpdatedAt:   now,
-		Assets:      manifestAssets,
+		Schema:    pluginAssetSchema,
+		Scope:     scope,
+		UpdatedAt: now,
+		Assets:    manifestAssets,
 	}
 	stateJSON := &pluginInstanceStateJSON{
 		Schema:      pluginStateSchema,
-		OwnerKey:    ownerKey,
-		FactAssetId: strconv.FormatInt(factAssetId, 10),
+		Scope:       scope,
 		Revision:    state.Revision,
 		UpdatedAt:   now,
 		State:       decodeJSONValue(state.StateJson),
@@ -566,6 +640,34 @@ func buildPluginAssetJSON(asset ds.PluginAsset) pluginAssetJSON {
 		Height:    asset.Height,
 		SizeBytes: asset.SizeBytes,
 	}
+}
+
+func applyScopeFilter(tx *gorm.DB, scope ds.PluginAssetScope) *gorm.DB {
+	filtered := tx.Where("scope_kind = ? AND owner_key = ?", scope.Kind, scope.OwnerKey)
+	switch scope.Kind {
+	case ds.PluginAssetScopeFact:
+		return filtered.Where("fact_asset_id = ?", scope.FactAssetId)
+	case ds.PluginAssetScopeDev:
+		return filtered.Where("plugin_id = ? AND plugin_version = ?", scope.PluginId, scope.PluginVersion)
+	default:
+		return filtered.Where("1 = 0")
+	}
+}
+
+func applyScopeToPluginInstanceState(state *ds.PluginInstanceState, scope ds.PluginAssetScope) {
+	state.ScopeKind = scope.Kind
+	state.OwnerKey = scope.OwnerKey
+	state.FactAssetId = nullableInt64(scope.FactAssetId)
+	state.PluginId = scope.PluginId
+	state.PluginVersion = scope.PluginVersion
+}
+
+func nullableInt64(value int64) *int64 {
+	if value <= 0 {
+		return nil
+	}
+	v := value
+	return &v
 }
 
 func writeJSONFileAtomic(path string, payload interface{}) error {
@@ -596,6 +698,123 @@ func writeFileAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func verifyDevPluginWorkspaceAccess(user security.JwtUser, pluginId string) error {
+	if user.Id == 0 {
+		return errors.New("请先登录")
+	}
+	if pluginNumericID, err := strconv.ParseInt(strings.TrimSpace(pluginId), 10, 64); err == nil && pluginNumericID > 0 {
+		plugin := dev.Plugin{Id: pluginNumericID}.GetById()
+		if plugin.Id == 0 {
+			return errors.New("开发工作区插件不存在")
+		}
+		if plugin.CreatedBy != user.Id {
+			return errors.New("无权编辑该插件")
+		}
+	}
+	return nil
+}
+
+func resolveDevPluginWorkspaceVersion(pluginId string, version string) (string, string, error) {
+	versionRoot, manifestVersion, err := resolveDevPluginVersionRoot(pluginId, version)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := os.Stat(versionRoot); err != nil {
+		if os.IsNotExist(err) {
+			return "", "", errors.New("开发工作区插件不存在")
+		}
+		return "", "", err
+	}
+	resolvedVersion := filepath.Base(versionRoot)
+	return resolvedVersion, manifestVersion, nil
+}
+
+func resolveDevPluginVersionRoot(pluginId string, version string) (string, string, error) {
+	pluginRoot := filepath.Join(setting.Config.App.FilePath.Plugin, strings.TrimSpace(pluginId))
+	normalizedVersion := strings.TrimSpace(version)
+	if normalizedVersion == "" {
+		entries, err := os.ReadDir(pluginRoot)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", "", errors.New("开发工作区插件不存在")
+			}
+			return "", "", err
+		}
+		latestVersion := ""
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			candidate := strings.TrimSpace(entry.Name())
+			if candidate == "" {
+				continue
+			}
+			if latestVersion == "" || comparePluginVersions(candidate, latestVersion) > 0 {
+				latestVersion = candidate
+			}
+		}
+		if latestVersion == "" {
+			return "", "", errors.New("开发工作区插件版本不存在")
+		}
+		normalizedVersion = latestVersion
+	}
+	versionRoot := filepath.Join(pluginRoot, normalizedVersion)
+	manifestVersion, err := loadDevPluginManifestVersion(versionRoot)
+	if err != nil {
+		return "", "", err
+	}
+	return versionRoot, manifestVersion, nil
+}
+
+func comparePluginVersions(v1 string, v2 string) int {
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+	limit := len(p1)
+	if len(p2) > limit {
+		limit = len(p2)
+	}
+	for i := 0; i < limit; i++ {
+		var n1, n2 int
+		if i < len(p1) {
+			n1, _ = strconv.Atoi(p1[i])
+		}
+		if i < len(p2) {
+			n2, _ = strconv.Atoi(p2[i])
+		}
+		if n1 != n2 {
+			return n1 - n2
+		}
+	}
+	return 0
+}
+
+func loadDevPluginManifestVersion(versionRoot string) (string, error) {
+	manifestPath := filepath.Join(versionRoot, "manifest.json")
+	bytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", errors.New("开发工作区插件缺少manifest.json")
+		}
+		return "", err
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(bytes, &manifest); err != nil {
+		return "", errors.New("开发工作区manifest.json格式错误")
+	}
+	return strings.TrimSpace(manifest.Version), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func normalizeCollectionKey(value string) string {

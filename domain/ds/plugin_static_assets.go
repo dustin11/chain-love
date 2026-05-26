@@ -1,6 +1,7 @@
 package ds
 
 import (
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,27 +22,27 @@ func PluginAssetsRoot() string {
 }
 
 // 插件实例资源目录。
-func PluginAssetInstanceDir(ownerKey string, factAssetId int64) string {
-	return filepath.Join(PluginAssetsRoot(), ownerKey, strconv.FormatInt(factAssetId, 10))
+func PluginAssetInstanceDir(scope PluginAssetScope) string {
+	return filepath.Join(append([]string{PluginAssetsRoot()}, scope.StaticPathParts()...)...)
 }
 
 // 单个资源文件目录。
-func PluginAssetDir(ownerKey string, factAssetId int64, assetId uint64) string {
+func PluginAssetDir(scope PluginAssetScope, assetId uint64) string {
 	return filepath.Join(
-		PluginAssetInstanceDir(ownerKey, factAssetId),
+		PluginAssetInstanceDir(scope),
 		"assets",
 		strconv.FormatUint(assetId, 10),
 	)
 }
 
 // 资源清单文件路径。
-func PluginAssetManifestPath(ownerKey string, factAssetId int64) string {
-	return filepath.Join(PluginAssetInstanceDir(ownerKey, factAssetId), "manifest.json")
+func PluginAssetManifestPath(scope PluginAssetScope) string {
+	return filepath.Join(PluginAssetInstanceDir(scope), "manifest.json")
 }
 
 // 插件状态文件路径。
-func PluginAssetStatePath(ownerKey string, factAssetId int64) string {
-	return filepath.Join(PluginAssetInstanceDir(ownerKey, factAssetId), "state.json")
+func PluginAssetStatePath(scope PluginAssetScope) string {
+	return filepath.Join(PluginAssetInstanceDir(scope), "state.json")
 }
 
 // 插件资源静态 URL。
@@ -51,11 +52,18 @@ func PluginAssetStaticURL(pathParts ...string) string {
 }
 
 // 资源清单静态 URL。
-func PluginAssetManifestURL(ownerKey string, factAssetId int64) string {
-	return PluginAssetStaticURL(ownerKey, strconv.FormatInt(factAssetId, 10), "manifest.json")
+func PluginAssetManifestURL(scope PluginAssetScope) string {
+	return PluginAssetStaticURL(append(scope.StaticPathParts(), "manifest.json")...)
 }
 
 // 插件状态静态 URL。
-func PluginAssetStateURL(ownerKey string, factAssetId int64) string {
-	return PluginAssetStaticURL(ownerKey, strconv.FormatInt(factAssetId, 10), "state.json")
+func PluginAssetStateURL(scope PluginAssetScope) string {
+	return PluginAssetStaticURL(append(scope.StaticPathParts(), "state.json")...)
+}
+
+// MustValidatePluginAssetScope 确保 scope 在生成静态路径前已合法。
+func MustValidatePluginAssetScope(scope PluginAssetScope) {
+	if err := scope.Validate(); err != nil {
+		panic(errors.New("invalid plugin asset scope: " + err.Error()))
+	}
 }
