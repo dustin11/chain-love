@@ -136,14 +136,11 @@ func ResolveDevPluginAssetScope(user security.JwtUser, pluginId string, version 
 		return ds.PluginAssetScope{}, errors.New("请先登录钱包")
 	}
 	pluginId = strings.TrimSpace(pluginId)
-	if pluginId == "" {
-		return ds.PluginAssetScope{}, errors.New("pluginId不能为空")
-	}
-	resolvedVersion, manifestVersion, err := resolveDevPluginWorkspaceVersion(pluginId, version)
-	if err != nil {
+	version = strings.TrimSpace(version)
+	if err := ds.ValidatePluginAssetPathSegment("pluginId", pluginId); err != nil {
 		return ds.PluginAssetScope{}, err
 	}
-	if err := verifyDevPluginWorkspaceAccess(user, pluginId); err != nil {
+	if err := ds.ValidatePluginAssetPathSegment("pluginVersion", version); err != nil {
 		return ds.PluginAssetScope{}, err
 	}
 	scope := ds.PluginAssetScope{
@@ -151,7 +148,7 @@ func ResolveDevPluginAssetScope(user security.JwtUser, pluginId string, version 
 		OwnerKey:      factory.OwnerIndexKey(walletAddress),
 		OwnerAddress:  walletAddress,
 		PluginId:      pluginId,
-		PluginVersion: firstNonEmpty(manifestVersion, resolvedVersion, strings.TrimSpace(version)),
+		PluginVersion: version,
 	}
 	return scope, scope.Validate()
 }
@@ -167,7 +164,6 @@ func UploadPluginAsset(user security.JwtUser, factAssetId int64, collectionKey s
 
 // UploadPluginAssetInScope 上传并绑定指定资源空间下的插件实例资源。
 func UploadPluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, fileHeader *multipart.FileHeader) (*PluginAssetUploadResult, error) {
-	collectionKey = normalizeCollectionKey(collectionKey)
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
@@ -178,7 +174,44 @@ func UploadPluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, 
 	if err != nil {
 		return nil, err
 	}
+	return saveProcessedPluginImageAsset(user, scope, collectionKey, processed)
+}
 
+// ImportPluginAssetImageInScope 从用户素材库导入图片到插件资源空间。
+func ImportPluginAssetImageInScope(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, imageID uint64) (*PluginAssetUploadResult, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	if imageID == 0 {
+		return nil, errors.New("图片不能为空")
+	}
+	imageRecord := ds.Image{Id: imageID}.GetById()
+	if imageRecord.Id == 0 || imageRecord.CreatedBy != user.Id {
+		return nil, errors.New("图片不存在或无权访问")
+	}
+	imagePath, err := resolveUserImageStoragePath(imageRecord.Url)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(imagePath)
+	if err != nil {
+		return nil, err
+	}
+	processed, err := processPluginImageBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	return saveProcessedPluginImageAsset(user, scope, collectionKey, processed)
+}
+
+func saveProcessedPluginImageAsset(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, processed *processedPluginImage) (*PluginAssetUploadResult, error) {
+	collectionKey, err := normalizeCollectionKey(collectionKey)
+	if err != nil {
+		return nil, err
+	}
+	if processed == nil {
+		return nil, errors.New("图片处理结果为空")
+	}
 	assetID := generatePluginAssetID()
 	assetDir := ds.PluginAssetDir(scope, assetID)
 	originalName := "original" + processed.Ext
@@ -300,7 +333,7 @@ func SavePluginInstanceStateInScope(user security.JwtUser, scope ds.PluginAssetS
 	return RebuildPluginAssetSnapshot(scope)
 }
 
-// DeletePluginAsset 删除插件资源绑定并刷新静态快照。
+// DeletePluginAsset 删除插件资源并刷新静态快照。
 func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64) (*PluginAssetSnapshot, error) {
 	if factAssetId <= 0 || assetID == 0 {
 		return nil, errors.New("插件资产实例或资源不能为空")
@@ -312,7 +345,7 @@ func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64)
 	return DeletePluginAssetInScope(user, scope, assetID)
 }
 
-// DeletePluginAssetInScope 删除指定空间下的插件资源绑定并刷新静态快照。
+// DeletePluginAssetInScope 物理删除指定空间下的插件资源并刷新静态快照。
 func DeletePluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, assetID uint64) (*PluginAssetSnapshot, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, err
@@ -320,33 +353,141 @@ func DeletePluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, 
 	if assetID == 0 {
 		return nil, errors.New("资源不能为空")
 	}
+	var asset ds.PluginAsset
 	err := domain.Db.Transaction(func(tx *gorm.DB) error {
-		result := applyScopeFilter(tx.Model(&ds.PluginAsset{}), scope).
+		err := applyScopeFilter(tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&ds.PluginAsset{}), scope).
 			Where("id = ?", assetID).
-			Updates(map[string]interface{}{
-				"status":     ds.PluginAssetStatusDeleted,
-				"updated_by": user.Id,
-			})
+			First(&asset).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("资源不存在或无权删除")
+		}
+		if err != nil {
+			return err
+		}
+		if err := applyScopeFilter(tx, scope).
+			Where("asset_id = ?", assetID).
+			Delete(&ds.PluginAssetBinding{}).Error; err != nil {
+			return err
+		}
+		result := applyScopeFilter(tx, scope).
+			Where("id = ?", assetID).
+			Delete(&ds.PluginAsset{})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
 			return errors.New("资源不存在或无权删除")
 		}
-		if err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
-			Where("asset_id = ?", assetID).
-			Updates(map[string]interface{}{
-				"status":     ds.PluginAssetBindingStatusDeleted,
-				"updated_by": user.Id,
-			}).Error; err != nil {
-			return err
-		}
 		return bumpPluginInstanceState(tx, user.Id, scope)
 	})
 	if err != nil {
 		return nil, err
 	}
+	assetDir := ds.PluginAssetDir(scope, assetID)
+	if strings.TrimSpace(asset.StoragePath) != "" {
+		// 以数据库路径反推目录，避免后续目录布局调整时误删实例根目录。
+		assetDir = filepath.Dir(asset.StoragePath)
+	}
+	if err := removePluginAssetDir(scope, assetDir); err != nil {
+		return nil, err
+	}
 	return RebuildPluginAssetSnapshot(scope)
+}
+
+func removePluginAssetDir(scope ds.PluginAssetScope, assetDir string) error {
+	root, err := filepath.Abs(ds.PluginAssetInstanceDir(scope))
+	if err != nil {
+		return err
+	}
+	target, err := filepath.Abs(assetDir)
+	if err != nil {
+		return err
+	}
+	if target == root || !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+		return errors.New("资源目录越界")
+	}
+	return os.RemoveAll(target)
+}
+
+func resolveUserImageStoragePath(imageURL string) (string, error) {
+	trimmed := strings.TrimSpace(imageURL)
+	if trimmed == "" {
+		return "", errors.New("图片路径为空")
+	}
+	cleanURL := filepath.Clean(trimmed)
+	if cleanURL == "." || filepath.IsAbs(cleanURL) || strings.HasPrefix(cleanURL, "..") {
+		return "", errors.New("图片路径无效")
+	}
+	root, err := filepath.Abs(setting.Config.App.FilePath.Image)
+	if err != nil {
+		return "", err
+	}
+	target, err := filepath.Abs(filepath.Join(root, cleanURL))
+	if err != nil {
+		return "", err
+	}
+	if target == root || !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+		return "", errors.New("图片路径越界")
+	}
+	return target, nil
+}
+
+func processPluginImageBytes(data []byte) (*processedPluginImage, error) {
+	if len(data) == 0 {
+		return nil, errors.New("上传文件为空")
+	}
+	if setting.Config.App.ImageMaxSize > 0 && int64(len(data)) > setting.Config.App.ImageMaxSize {
+		return nil, errors.New("图片超过最大限制")
+	}
+	ctype := http.DetectContentType(data[:minInt(len(data), 512)])
+	if !strings.HasPrefix(ctype, "image/") {
+		return nil, errors.New("不是图片文件")
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Width > 10000 || cfg.Height > 10000 {
+		return nil, errors.New("图片分辨率太大")
+	}
+	src, err := imaging.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if src.Bounds().Dx() > 1600 || src.Bounds().Dy() > 1600 {
+		src = imaging.Resize(src, 1600, 0, imaging.CatmullRom)
+	}
+	mime := defaultImageMime
+	ext := ".jpg"
+	var original bytes.Buffer
+	if hasImageAlpha(src) {
+		mime = "image/png"
+		ext = ".png"
+		if err := png.Encode(&original, src); err != nil {
+			return nil, err
+		}
+	} else if err := jpeg.Encode(&original, src, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
+	}
+	thumb := imaging.Thumbnail(src, 360, 360, imaging.CatmullRom)
+	var thumbBuffer bytes.Buffer
+	if mime == "image/png" {
+		if err := png.Encode(&thumbBuffer, thumb); err != nil {
+			return nil, err
+		}
+	} else if err := jpeg.Encode(&thumbBuffer, thumb, &jpeg.Options{Quality: 78}); err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(original.Bytes())
+	return &processedPluginImage{
+		Original: original.Bytes(),
+		Thumb:    thumbBuffer.Bytes(),
+		Mime:     mime,
+		Ext:      ext,
+		Hash:     "sha256:" + hex.EncodeToString(sum[:]),
+		Width:    src.Bounds().Dx(),
+		Height:   src.Bounds().Dy(),
+	}, nil
 }
 
 // RebuildPluginAssetSnapshot 重建插件实例资源静态快照。
@@ -410,9 +551,6 @@ func processUploadedPluginImage(fileHeader *multipart.FileHeader) (*processedPlu
 	if fileHeader.Size <= 0 {
 		return nil, errors.New("上传文件为空")
 	}
-	if setting.Config.App.ImageMaxSize > 0 && fileHeader.Size > setting.Config.App.ImageMaxSize {
-		return nil, errors.New("图片超过最大限制")
-	}
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, err
@@ -422,58 +560,7 @@ func processUploadedPluginImage(fileHeader *multipart.FileHeader) (*processedPlu
 	if err != nil {
 		return nil, err
 	}
-	if len(data) == 0 {
-		return nil, errors.New("上传文件为空")
-	}
-	ctype := http.DetectContentType(data[:minInt(len(data), 512)])
-	if !strings.HasPrefix(ctype, "image/") {
-		return nil, errors.New("不是图片文件")
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	if cfg.Width > 10000 || cfg.Height > 10000 {
-		return nil, errors.New("图片分辨率太大")
-	}
-	src, err := imaging.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	if src.Bounds().Dx() > 1600 || src.Bounds().Dy() > 1600 {
-		src = imaging.Resize(src, 1600, 0, imaging.CatmullRom)
-	}
-	mime := defaultImageMime
-	ext := ".jpg"
-	var original bytes.Buffer
-	if hasImageAlpha(src) {
-		mime = "image/png"
-		ext = ".png"
-		if err := png.Encode(&original, src); err != nil {
-			return nil, err
-		}
-	} else if err := jpeg.Encode(&original, src, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, err
-	}
-	thumb := imaging.Thumbnail(src, 360, 360, imaging.CatmullRom)
-	var thumbBuffer bytes.Buffer
-	if mime == "image/png" {
-		if err := png.Encode(&thumbBuffer, thumb); err != nil {
-			return nil, err
-		}
-	} else if err := jpeg.Encode(&thumbBuffer, thumb, &jpeg.Options{Quality: 78}); err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256(original.Bytes())
-	return &processedPluginImage{
-		Original: original.Bytes(),
-		Thumb:    thumbBuffer.Bytes(),
-		Mime:     mime,
-		Ext:      ext,
-		Hash:     "sha256:" + hex.EncodeToString(sum[:]),
-		Width:    src.Bounds().Dx(),
-		Height:   src.Bounds().Dy(),
-	}, nil
+	return processPluginImageBytes(data)
 }
 
 func writeUploadedPluginImageFiles(assetDir string, originalName string, thumbName string, processed *processedPluginImage) error {
@@ -496,7 +583,10 @@ func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAsset
 		return err
 	}
 	for _, input := range bindings {
-		collectionKey := normalizeCollectionKey(input.CollectionKey)
+		collectionKey, err := normalizeCollectionKey(input.CollectionKey)
+		if err != nil {
+			return err
+		}
 		var count int64
 		if err := applyScopeFilter(tx.Model(&ds.PluginAsset{}), scope).
 			Where("id = ? AND status = ?", input.AssetId, ds.PluginAssetStatusActive).
@@ -704,14 +794,16 @@ func verifyDevPluginWorkspaceAccess(user security.JwtUser, pluginId string) erro
 	if user.Id == 0 {
 		return errors.New("请先登录")
 	}
-	if pluginNumericID, err := strconv.ParseInt(strings.TrimSpace(pluginId), 10, 64); err == nil && pluginNumericID > 0 {
-		plugin := dev.Plugin{Id: pluginNumericID}.GetById()
-		if plugin.Id == 0 {
-			return errors.New("开发工作区插件不存在")
-		}
-		if plugin.CreatedBy != user.Id {
-			return errors.New("无权编辑该插件")
-		}
+	pluginNumericID, err := strconv.ParseInt(strings.TrimSpace(pluginId), 10, 64)
+	if err != nil || pluginNumericID <= 0 {
+		return errors.New("开发工作区插件不存在")
+	}
+	plugin := dev.Plugin{Id: pluginNumericID}.GetById()
+	if plugin.Id == 0 {
+		return errors.New("开发工作区插件不存在")
+	}
+	if plugin.CreatedBy != user.Id {
+		return errors.New("无权编辑该插件")
 	}
 	return nil
 }
@@ -732,8 +824,16 @@ func resolveDevPluginWorkspaceVersion(pluginId string, version string) (string, 
 }
 
 func resolveDevPluginVersionRoot(pluginId string, version string) (string, string, error) {
+	if err := ds.ValidatePluginAssetPathSegment("pluginId", pluginId); err != nil {
+		return "", "", err
+	}
 	pluginRoot := filepath.Join(setting.Config.App.FilePath.Plugin, strings.TrimSpace(pluginId))
 	normalizedVersion := strings.TrimSpace(version)
+	if normalizedVersion != "" {
+		if err := ds.ValidatePluginAssetPathSegment("pluginVersion", normalizedVersion); err != nil {
+			return "", "", err
+		}
+	}
 	if normalizedVersion == "" {
 		entries, err := os.ReadDir(pluginRoot)
 		if err != nil {
@@ -749,6 +849,9 @@ func resolveDevPluginVersionRoot(pluginId string, version string) (string, strin
 			}
 			candidate := strings.TrimSpace(entry.Name())
 			if candidate == "" {
+				continue
+			}
+			if ds.ValidatePluginAssetPathSegment("pluginVersion", candidate) != nil {
 				continue
 			}
 			if latestVersion == "" || comparePluginVersions(candidate, latestVersion) > 0 {
@@ -817,12 +920,15 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func normalizeCollectionKey(value string) string {
+func normalizeCollectionKey(value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
-		return "default"
+		return "default", nil
 	}
-	return trimmed
+	if err := ds.ValidatePluginAssetPathSegment("collectionKey", trimmed); err != nil {
+		return "", err
+	}
+	return trimmed, nil
 }
 
 func encodeJSONOrEmpty(value map[string]interface{}) string {

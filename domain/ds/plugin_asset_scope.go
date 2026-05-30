@@ -3,9 +3,12 @@ package ds
 import (
 	"errors"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+var pluginAssetSafeSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
 
 // 插件资源空间类型。
 type PluginAssetScopeKind string
@@ -34,20 +37,44 @@ func (s PluginAssetScope) Validate() error {
 	if ownerKey == "" {
 		return errors.New("ownerKey不能为空")
 	}
+	if err := ValidatePluginAssetPathSegment("ownerKey", ownerKey); err != nil {
+		return err
+	}
 	switch s.Kind {
 	case PluginAssetScopeFact:
 		if s.FactAssetId <= 0 {
 			return errors.New("factAssetId不能为空")
 		}
 	case PluginAssetScopeDev:
-		if strings.TrimSpace(s.PluginId) == "" {
-			return errors.New("pluginId不能为空")
+		if err := ValidatePluginAssetPathSegment("pluginId", s.PluginId); err != nil {
+			return err
 		}
-		if strings.TrimSpace(s.PluginVersion) == "" {
-			return errors.New("pluginVersion不能为空")
+		if err := ValidatePluginAssetPathSegment("pluginVersion", s.PluginVersion); err != nil {
+			return err
 		}
 	default:
 		return errors.New("scope kind无效")
+	}
+	return nil
+}
+
+// ValidatePluginAssetPathSegment 校验插件资源路径中的单个目录片段。
+func ValidatePluginAssetPathSegment(label string, value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return errors.New(label + "不能为空")
+	}
+	if trimmed == "." || trimmed == ".." {
+		return errors.New(label + "无效")
+	}
+	if filepath.Clean(trimmed) != trimmed {
+		return errors.New(label + "不能包含路径分隔符")
+	}
+	if strings.ContainsAny(trimmed, `/\`) {
+		return errors.New(label + "不能包含路径分隔符")
+	}
+	if !pluginAssetSafeSegmentPattern.MatchString(trimmed) {
+		return errors.New(label + "包含非法字符")
 	}
 	return nil
 }
@@ -65,8 +92,8 @@ func (s PluginAssetScope) StaticPathParts() []string {
 		return []string{
 			string(PluginAssetScopeDev),
 			strings.TrimSpace(s.OwnerKey),
-			filepath.Clean(strings.TrimSpace(s.PluginId)),
-			filepath.Clean(strings.TrimSpace(s.PluginVersion)),
+			strings.TrimSpace(s.PluginId),
+			strings.TrimSpace(s.PluginVersion),
 		}
 	default:
 		return []string{}

@@ -26,6 +26,37 @@ func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstan
 	return req
 }
 
+// 素材库图片导入请求。
+type pluginAssetImportImageInput struct {
+	ImageId       json.RawMessage `json:"imageId"`       // 素材库图片 ID。
+	CollectionKey string          `json:"collectionKey"` // 资源集合键。
+}
+
+func bindPluginAssetImportImageInput(ctx *contextx.AppContext) pluginAssetImportImageInput {
+	var req pluginAssetImportImageInput
+	err := ctx.Gin.ShouldBindJSON(&req)
+	e.PanicParameterError(err)
+	_, err = req.parseImageID()
+	e.PanicParameterError(err)
+	return req
+}
+
+func (req pluginAssetImportImageInput) parseImageID() (uint64, error) {
+	var id uint64
+	if err := json.Unmarshal(req.ImageId, &id); err == nil && id > 0 {
+		return id, nil
+	}
+	var idText string
+	if err := json.Unmarshal(req.ImageId, &idText); err != nil {
+		return 0, err
+	}
+	parsed, err := strconv.ParseUint(idText, 10, 64)
+	if err != nil || parsed == 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return parsed, nil
+}
+
 // @Summary 上传 fact 插件实例资源
 // @Tags 插件资源
 // @Param factAssetId path string true "插件资产实例ID"
@@ -61,6 +92,43 @@ func PluginAssetUploadDev(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, pluginId, version)
 	e.PanicServerErr(err)
 	result, err := ds_service.UploadPluginAssetInScope(*ctx.User, scope, ctx.Gin.PostForm("collectionKey"), file)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// @Summary 从素材库导入 fact 插件实例图片
+// @Tags 插件资源
+// @Param factAssetId path string true "插件资产实例ID"
+// @Param body body pluginAssetImportImageInput true "导入图片请求"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/fact/{factAssetId}/import-image [post]
+func PluginAssetImportImageFact(ctx *contextx.AppContext) {
+	factAssetId, err := strconv.ParseInt(ctx.Gin.Param("factAssetId"), 10, 64)
+	e.PanicParameterError(err)
+	req := bindPluginAssetImportImageInput(ctx)
+	imageID, err := req.parseImageID()
+	e.PanicParameterError(err)
+	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
+	e.PanicServerErr(err)
+	result, err := ds_service.ImportPluginAssetImageInScope(*ctx.User, scope, req.CollectionKey, imageID)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// @Summary 从素材库导入 dev 插件实例图片
+// @Tags 插件资源
+// @Param pluginId path string true "插件ID"
+// @Param version path string true "插件版本"
+// @Param body body pluginAssetImportImageInput true "导入图片请求"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/dev/{pluginId}/{version}/import-image [post]
+func PluginAssetImportImageDev(ctx *contextx.AppContext) {
+	req := bindPluginAssetImportImageInput(ctx)
+	imageID, err := req.parseImageID()
+	e.PanicParameterError(err)
+	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, ctx.Gin.Param("pluginId"), ctx.Gin.Param("version"))
+	e.PanicServerErr(err)
+	result, err := ds_service.ImportPluginAssetImageInScope(*ctx.User, scope, req.CollectionKey, imageID)
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
@@ -163,6 +231,11 @@ func PluginAssetRebuildSnapshotDev(ctx *contextx.AppContext) {
 // 兼容旧 fact 路由。
 func PluginAssetUpload(ctx *contextx.AppContext) {
 	PluginAssetUploadFact(ctx)
+}
+
+// 兼容旧 fact 路由。
+func PluginAssetImportImage(ctx *contextx.AppContext) {
+	PluginAssetImportImageFact(ctx)
 }
 
 // 兼容旧 fact 路由。
