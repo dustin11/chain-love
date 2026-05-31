@@ -18,6 +18,8 @@ const (
 	PluginAssetScopeFact PluginAssetScopeKind = "fact"
 	// 开发工作区插件实例空间。
 	PluginAssetScopeDev PluginAssetScopeKind = "dev"
+	// 铸造前配置草稿空间。
+	PluginAssetScopeDraft PluginAssetScopeKind = "draft"
 )
 
 // 插件资源空间。
@@ -29,6 +31,7 @@ type PluginAssetScope struct {
 	PluginId      string               `json:"pluginId,omitempty"`           // 插件业务ID。
 	PluginVersion string               `json:"version,omitempty"`            // 插件版本号。
 	ReleaseId     int64                `json:"releaseId,string,omitempty"`   // 发布记录ID。
+	DraftId       string               `json:"draftId,omitempty"`            // 草稿ID。
 }
 
 // Validate 校验资源空间是否合法。
@@ -50,6 +53,13 @@ func (s PluginAssetScope) Validate() error {
 			return err
 		}
 		if err := ValidatePluginAssetPathSegment("pluginVersion", s.PluginVersion); err != nil {
+			return err
+		}
+	case PluginAssetScopeDraft:
+		if s.ReleaseId <= 0 {
+			return errors.New("releaseId不能为空")
+		}
+		if err := ValidatePluginAssetPathSegment("draftId", s.DraftId); err != nil {
 			return err
 		}
 	default:
@@ -85,7 +95,6 @@ func (s PluginAssetScope) StaticPathParts() []string {
 	case PluginAssetScopeFact:
 		return []string{
 			string(PluginAssetScopeFact),
-			strings.TrimSpace(s.OwnerKey),
 			strconv.FormatInt(s.FactAssetId, 10),
 		}
 	case PluginAssetScopeDev:
@@ -94,6 +103,13 @@ func (s PluginAssetScope) StaticPathParts() []string {
 			strings.TrimSpace(s.OwnerKey),
 			strings.TrimSpace(s.PluginId),
 			strings.TrimSpace(s.PluginVersion),
+		}
+	case PluginAssetScopeDraft:
+		return []string{
+			string(PluginAssetScopeDraft),
+			strings.TrimSpace(s.OwnerKey),
+			strconv.FormatInt(s.ReleaseId, 10),
+			strings.TrimSpace(s.DraftId),
 		}
 	default:
 		return []string{}

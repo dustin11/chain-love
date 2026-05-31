@@ -28,6 +28,7 @@ var tables = []interface{}{
 	&ds.PluginAsset{},
 	&ds.PluginAssetBinding{},
 	&ds.PluginInstanceState{},
+	&ds.PluginInstanceDraft{},
 
 	&active.Like{},
 

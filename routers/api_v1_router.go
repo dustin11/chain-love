@@ -90,15 +90,20 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		pluginAssetRouter.POST("/fact/:factAssetId/upload", context.WithAppContext(ds_api.PluginAssetUploadFact))
 		pluginAssetRouter.POST("/fact/:factAssetId/import-image", context.WithAppContext(ds_api.PluginAssetImportImageFact))
+		pluginAssetRouter.POST("/fact/:factAssetId/commit", context.WithAppContext(ds_api.PluginAssetCommitFact))
 		pluginAssetRouter.PUT("/fact/:factAssetId/state", context.WithAppContext(ds_api.PluginAssetSaveStateFact))
 		pluginAssetRouter.DELETE("/fact/:factAssetId/assets/:assetId", context.WithAppContext(ds_api.PluginAssetDeleteFact))
 		pluginAssetRouter.POST("/fact/:factAssetId/snapshot/rebuild", context.WithAppContext(ds_api.PluginAssetRebuildSnapshotFact))
 
 		pluginAssetRouter.POST("/dev/:pluginId/:version/upload", context.WithAppContext(ds_api.PluginAssetUploadDev))
 		pluginAssetRouter.POST("/dev/:pluginId/:version/import-image", context.WithAppContext(ds_api.PluginAssetImportImageDev))
+		pluginAssetRouter.POST("/dev/:pluginId/:version/commit", context.WithAppContext(ds_api.PluginAssetCommitDev))
 		pluginAssetRouter.PUT("/dev/:pluginId/:version/state", context.WithAppContext(ds_api.PluginAssetSaveStateDev))
 		pluginAssetRouter.DELETE("/dev/:pluginId/:version/assets/:assetId", context.WithAppContext(ds_api.PluginAssetDeleteDev))
 		pluginAssetRouter.POST("/dev/:pluginId/:version/snapshot/rebuild", context.WithAppContext(ds_api.PluginAssetRebuildSnapshotDev))
+
+		pluginAssetRouter.POST("/draft/:releaseId/:draftId/commit", context.WithAppContext(ds_api.PluginAssetCommitDraft))
+		pluginAssetRouter.GET("/draft/:releaseId/active", context.WithAppContext(ds_api.PluginAssetGetActiveDraft))
 
 		pluginAssetRouter.POST("/:factAssetId/upload", context.WithAppContext(ds_api.PluginAssetUpload))
 		pluginAssetRouter.POST("/:factAssetId/import-image", context.WithAppContext(ds_api.PluginAssetImportImage))

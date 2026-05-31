@@ -242,6 +242,8 @@ type MintAssetRequest struct {
 	Inputs map[string]map[string]int64 `json:"inputs"`
 	// 插件属性面板参数。
 	PluginOptions map[string]any `json:"pluginOptions,omitempty"`
+	// 铸造前插件资源草稿ID。
+	PluginAssetDraftId string `json:"pluginAssetDraftId,omitempty"`
 	// 前端计算后的总支付金额。
 	TotalPaid string `json:"totalPaid"`
 	// 链 ID。

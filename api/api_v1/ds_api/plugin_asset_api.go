@@ -2,6 +2,7 @@ package ds_api
 
 import (
 	"encoding/json"
+	"mime/multipart"
 	"strconv"
 
 	"senspace/pkg/app"
@@ -24,6 +25,24 @@ func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstan
 		req.Bindings[index] = binding
 	}
 	return req
+}
+
+func bindPluginAssetCommitInput(ctx *contextx.AppContext) (ds_service.PluginAssetCommitInput, map[string]*multipart.FileHeader) {
+	var req ds_service.PluginAssetCommitInput
+	payload := ctx.Gin.PostForm("payload")
+	e.PanicIfParameterError(payload == "", "payload不能为空")
+	err := json.Unmarshal([]byte(payload), &req)
+	e.PanicParameterError(err)
+	files := map[string]*multipart.FileHeader{}
+	form, err := ctx.Gin.MultipartForm()
+	if err == nil && form != nil {
+		for key, list := range form.File {
+			if len(list) > 0 {
+				files[key] = list[0]
+			}
+		}
+	}
+	return req, files
 }
 
 // 素材库图片导入请求。
@@ -162,6 +181,73 @@ func PluginAssetSaveStateDev(ctx *contextx.AppContext) {
 	snapshot, err := ds_service.SavePluginInstanceStateInScope(*ctx.User, scope, bindPluginAssetStateInput(ctx))
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(snapshot))
+}
+
+// @Summary 提交 fact 插件实例资源和状态
+// @Tags 插件资源
+// @Param factAssetId path string true "插件资产实例ID"
+// @Param payload formData string true "提交参数JSON"
+// @Param files formData file false "本地资源文件"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/fact/{factAssetId}/commit [post]
+func PluginAssetCommitFact(ctx *contextx.AppContext) {
+	factAssetId, err := strconv.ParseInt(ctx.Gin.Param("factAssetId"), 10, 64)
+	e.PanicParameterError(err)
+	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
+	e.PanicServerErr(err)
+	req, files := bindPluginAssetCommitInput(ctx)
+	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// @Summary 提交 dev 插件实例资源和状态
+// @Tags 插件资源
+// @Param pluginId path string true "插件ID"
+// @Param version path string true "插件版本"
+// @Param payload formData string true "提交参数JSON"
+// @Param files formData file false "本地资源文件"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/dev/{pluginId}/{version}/commit [post]
+func PluginAssetCommitDev(ctx *contextx.AppContext) {
+	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, ctx.Gin.Param("pluginId"), ctx.Gin.Param("version"))
+	e.PanicServerErr(err)
+	req, files := bindPluginAssetCommitInput(ctx)
+	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// @Summary 提交 draft 插件实例资源和状态
+// @Tags 插件资源
+// @Param releaseId path string true "发布记录ID"
+// @Param draftId path string true "草稿ID"
+// @Param payload formData string true "提交参数JSON"
+// @Param files formData file false "本地资源文件"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/draft/{releaseId}/{draftId}/commit [post]
+func PluginAssetCommitDraft(ctx *contextx.AppContext) {
+	releaseId, err := strconv.ParseInt(ctx.Gin.Param("releaseId"), 10, 64)
+	e.PanicParameterError(err)
+	scope, err := ds_service.ResolveDraftPluginAssetScope(*ctx.User, releaseId, ctx.Gin.Param("draftId"))
+	e.PanicServerErr(err)
+	req, files := bindPluginAssetCommitInput(ctx)
+	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// @Summary 获取当前用户的活动 draft 插件实例资源
+// @Tags 插件资源
+// @Param releaseId path string true "发布记录ID"
+// @Security ApiKeyAuth
+// @Router /api/v1/plugin-assets/draft/{releaseId}/active [get]
+func PluginAssetGetActiveDraft(ctx *contextx.AppContext) {
+	releaseId, err := strconv.ParseInt(ctx.Gin.Param("releaseId"), 10, 64)
+	e.PanicParameterError(err)
+	result, err := ds_service.GetActivePluginInstanceDraft(*ctx.User, releaseId)
+	e.PanicServerErr(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
 // @Summary 删除 fact 插件实例资源

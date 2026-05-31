@@ -18,6 +18,7 @@ import (
 	"senspace/domain/task"
 	"senspace/pkg/app/security"
 	"senspace/pkg/setting"
+	"senspace/service/ds_service"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -467,6 +468,25 @@ func MintReleaseAsset(user security.JwtUser, releaseIdRaw string, req MintAssetR
 	})
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.PluginAssetDraftId) != "" {
+		factAssetIds := make([]int64, 0, len(response.Assets))
+		for _, asset := range response.Assets {
+			factAssetId, err := strconv.ParseInt(asset.AssetId, 10, 64)
+			if err != nil {
+				if rollbackErr := rollbackCommittedMintArtifacts(committedMint); rollbackErr != nil {
+					return nil, fmt.Errorf("插件资源草稿归档失败: %w；补偿回滚失败: %v", err, rollbackErr)
+				}
+				return nil, err
+			}
+			factAssetIds = append(factAssetIds, factAssetId)
+		}
+		if err := ds_service.ArchiveDraftPluginAssetsToFactAssets(user, releaseId, req.PluginAssetDraftId, factAssetIds, pluginOptions.Data); err != nil {
+			if rollbackErr := rollbackCommittedMintArtifacts(committedMint); rollbackErr != nil {
+				return nil, fmt.Errorf("插件资源草稿归档失败: %w；补偿回滚失败: %v", err, rollbackErr)
+			}
+			return nil, err
+		}
 	}
 	if err := rebuildOwnerFactorySnapshots(ownerKey); err != nil {
 		if rollbackErr := rollbackCommittedMintArtifacts(committedMint); rollbackErr != nil {
@@ -1122,6 +1142,11 @@ func rollbackCommittedMintArtifacts(ctx committedMintContext) error {
 
 	if err := removeMintedStaticFiles(mintedAssets); err != nil {
 		return err
+	}
+	for _, asset := range mintedAssets {
+		if err := ds_service.DeleteFactPluginAssetArtifacts(asset.Id); err != nil {
+			return err
+		}
 	}
 	if removeOwnerSnapshots {
 		return removeOwnerFactorySnapshotArtifacts(ctx.OwnerKey)
