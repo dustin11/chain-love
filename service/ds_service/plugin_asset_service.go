@@ -344,7 +344,6 @@ func saveProcessedPluginImageAsset(user security.JwtUser, scope ds.PluginAssetSc
 			CollectionKey: collectionKey,
 			SortOrder:     sortOrder,
 			ConfigJson:    "{}",
-			Status:        ds.PluginAssetBindingStatusActive,
 		}
 		binding.CreatedBy = user.Id
 		binding.UpdatedBy = user.Id
@@ -538,7 +537,6 @@ func ArchiveDraftPluginAssetsToFactAssets(user security.JwtUser, releaseId int64
 	}
 	var draftBindings []ds.PluginAssetBinding
 	if err := applyScopeFilter(domain.Db.Model(&ds.PluginAssetBinding{}), draftScope).
-		Where("status = ?", ds.PluginAssetBindingStatusActive).
 		Order("collection_key ASC, sort_order ASC, id ASC").
 		Find(&draftBindings).Error; err != nil {
 		return err
@@ -1049,11 +1047,7 @@ func replaceLocalPluginAssetIDValue(value interface{}, localAssetIds map[string]
 
 func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAssetScope, bindings []PluginAssetBindingInput) error {
 	if err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
-		Where("status = ?", ds.PluginAssetBindingStatusActive).
-		Updates(map[string]interface{}{
-			"status":     ds.PluginAssetBindingStatusDeleted,
-			"updated_by": userID,
-		}).Error; err != nil {
+		Delete(&ds.PluginAssetBinding{}).Error; err != nil {
 		return err
 	}
 	for _, input := range bindings {
@@ -1082,7 +1076,6 @@ func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAsset
 			CollectionKey: collectionKey,
 			SortOrder:     input.SortOrder,
 			ConfigJson:    normalizeRawJSON(input.Config),
-			Status:        ds.PluginAssetBindingStatusActive,
 		}
 		binding.CreatedBy = userID
 		binding.UpdatedBy = userID
@@ -1173,7 +1166,7 @@ func lockPluginInstanceState(tx *gorm.DB, scope ds.PluginAssetScope) (ds.PluginI
 func nextPluginAssetSortOrder(tx *gorm.DB, scope ds.PluginAssetScope, collectionKey string) (int, error) {
 	var maxOrder int
 	err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
-		Where("collection_key = ? AND status = ?", collectionKey, ds.PluginAssetBindingStatusActive).
+		Where("collection_key = ?", collectionKey).
 		Select("COALESCE(MAX(sort_order), 0)").
 		Scan(&maxOrder).Error
 	return maxOrder + 10, err
@@ -1189,7 +1182,6 @@ func buildPluginAssetSnapshotPayload(db *gorm.DB, scope ds.PluginAssetScope) (*p
 	}
 	var bindings []ds.PluginAssetBinding
 	if err := applyScopeFilter(db.Model(&ds.PluginAssetBinding{}), scope).
-		Where("status = ?", ds.PluginAssetBindingStatusActive).
 		Order("collection_key ASC, sort_order ASC, id ASC").
 		Find(&bindings).Error; err != nil {
 		return nil, nil, 0, err

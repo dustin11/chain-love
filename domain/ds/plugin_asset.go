@@ -12,16 +12,6 @@ const (
 	PluginAssetStatusDeleted PluginAssetStatus = "deleted"
 )
 
-// 插件资源绑定状态。
-type PluginAssetBindingStatus string
-
-const (
-	// 绑定可正常使用。
-	PluginAssetBindingStatusActive PluginAssetBindingStatus = "active"
-	// 绑定已删除，静态状态不再输出。
-	PluginAssetBindingStatusDeleted PluginAssetBindingStatus = "deleted"
-)
-
 // 用户插件运行时上传的资源文件。
 type PluginAsset struct {
 	Id            uint64               `json:"id,string" gorm:"primaryKey;autoIncrement:false;comment:资源ID"`                                                                                            // 资源ID。
@@ -54,19 +44,18 @@ func (PluginAsset) TableName() string {
 
 // 资源在插件实例中的展示配置。
 type PluginAssetBinding struct {
-	Id            uint64                   `json:"id,string" gorm:"primaryKey;autoIncrement;comment:绑定ID"`                                                       // 绑定ID。
-	ScopeKind     PluginAssetScopeKind     `json:"scopeKind" gorm:"type:varchar(16);not null;index:idx_plugin_asset_binding_scope,priority:1;comment:资源空间类型"`    // 资源空间类型。
-	OwnerKey      string                   `json:"ownerKey" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_scope,priority:2;comment:钱包索引键"`     // 钱包索引键。
-	FactAssetId   *int64                   `json:"factAssetId,string,omitempty" gorm:"index:idx_plugin_asset_binding_scope,priority:3;comment:插件资产实例ID"`         // 插件资产实例ID。
-	PluginId      string                   `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_scope,priority:4;comment:插件业务ID"`    // 插件业务ID。
-	PluginVersion string                   `json:"pluginVersion" gorm:"type:varchar(64);not null;index:idx_plugin_asset_binding_scope,priority:5;comment:插件版本号"` // 插件版本号。
-	ReleaseId     *int64                   `json:"releaseId,string,omitempty" gorm:"index:idx_plugin_asset_binding_release;comment:发布记录ID"`                      // 发布记录ID。
-	DraftId       string                   `json:"draftId,omitempty" gorm:"type:varchar(128);index:idx_plugin_asset_binding_draft;comment:草稿ID"`                 // 草稿ID。
-	AssetId       uint64                   `json:"assetId,string" gorm:"not null;index:idx_plugin_asset_binding_asset;comment:资源ID"`                             // 资源ID。
-	CollectionKey string                   `json:"collectionKey" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_collection;comment:资源集合键"`      // 资源集合键。
-	SortOrder     int                      `json:"sortOrder" gorm:"not null;index:idx_plugin_asset_binding_order;comment:展示排序"`                                  // 展示排序。
-	ConfigJson    string                   `json:"configJson,omitempty" gorm:"type:json;comment:展示配置JSON"`                                                       // 展示配置JSON。
-	Status        PluginAssetBindingStatus `json:"status" gorm:"type:varchar(32);not null;index:idx_plugin_asset_binding_status;comment:绑定状态"`                   // 绑定状态。
+	Id            uint64               `json:"id,string" gorm:"primaryKey;autoIncrement;comment:绑定ID"`                                                       // 绑定ID。
+	ScopeKind     PluginAssetScopeKind `json:"scopeKind" gorm:"type:varchar(16);not null;index:idx_plugin_asset_binding_scope,priority:1;comment:资源空间类型"`    // 资源空间类型。
+	OwnerKey      string               `json:"ownerKey" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_scope,priority:2;comment:钱包索引键"`     // 钱包索引键。
+	FactAssetId   *int64               `json:"factAssetId,string,omitempty" gorm:"index:idx_plugin_asset_binding_scope,priority:3;comment:插件资产实例ID"`         // 插件资产实例ID。
+	PluginId      string               `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_scope,priority:4;comment:插件业务ID"`    // 插件业务ID。
+	PluginVersion string               `json:"pluginVersion" gorm:"type:varchar(64);not null;index:idx_plugin_asset_binding_scope,priority:5;comment:插件版本号"` // 插件版本号。
+	ReleaseId     *int64               `json:"releaseId,string,omitempty" gorm:"index:idx_plugin_asset_binding_release;comment:发布记录ID"`                      // 发布记录ID。
+	DraftId       string               `json:"draftId,omitempty" gorm:"type:varchar(128);index:idx_plugin_asset_binding_draft;comment:草稿ID"`                 // 草稿ID。
+	AssetId       uint64               `json:"assetId,string" gorm:"not null;index:idx_plugin_asset_binding_asset;comment:资源ID"`                             // 资源ID。
+	CollectionKey string               `json:"collectionKey" gorm:"type:varchar(128);not null;index:idx_plugin_asset_binding_collection;comment:资源集合键"`      // 资源集合键。
+	SortOrder     int                  `json:"sortOrder" gorm:"not null;index:idx_plugin_asset_binding_order;comment:展示排序"`                                  // 展示排序。
+	ConfigJson    string               `json:"configJson,omitempty" gorm:"type:json;comment:展示配置JSON"`                                                       // 展示配置JSON。
 	domain.CreatInfo
 	domain.UpdateInfo
 }
