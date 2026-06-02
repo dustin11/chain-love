@@ -116,11 +116,22 @@ func setAuthCookies(ctx *gin.Context, access, refresh string) {
 	ctx.Header("X-Senspace-Auth-Cookie-Secure", boolHeader(secure))
 	logging.Info("set auth cookies secure=", secure, " sameSite=", sameSite, " forwardedProto=", ctx.GetHeader("X-Forwarded-Proto"), " host=", ctx.Request.Host)
 
+	// 清理历史上 path=/ 的 access_token，避免它继续污染静态资源请求。
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     consts.ACCESS_TOKEN,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   -1,
+	})
+
 	// Access token cookie
 	http.SetCookie(ctx.Writer, &http.Cookie{
 		Name:     consts.ACCESS_TOKEN,
 		Value:    access,
-		Path:     "/", // 若需更严格限制，改为 "/api/v1/auth" 或其它路径
+		Path:     "/api/v1",
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
@@ -161,6 +172,15 @@ func clearAuthCookies(c *gin.Context) {
 		Name:     consts.ACCESS_TOKEN,
 		Value:    "",
 		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   -1,
+	})
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     consts.ACCESS_TOKEN,
+		Value:    "",
+		Path:     "/api/v1",
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,

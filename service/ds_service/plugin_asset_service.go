@@ -1380,7 +1380,13 @@ func writeFileAtomic(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o644)
 }
 
 func verifyDevPluginWorkspaceAccess(user security.JwtUser, pluginId string) error {
