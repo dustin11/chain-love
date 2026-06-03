@@ -115,10 +115,5 @@ func CurrentEnv() string {
 
 // IsDevLikeEnv 判断当前环境是否属于开发态环境。
 func IsDevLikeEnv() bool {
-	switch CurrentEnv() {
-	case "dev", "ldev", "wdev":
-		return true
-	default:
-		return false
-	}
+	return consts.IsDevLikeEnv(CurrentEnv())
 }

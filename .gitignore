@@ -30,6 +30,7 @@ runtime/
 go.work
 go.work.sum
 .gocache
+.wdev-go-cache/
 
 # env file
 .env

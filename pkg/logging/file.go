@@ -1,11 +1,11 @@
 package logging
 
 import (
-	"senspace/pkg/setting"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"senspace/pkg/setting"
 	"time"
 )
 
@@ -33,11 +33,19 @@ func openLogFile(filePath string) *os.File {
 	case os.IsNotExist(err):
 		mkDir()
 	case os.IsPermission(err):
+		if setting.IsDevLikeEnv() {
+			log.Printf("logging fallback to stdout, permission denied for %s: %v", filePath, err)
+			return nil
+		}
 		log.Fatalf("Permission :%v", err)
 	}
 
 	handle, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		if setting.IsDevLikeEnv() {
+			log.Printf("logging fallback to stdout, failed to open %s: %v", filePath, err)
+			return nil
+		}
 		log.Fatalf("Fail to OpenFile :%v", err)
 	}
 

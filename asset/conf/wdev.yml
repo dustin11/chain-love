@@ -1,0 +1,48 @@
+app:
+  name: senspace
+  allowedCORSOrigins: [http://localhost:3000, http://127.0.0.1:3000, http://localhost:8081, http://127.0.0.1:8081]
+  pagesize: 10
+  jwtsecret: 233
+  prefixurl: http://127.0.0.1:8000
+  runtimerootpath: runtime/
+  pluginSourceRoot: F:\project\senspace\runtime\wdev\plugin-source\
+  pluginRuntimeRoot: F:\project\senspace\runtime\wdev\plugin-runtime\
+  pluginBuilderImage: senspace/plugin-builder:latest
+  pluginBuildTimeoutSec: 120
+  pluginBuildCpu: "1.5"
+  pluginBuildMemory: 512m
+  pluginBuildPidsLimit: 128
+  pluginBuildTmpfs: /tmp:rw,noexec,nosuid,size=256m
+  imageMaxSize: 20024000
+  imageExts: [jpg,jpeg,png,gif]
+  logSavePath: F:\project\senspace\runtime\wdev\logs\
+  logSaveName: log
+  logFileExt: log
+  timeFormat: 20060102
+
+  filePath:
+    book: F:\project\senspace\runtime\wdev\book\
+    font: F:\project\senspace\runtime\wdev\font\
+    image: F:\project\senspace\runtime\wdev\image\
+    plugin: F:\project\senspace\runtime\wdev\plugin\
+    factory: F:\project\senspace\runtime\wdev\factory\
+    pluginAssets: F:\project\senspace\runtime\wdev\plugin-assets\
+server:
+  runmode: debug
+  port: 9010
+  readtimeout: 60
+  writetimeout: 60
+database:
+  type: mysql
+  user: root
+  password: smart@vserp
+  host: ${s90}:3307
+  name: senspace
+redis:
+  host: ${s90}:6379
+  password:
+  maxIdle: 30
+  maxActive: 30
+  idleTimeout: 200
+
+s90: localhost

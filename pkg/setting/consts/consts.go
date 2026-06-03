@@ -31,3 +31,12 @@ func Getenv() string {
 	}
 	return env
 }
+
+func IsDevLikeEnv(env string) bool {
+	switch env {
+	case "dev", "ldev", "wdev":
+		return true
+	default:
+		return false
+	}
+}

@@ -18,8 +18,9 @@ import (
 )
 
 func init() {
-	if consts.Getenv() != "dev" {
-		log.Println("=============>env:" + consts.Getenv())
+	env := consts.Getenv()
+	if !consts.IsDevLikeEnv(env) {
+		log.Println("=============>env:" + env)
 		gin.SetMode(gin.ReleaseMode)
 		asset.Restore()
 	}
