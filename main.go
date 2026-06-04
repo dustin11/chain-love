@@ -31,7 +31,9 @@ func init() {
 	if err := d_util.EnsureDatabaseExists(setting.Config.Database.Name); err != nil {
 		log.Fatalf("ensure database exists error: %v", err)
 	}
-	domain.Setup()
+	if err := domain.Setup(); err != nil {
+		log.Fatalf("database setup failed: %v", err)
+	}
 	if domain.Db == nil {
 		log.Fatal("database setup failed: domain.Db is nil")
 	}

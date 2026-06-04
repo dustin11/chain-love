@@ -14,6 +14,11 @@ import (
 
 var Db *gorm.DB
 
+const (
+	initialConnectMaxAttempts = 30
+	initialConnectRetryDelay  = 2 * time.Second
+)
+
 type CreatInfo struct {
 	CreatedAt time.Time `json:"-" gorm:"autoCreateTime"`
 	CreatedBy uint64    `json:"-"`
@@ -24,7 +29,7 @@ type UpdateInfo struct {
 	UpdatedBy uint64    `json:"-"`
 }
 
-func Setup() {
+func Setup() error {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		setting.Config.Database.User,
 		setting.Config.Database.Password,
@@ -37,10 +42,10 @@ func Setup() {
 		})
 	}
 
-	db, err := open()
+	db, err := openWithRetry(open, initialConnectMaxAttempts, initialConnectRetryDelay)
 	if err != nil {
 		logging.Error("mysql open failed", err)
-		return
+		return err
 	}
 	Db = db
 
@@ -57,6 +62,8 @@ func Setup() {
 			}
 		}
 	}()
+
+	return nil
 }
 
 // configurePool 将通用的连接池设置提取出来，方便重连时复用
@@ -81,6 +88,31 @@ func reconnect(open func() (*gorm.DB, error)) {
 		logging.Error("mysql reconnect failed", err)
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func openWithRetry(open func() (*gorm.DB, error), maxAttempts int, delay time.Duration) (*gorm.DB, error) {
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+	if delay <= 0 {
+		delay = time.Second
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		db, err := open()
+		if err == nil {
+			return db, nil
+		}
+		lastErr = err
+		if attempt == maxAttempts {
+			break
+		}
+		logging.Warn(fmt.Sprintf("mysql open attempt %d/%d failed, retrying in %s", attempt, maxAttempts, delay), err)
+		time.Sleep(delay)
+	}
+
+	return nil, fmt.Errorf("open mysql after %d attempts: %w", maxAttempts, lastErr)
 }
 
 // 需要从api 传入ctx.Gin.Request.Context() 太麻烦，不用

@@ -122,7 +122,7 @@ func TestExecuteReleaseBuildWritesReleaseSnapshotForArtifactPlugin(t *testing.T)
 	setting.Config.App.FilePath.Factory = filepath.Join(t.TempDir(), "factory")
 	setting.Config.App.RuntimeRootPath = filepath.Join(t.TempDir(), "runtime")
 	require.NoError(t, d_util.EnsureDatabaseExists(setting.Config.Database.Name))
-	domain.Setup()
+	require.NoError(t, domain.Setup())
 	require.NotNil(t, domain.Db)
 	d_util.InitTable(domain.Db)
 
@@ -215,7 +215,7 @@ func TestPublishPluginCleansSnapshotWhenVersionAlreadyPublished(t *testing.T) {
 	setting.Config.App.PluginSourceRoot = filepath.Join(tempRoot, "runtime", "plugin-source")
 	setting.Config.App.PluginRuntimeRoot = filepath.Join(tempRoot, "runtime", "plugin-runtime")
 	require.NoError(t, d_util.EnsureDatabaseExists(setting.Config.Database.Name))
-	domain.Setup()
+	require.NoError(t, domain.Setup())
 	require.NotNil(t, domain.Db)
 	d_util.InitTable(domain.Db)
 

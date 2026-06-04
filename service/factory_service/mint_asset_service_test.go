@@ -677,7 +677,7 @@ func setupMintAssetServiceTest(t *testing.T) mintAssetServiceTestEnv {
 	setting.Config.App.RuntimeRootPath = filepath.Join(t.TempDir(), "runtime")
 
 	require.NoError(t, d_util.EnsureDatabaseExists(setting.Config.Database.Name))
-	domain.Setup()
+	require.NoError(t, domain.Setup())
 	require.NotNil(t, domain.Db, "无法连接测试数据库，请确认 ldev MySQL 运行在 127.0.0.1:3307")
 	d_util.InitTable(domain.Db)
 
