@@ -188,7 +188,37 @@ e.PanicServerErrTipMsg(err, "重命名失败")
 app.Response(c, e.Success)
 ```
 
-## 4. 允许的错误处理风格
+## 4. 业务错误处理规范
+
+service 层涉及参数校验、权限校验、数据不存在、状态冲突时，优先返回 `pkg/bizerr` 中的统一业务错误。
+
+优先使用：
+
+- `bizerr.Parameter(message)`
+- `bizerr.Unauthorized()`
+- `bizerr.Forbidden(message)`
+- `bizerr.NotFound(message)`
+- `bizerr.Conflict(message)`
+
+使用建议：
+
+- 需要通用提示时，直接传空字符串，让 `bizerr` 使用统一默认文案。
+- 只有在确实需要更具体提示时，才传自定义 `message`。
+- 不要在新的 service 代码里重复声明同语义错误变量，也不要散落 `errors.New(...)` 表达通用业务错误。
+
+API 层拿到 `bizerr` 后，优先通过统一转换方法处理：
+
+- `bizerr.PanicHTTP(err)`
+
+示例：
+
+```go
+err = dev_service.DeletePlugin(c.User, req.PluginId)
+bizerr.PanicHTTP(err)
+app.Response(c.Gin, e.Success)
+```
+
+## 5. 允许的错误处理风格
 
 - 允许 service 内部继续返回 `error`，由 API 层统一转成 `e.*`。
 - 允许 service 内部在项目已有模式下直接 `panic`，但新代码优先保持边界清晰。
@@ -198,7 +228,7 @@ app.Response(c, e.Success)
   - 自行 `c.JSON(...)` 输出非统一格式错误
   - 同一层混用多套风格
 
-## 5. 响应风格规范
+## 6. 响应风格规范
 
 - 查询成功并返回数据：`app.Response(c, e.SuccessData(data))`
 - 仅表示成功：`app.Response(c, e.Success)`

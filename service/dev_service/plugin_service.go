@@ -13,8 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	"senspace/domain/ds"
 	"senspace/domain/dev"
 	"senspace/domain/dev/vo"
+	"senspace/domain/factory"
+	"senspace/pkg/bizerr"
+	"senspace/pkg/app/security"
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/e"
 	"senspace/pkg/setting"
@@ -234,12 +238,55 @@ func Delete(pluginId string, relPath string) error {
 	return os.RemoveAll(fullPath)
 }
 
-func DeletePlugin(pluginId string) error {
-	if id, err := strconv.ParseInt(pluginId, 10, 64); err == nil {
-		dev.Plugin{Id: id}.Delete()
+func DeletePlugin(user *security.JwtUser, pluginId string) error {
+	if user == nil || user.Id == 0 {
+		return bizerr.Unauthorized()
 	}
-	rootPath := getPluginRoot(pluginId)
+
+	normalizedPluginID := strings.TrimSpace(pluginId)
+	if normalizedPluginID == "" {
+		return bizerr.Parameter("")
+	}
+
+	id, err := strconv.ParseInt(normalizedPluginID, 10, 64)
+	if err != nil || id <= 0 {
+		return bizerr.NotFound("")
+	}
+
+	plugin := dev.Plugin{Id: id}.GetById()
+	if plugin.Id == 0 {
+		return bizerr.NotFound("")
+	}
+	if plugin.CreatedBy != user.Id {
+		return bizerr.Forbidden("")
+	}
+
+	if err := removeDevPluginAssetDir(factory.OwnerIndexKey(user.Addr), normalizedPluginID); err != nil {
+		return err
+	}
+
+	plugin.Delete()
+	rootPath := getPluginRoot(normalizedPluginID)
 	return os.RemoveAll(rootPath)
+}
+
+func removeDevPluginAssetDir(ownerKey string, pluginId string) error {
+	normalizedOwnerKey := strings.TrimSpace(ownerKey)
+	if normalizedOwnerKey == "" {
+		return nil
+	}
+	normalizedPluginID := strings.TrimSpace(pluginId)
+	if normalizedPluginID == "" {
+		return nil
+	}
+	if err := ds.ValidatePluginAssetPathSegment("ownerKey", normalizedOwnerKey); err != nil {
+		return err
+	}
+	if err := ds.ValidatePluginAssetPathSegment("pluginId", normalizedPluginID); err != nil {
+		return err
+	}
+	target := filepath.Join(ds.PluginAssetsRoot(), string(ds.PluginAssetScopeDev), normalizedOwnerKey, normalizedPluginID)
+	return os.RemoveAll(target)
 }
 
 func SavePlugin(ctx *contextx.AppContext, pluginId string, form *multipart.Form) (interface{}, error) {

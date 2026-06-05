@@ -4,6 +4,7 @@ import (
 	"senspace/domain/dev"
 	"senspace/pkg/app"
 	"senspace/pkg/app/contextx"
+	"senspace/pkg/bizerr"
 	"senspace/pkg/e"
 	"senspace/service/dev_service"
 	"strconv"
@@ -87,15 +88,16 @@ func Delete(c *gin.Context) {
 	app.Response(c, e.Success)
 }
 
-func DeletePlugin(c *gin.Context) {
+func DeletePlugin(c *contextx.AppContext) {
 	var req struct {
 		PluginId string `json:"pluginId"`
 	}
-	err := c.ShouldBindJSON(&req)
+	e.PanicIfUnauthorizedErr(c.User == nil, "无授权信息！")
+	err := c.Gin.ShouldBindJSON(&req)
 	e.PanicParameterError(err)
-	err = dev_service.DeletePlugin(req.PluginId)
-	e.PanicServerErr(err)
-	app.Response(c, e.Success)
+	err = dev_service.DeletePlugin(c.User, req.PluginId)
+	bizerr.PanicHTTP(err)
+	app.Response(c.Gin, e.Success)
 }
 
 func SavePlugin(c *contextx.AppContext) {
