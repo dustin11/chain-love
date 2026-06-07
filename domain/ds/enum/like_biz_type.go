@@ -7,11 +7,13 @@ type LikeBizType uint8
 const (
 	DeskSidingAlbum LikeBizType = 1
 	DeskSidingNote  LikeBizType = 3
+	PluginComment   LikeBizType = 4
 )
 
 var likeBizTypeDesc = map[LikeBizType]string{
 	DeskSidingAlbum: "桌靠相册",
 	DeskSidingNote:  "桌靠笔记",
+	PluginComment:   "插件评论",
 }
 
 func (v LikeBizType) String() string {

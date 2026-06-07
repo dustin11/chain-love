@@ -29,6 +29,7 @@ var tables = []interface{}{
 	&ds.PluginAssetBinding{},
 	&ds.PluginInstanceState{},
 	&ds.PluginInstanceDraft{},
+	&ds.PluginComment{},
 
 	&active.Like{},
 

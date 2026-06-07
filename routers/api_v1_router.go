@@ -6,6 +6,7 @@ import (
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
+	"senspace/api/api_v1/plugin_comment_api"
 	"senspace/api/api_v1/sys_api"
 	"senspace/api/api_v1/task_api"
 	"senspace/middleware"
@@ -135,6 +136,13 @@ func SetupApiV1Router(router *gin.Engine) {
 		pluginRouter.POST("/delete", dev_api.Delete)
 		pluginRouter.POST("/deletePlugin", context.WithAppContext(dev_api.DeletePlugin))
 		pluginRouter.POST("/save", context.WithAppContext(dev_api.SavePlugin))
+	}
+	// 插件评论
+	pluginCommentRouter := apiRouter.Group("/plugin-comments")
+	{
+		pluginCommentRouter.POST("/list", context.WithAppContext(plugin_comment_api.ListComments))
+		pluginCommentRouter.POST("/create", context.WithAppContext(plugin_comment_api.CreateComment))
+		pluginCommentRouter.POST("/like", context.WithAppContext(plugin_comment_api.LikeComment))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")
