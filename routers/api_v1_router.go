@@ -51,6 +51,16 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		factoryPublicRouter.GET("/market", factory_api.GetPublicMarketList)
 	}
+	pluginCommentPublicRouter := router.Group(
+		"/api/v1/plugin-comments",
+		middleware.OptionalAuth(),
+	)
+	{
+		pluginCommentPublicRouter.POST(
+			"/list",
+			context.WithAppContext(plugin_comment_api.ListComments),
+		)
+	}
 
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
@@ -140,9 +150,9 @@ func SetupApiV1Router(router *gin.Engine) {
 	// 插件评论
 	pluginCommentRouter := apiRouter.Group("/plugin-comments")
 	{
-		pluginCommentRouter.POST("/list", context.WithAppContext(plugin_comment_api.ListComments))
 		pluginCommentRouter.POST("/create", context.WithAppContext(plugin_comment_api.CreateComment))
 		pluginCommentRouter.POST("/like", context.WithAppContext(plugin_comment_api.LikeComment))
+		pluginCommentRouter.POST("/cleanup", context.WithAppContext(plugin_comment_api.CleanupComments))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")

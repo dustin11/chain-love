@@ -47,7 +47,9 @@ func ListComments(req ListRequest, user *security.JwtUser) (*ListResult, error) 
 
 	query := tx.Model(&ds.PluginComment{}).Where("instance_id = ?", instanceId)
 	if strings.TrimSpace(req.Mode) == "current" {
-		if index, ok := anchorIndex(req.Anchor); ok {
+		if itemID := anchorItemID(req.Anchor); itemID != "" {
+			query = query.Where("anchor_item_id = ?", itemID)
+		} else if index, ok := anchorIndex(req.Anchor); ok {
 			query = query.Where("anchor_index = ?", index)
 		}
 	}
@@ -103,6 +105,7 @@ func CreateComment(req CreateRequest, user *security.JwtUser) (*CommentView, err
 		return nil, err
 	}
 	anchorIdx, hasIndex := anchorIndex(req.Anchor)
+	anchorItemID := anchorItemID(req.Anchor)
 	comment := ds.PluginComment{
 		InstanceId:      instanceId,
 		AnchorJson:      anchorJson,
@@ -114,6 +117,9 @@ func CreateComment(req CreateRequest, user *security.JwtUser) (*CommentView, err
 	}
 	if hasIndex {
 		comment.AnchorIndex = &anchorIdx
+	}
+	if anchorItemID != "" {
+		comment.AnchorItemId = &anchorItemID
 	}
 
 	if strings.TrimSpace(req.ParentId) != "" {
@@ -161,6 +167,108 @@ func CreateComment(req CreateRequest, user *security.JwtUser) (*CommentView, err
 	return &views[0], nil
 }
 
+// CleanupComments 级联删除插件评论及其点赞数据。
+func CleanupComments(req CleanupRequest, user *security.JwtUser) (*CleanupResult, error) {
+	tx, err := db()
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.Id == 0 {
+		return nil, errors.New("请先登录")
+	}
+	instanceID := strings.TrimSpace(req.InstanceId)
+	if instanceID == "" {
+		return nil, errors.New("instanceId不能为空")
+	}
+	if req.DeleteAll {
+		return cleanupAllInstanceComments(tx, instanceID)
+	}
+	if len(req.Items) == 0 {
+		return &CleanupResult{}, nil
+	}
+
+	commentIDs := make([]uint64, 0)
+	for _, item := range req.Items {
+		commentID := strings.TrimSpace(item.CommentId)
+		if commentID != "" {
+			ids, queryErr := listCommentSubtreeIDsByCommentID(
+				tx,
+				instanceID,
+				commentID,
+				user.Id,
+			)
+			if queryErr != nil {
+				return nil, queryErr
+			}
+			commentIDs = append(commentIDs, ids...)
+			continue
+		}
+
+		itemID := strings.TrimSpace(item.ItemId)
+		if itemID != "" {
+			ids, queryErr := listCommentIDsByItemID(tx, instanceID, itemID)
+			if queryErr != nil {
+				return nil, queryErr
+			}
+			commentIDs = append(commentIDs, ids...)
+			continue
+		}
+
+		if item.Index == nil {
+			continue
+		}
+		ids, queryErr := listCommentIDsByIndex(tx, instanceID, *item.Index)
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		commentIDs = append(commentIDs, ids...)
+	}
+
+	commentIDs = dedupeCommentIDs(commentIDs)
+	if len(commentIDs) == 0 {
+		return &CleanupResult{}, nil
+	}
+
+	replyCountAdjustments, err := buildReplyCountAdjustments(tx, commentIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &CleanupResult{}
+	err = tx.Transaction(func(trx *gorm.DB) error {
+		deletedLikeCount, deleteLikeErr := deleteCommentLikes(trx, commentIDs)
+		if deleteLikeErr != nil {
+			return deleteLikeErr
+		}
+		result.DeletedLikeCount = deletedLikeCount
+
+		deleteCommentsResult := trx.Where("id IN ?", commentIDs).Delete(&ds.PluginComment{})
+		if deleteCommentsResult.Error != nil {
+			return deleteCommentsResult.Error
+		}
+		result.DeletedCommentCount = deleteCommentsResult.RowsAffected
+
+		for rootID, delta := range replyCountAdjustments {
+			if delta <= 0 {
+				continue
+			}
+			if updateErr := trx.Model(&ds.PluginComment{}).
+				Where("id = ?", rootID).
+				UpdateColumn(
+					"reply_cnt",
+					gorm.Expr("GREATEST(reply_cnt - ?, 0)", delta),
+				).Error; updateErr != nil {
+				return updateErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // LikeComment 连续点赞一次，底层复用 act_like 的三次上限能力。
 func LikeComment(req LikeRequest, user *security.JwtUser) (*LikeResult, error) {
 	tx, err := db()
@@ -190,6 +298,40 @@ func LikeComment(req LikeRequest, user *security.JwtUser) (*LikeResult, error) {
 		return nil, err
 	}
 	return &LikeResult{Id: strconv.FormatUint(id, 10), LikeCnt: total, LikedByMe: liked}, nil
+}
+
+func cleanupAllInstanceComments(tx *gorm.DB, instanceID string) (*CleanupResult, error) {
+	var commentIDs []uint64
+	err := tx.Model(&ds.PluginComment{}).
+		Where("instance_id = ?", instanceID).
+		Pluck("id", &commentIDs).Error
+	if err != nil {
+		return nil, err
+	}
+	commentIDs = dedupeCommentIDs(commentIDs)
+	if len(commentIDs) == 0 {
+		return &CleanupResult{}, nil
+	}
+
+	result := &CleanupResult{}
+	err = tx.Transaction(func(trx *gorm.DB) error {
+		deletedLikeCount, deleteLikeErr := deleteCommentLikes(trx, commentIDs)
+		if deleteLikeErr != nil {
+			return deleteLikeErr
+		}
+		result.DeletedLikeCount = deletedLikeCount
+
+		deleteCommentsResult := trx.Where("id IN ?", commentIDs).Delete(&ds.PluginComment{})
+		if deleteCommentsResult.Error != nil {
+			return deleteCommentsResult.Error
+		}
+		result.DeletedCommentCount = deleteCommentsResult.RowsAffected
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func buildCommentViews(tx *gorm.DB, comments []ds.PluginComment, user *security.JwtUser) ([]CommentView, error) {
@@ -357,6 +499,138 @@ func anchorIndex(anchor CommentAnchor) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func anchorItemID(anchor CommentAnchor) string {
+	return anchorString(anchor, "itemId")
+}
+
+func listCommentIDsByItemID(tx *gorm.DB, instanceID string, itemID string) ([]uint64, error) {
+	var ids []uint64
+	err := tx.Model(&ds.PluginComment{}).
+		Where("instance_id = ? AND anchor_item_id = ?", instanceID, itemID).
+		Pluck("id", &ids).Error
+	return ids, err
+}
+
+func listCommentIDsByIndex(tx *gorm.DB, instanceID string, index int) ([]uint64, error) {
+	var ids []uint64
+	err := tx.Model(&ds.PluginComment{}).
+		Where("instance_id = ? AND anchor_index = ?", instanceID, index).
+		Pluck("id", &ids).Error
+	return ids, err
+}
+
+func listCommentSubtreeIDsByCommentID(
+	tx *gorm.DB,
+	instanceID string,
+	commentID string,
+	userID uint64,
+) ([]uint64, error) {
+	id, err := parseUintID(commentID)
+	if err != nil {
+		return nil, err
+	}
+
+	var comments []ds.PluginComment
+	if err := tx.Where("instance_id = ?", instanceID).Find(&comments).Error; err != nil {
+		return nil, err
+	}
+	if len(comments) == 0 {
+		return []uint64{}, nil
+	}
+
+	commentByID := make(map[uint64]ds.PluginComment, len(comments))
+	childrenByParent := make(map[uint64][]uint64)
+	for _, comment := range comments {
+		commentByID[comment.Id] = comment
+		if comment.ParentId != nil {
+			childrenByParent[*comment.ParentId] = append(childrenByParent[*comment.ParentId], comment.Id)
+		}
+	}
+
+	target, ok := commentByID[id]
+	if !ok {
+		return nil, errors.New("评论不存在")
+	}
+	if target.CreatedBy != userID {
+		return nil, errors.New("只能删除自己的评论")
+	}
+
+	ids := []uint64{id}
+	queue := []uint64{id}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		children := childrenByParent[current]
+		if len(children) == 0 {
+			continue
+		}
+		ids = append(ids, children...)
+		queue = append(queue, children...)
+	}
+	return dedupeCommentIDs(ids), nil
+}
+
+// 回复数量挂在根评论上，删除回复树时需要同步扣减。
+func buildReplyCountAdjustments(tx *gorm.DB, commentIDs []uint64) (map[uint64]int, error) {
+	if len(commentIDs) == 0 {
+		return map[uint64]int{}, nil
+	}
+
+	var comments []ds.PluginComment
+	if err := tx.Where("id IN ?", commentIDs).Find(&comments).Error; err != nil {
+		return nil, err
+	}
+
+	deletedSet := make(map[uint64]struct{}, len(commentIDs))
+	for _, id := range commentIDs {
+		deletedSet[id] = struct{}{}
+	}
+
+	adjustments := make(map[uint64]int)
+	for _, comment := range comments {
+		if comment.RootId == nil {
+			continue
+		}
+		if _, deletingRoot := deletedSet[*comment.RootId]; deletingRoot {
+			continue
+		}
+		adjustments[*comment.RootId]++
+	}
+	return adjustments, nil
+}
+
+func dedupeCommentIDs(ids []uint64) []uint64 {
+	if len(ids) <= 1 {
+		return ids
+	}
+	seen := make(map[uint64]struct{}, len(ids))
+	result := make([]uint64, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
+	return result
+}
+
+func deleteCommentLikes(tx *gorm.DB, commentIDs []uint64) (int64, error) {
+	if len(commentIDs) == 0 {
+		return 0, nil
+	}
+	deleteResult := tx.
+		Where("biz_type = ? AND data_id IN ?", uint8(enum.PluginComment), commentIDs).
+		Delete(&active.Like{})
+	if deleteResult.Error != nil {
+		return 0, deleteResult.Error
+	}
+	return deleteResult.RowsAffected, nil
 }
 
 func normalizePage(page int, pageSize int) (int, int) {

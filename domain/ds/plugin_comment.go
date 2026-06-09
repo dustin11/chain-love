@@ -5,8 +5,9 @@ import "senspace/domain"
 // PluginComment 插件通用评论。
 type PluginComment struct {
 	Id              uint64  `json:"id,string" gorm:"primaryKey;autoIncrement;comment:评论ID"`
-	InstanceId      string  `json:"instanceId" gorm:"type:varchar(128);not null;index:idx_plugin_comment_instance_created,priority:1;index:idx_plugin_comment_instance_index,priority:1;comment:插件实例ID"`
+	InstanceId      string  `json:"instanceId" gorm:"type:varchar(128);not null;index:idx_plugin_comment_instance_created,priority:1;index:idx_plugin_comment_instance_index,priority:1;index:idx_plugin_comment_instance_item,priority:1;comment:插件实例ID"`
 	AnchorIndex     *int    `json:"anchorIndex,omitempty" gorm:"index:idx_plugin_comment_instance_index,priority:2;comment:锚点索引"`
+	AnchorItemId    *string `json:"anchorItemId,omitempty" gorm:"type:varchar(128);index:idx_plugin_comment_instance_item,priority:2;comment:锚点条目ID"`
 	AnchorJson      string  `json:"anchorJson" gorm:"type:json;comment:完整锚点JSON"`
 	ParentId        *uint64 `json:"parentId,string,omitempty" gorm:"index:idx_plugin_comment_parent;comment:父评论ID"`
 	RootId          *uint64 `json:"rootId,string,omitempty" gorm:"index:idx_plugin_comment_root;comment:根评论ID"`

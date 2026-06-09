@@ -32,6 +32,15 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
+func OptionalAuth() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if ok, user := ChkToken(ctx); ok {
+			applyUserToContext(ctx, user)
+		}
+		ctx.Next()
+	}
+}
+
 func ChkCookie(ctx *gin.Context) bool {
 	_, e := ctx.Request.Cookie(consts.ACCESS_TOKEN)
 	if e == nil {

@@ -1,9 +1,9 @@
 package plugin_comment_service
 
-// CommentAnchor 插件评论锚点，服务端原样保存插件传入的结构。
+// 评论锚点，服务端原样保存插件传入的结构。
 type CommentAnchor map[string]any
 
-// ListRequest 评论分页筛选参数。
+// 评论分页筛选参数。
 type ListRequest struct {
 	InstanceId string        `json:"instanceId"`
 	Mode       string        `json:"mode"`
@@ -12,7 +12,7 @@ type ListRequest struct {
 	PageSize   int           `json:"pageSize"`
 }
 
-// CreateRequest 新建评论参数。
+// 新建评论参数。
 type CreateRequest struct {
 	Anchor          CommentAnchor `json:"anchor"`
 	Content         string        `json:"content"`
@@ -20,12 +20,26 @@ type CreateRequest struct {
 	ReplyToNickname string        `json:"replyToNickname"`
 }
 
-// LikeRequest 评论点赞参数。
+// 评论级联清理参数。
+type CleanupRequest struct {
+	InstanceId string        `json:"instanceId"`
+	DeleteAll  bool          `json:"deleteAll,omitempty"`
+	Items      []CleanupItem `json:"items"`
+}
+
+// 评论级联清理目标。
+type CleanupItem struct {
+	CommentId string `json:"commentId,omitempty"`
+	ItemId    string `json:"itemId,omitempty"`
+	Index     *int   `json:"index,omitempty"`
+}
+
+// 评论点赞参数。
 type LikeRequest struct {
 	Id string `json:"id"`
 }
 
-// AuthorView 评论作者展示数据。
+// 评论作者展示数据。
 type AuthorView struct {
 	Id         string `json:"id"`
 	Nickname   string `json:"nickname"`
@@ -33,7 +47,7 @@ type AuthorView struct {
 	City       string `json:"city,omitempty"`
 }
 
-// CommentView 前端评论展示数据。
+// 前端评论展示数据。
 type CommentView struct {
 	Id              string        `json:"id"`
 	Anchor          CommentAnchor `json:"anchor"`
@@ -50,7 +64,7 @@ type CommentView struct {
 	UpdatedOn       string        `json:"updatedOn,omitempty"`
 }
 
-// ListResult 评论分页结果。
+// 评论分页结果。
 type ListResult struct {
 	Total    int64         `json:"total"`
 	Page     int           `json:"page"`
@@ -58,9 +72,15 @@ type ListResult struct {
 	Items    []CommentView `json:"items"`
 }
 
-// LikeResult 点赞后的评论点赞状态。
+// 点赞后的评论状态。
 type LikeResult struct {
 	Id        string `json:"id"`
 	LikeCnt   int64  `json:"likeCnt"`
 	LikedByMe bool   `json:"likedByMe"`
+}
+
+// 评论级联清理结果。
+type CleanupResult struct {
+	DeletedCommentCount int64 `json:"deletedCommentCount"`
+	DeletedLikeCount    int64 `json:"deletedLikeCount"`
 }
