@@ -660,6 +660,9 @@ func ClearReleaseDev(user security.JwtUser, releaseIdRaw string) (*ClearReleaseR
 	if err := purgeReleaseGeneratedArtifactsByID(releaseId); err != nil {
 		return nil, err
 	}
+	if err := ds_service.DeleteReleaseDraftArtifacts(release.Id); err != nil {
+		return nil, err
+	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
 		if release.CurrentRelease {
@@ -737,6 +740,9 @@ func ClearRelease(user security.JwtUser, releaseIdRaw string) (*ClearReleaseResp
 	}
 
 	if err := purgeReleaseGeneratedArtifactsByID(releaseId); err != nil {
+		return nil, err
+	}
+	if err := ds_service.DeleteReleaseDraftArtifacts(release.Id); err != nil {
 		return nil, err
 	}
 

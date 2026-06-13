@@ -13,15 +13,16 @@ import (
 	"strconv"
 	"strings"
 
-	"senspace/domain/ds"
 	"senspace/domain/dev"
 	"senspace/domain/dev/vo"
+	"senspace/domain/ds"
 	"senspace/domain/factory"
-	"senspace/pkg/bizerr"
-	"senspace/pkg/app/security"
 	"senspace/pkg/app/contextx"
+	"senspace/pkg/app/security"
+	"senspace/pkg/bizerr"
 	"senspace/pkg/e"
 	"senspace/pkg/setting"
+	"senspace/service/ds_service"
 )
 
 func getPluginRoot(pluginId string) string {
@@ -261,13 +262,31 @@ func DeletePlugin(user *security.JwtUser, pluginId string) error {
 		return bizerr.Forbidden("")
 	}
 
-	if err := removeDevPluginAssetDir(factory.OwnerIndexKey(user.Addr), normalizedPluginID); err != nil {
+	if err := removeDevPluginAssetDir(
+		resolveDevPluginOwnerKey(plugin, user),
+		normalizedPluginID,
+	); err != nil {
+		return err
+	}
+	if err := ds_service.DeletePluginDraftArtifactsByPluginID(normalizedPluginID); err != nil {
 		return err
 	}
 
 	plugin.Delete()
 	rootPath := getPluginRoot(normalizedPluginID)
 	return os.RemoveAll(rootPath)
+}
+
+/** 返回开发插件资源目录应使用的钱包索引键。 */
+func resolveDevPluginOwnerKey(plugin dev.Plugin, user *security.JwtUser) string {
+	normalizedOwnerKey := strings.TrimSpace(plugin.OwnerKey)
+	if normalizedOwnerKey != "" {
+		return normalizedOwnerKey
+	}
+	if user == nil {
+		return ""
+	}
+	return factory.OwnerIndexKey(user.Addr)
 }
 
 func removeDevPluginAssetDir(ownerKey string, pluginId string) error {
@@ -339,10 +358,15 @@ func SavePlugin(ctx *contextx.AppContext, pluginId string, form *multipart.Form)
 	}
 
 	var plugin dev.Plugin
+	resolvedOwnerKey := ""
+	if ctx.User != nil {
+		resolvedOwnerKey = factory.OwnerIndexKey(ctx.User.Addr)
+	}
 	if isNew {
 		plugin.Init(ctx.User)
 		plugin.Name = pluginName
 		plugin.Version = version
+		plugin.OwnerKey = resolvedOwnerKey
 		err := plugin.Add()
 		e.PanicIfErr(err)
 		pid = plugin.Id
@@ -355,6 +379,9 @@ func SavePlugin(ctx *contextx.AppContext, pluginId string, form *multipart.Form)
 
 		plugin.Name = pluginName
 		plugin.Version = version
+		if strings.TrimSpace(plugin.OwnerKey) == "" {
+			plugin.OwnerKey = resolvedOwnerKey
+		}
 		err := plugin.Update(ctx.User.Id)
 		e.PanicIfErr(err)
 	}

@@ -14,6 +14,7 @@ type Plugin struct {
 	Description string `json:"description" form:"description" gorm:"type:varchar(500);comment:描述"`
 	Version     string `json:"version" form:"version" gorm:"type:varchar(50);comment:版本"`
 	Author      string `json:"author" form:"author" gorm:"type:varchar(100);comment:作者"`
+	OwnerKey    string `json:"ownerKey" form:"ownerKey" gorm:"type:varchar(128);index;comment:插件资源归属的钱包索引键"`
 	domain.CreatInfo
 }
 

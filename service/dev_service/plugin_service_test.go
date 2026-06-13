@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"senspace/domain/dev"
 	"senspace/domain/ds"
+	"senspace/pkg/app/security"
 	"senspace/pkg/setting"
 )
 
@@ -46,5 +48,33 @@ func TestRemoveDevPluginAssetDirRemovesPluginDirectory(t *testing.T) {
 	)
 	if _, err := os.Stat(pluginDir); !os.IsNotExist(err) {
 		t.Fatalf("expected plugin asset dir to be removed, got err=%v", err)
+	}
+}
+
+func TestResolveDevPluginOwnerKeyPrefersStoredOwnerKey(t *testing.T) {
+	plugin := dev.Plugin{
+		OwnerKey: "stored-owner-key",
+	}
+	user := &security.JwtUser{
+		Addr: "0x1234567890abcdef1234567890abcdef12345678",
+	}
+
+	ownerKey := resolveDevPluginOwnerKey(plugin, user)
+
+	if ownerKey != "stored-owner-key" {
+		t.Fatalf("expected stored owner key, got %q", ownerKey)
+	}
+}
+
+func TestResolveDevPluginOwnerKeyFallsBackToRequestWallet(t *testing.T) {
+	plugin := dev.Plugin{}
+	user := &security.JwtUser{
+		Addr: "0x1234567890abcdef1234567890abcdef12345678",
+	}
+
+	ownerKey := resolveDevPluginOwnerKey(plugin, user)
+
+	if ownerKey == "" {
+		t.Fatal("expected fallback owner key to be resolved")
 	}
 }

@@ -60,6 +60,7 @@ type pluginBuildSettings struct {
 
 type dockerPluginBuildExecutor struct{}
 
+// runtimeManifestFile 表示插件运行产物清单。
 type runtimeManifestFile struct {
 	PluginId             string                      `json:"pluginId"`
 	Version              string                      `json:"version"`
@@ -67,6 +68,7 @@ type runtimeManifestFile struct {
 	BundleHash           string                      `json:"bundleHash"`
 	Integrity            string                      `json:"integrity"`
 	SandboxEntry         string                      `json:"sandboxEntry"`
+	StaticAssets         []string                    `json:"staticAssets,omitempty"`
 	ExternalDependencies []runtimeManifestDependency `json:"externalDependencies"`
 	BundledDependencies  []runtimeManifestDependency `json:"bundledDependencies"`
 }
@@ -494,6 +496,9 @@ func validateRuntimeManifest(
 	if err := validateRuntimeDependencyList(manifest.BundledDependencies, "bundled"); err != nil {
 		return err
 	}
+	if err := validateRuntimeStaticAssetList(manifest.StaticAssets); err != nil {
+		return err
+	}
 
 	seen := make(map[string]string, len(manifest.ExternalDependencies)+len(manifest.BundledDependencies))
 	for _, dependency := range manifest.ExternalDependencies {
@@ -503,6 +508,23 @@ func validateRuntimeManifest(
 		name := strings.TrimSpace(dependency.Name)
 		if previousMode, ok := seen[name]; ok {
 			return fmt.Errorf("运行清单依赖重复: %s (%s/%s)", name, previousMode, "bundled")
+		}
+	}
+	return nil
+}
+
+// validateRuntimeStaticAssetList 校验静态资源列表只能暴露 `assets/` 目录内的相对路径。
+func validateRuntimeStaticAssetList(staticAssets []string) error {
+	for _, assetPath := range staticAssets {
+		normalizedPath := strings.TrimSpace(filepath.ToSlash(assetPath))
+		if normalizedPath == "" {
+			return fmt.Errorf("运行清单 staticAssets 不能包含空路径")
+		}
+		if strings.HasPrefix(normalizedPath, "/") || strings.Contains(normalizedPath, "..") {
+			return fmt.Errorf("运行清单 staticAssets 非法: %s", normalizedPath)
+		}
+		if !strings.HasPrefix(normalizedPath, "assets/") {
+			return fmt.Errorf("运行清单 staticAssets 必须使用 assets/ 相对路径: %s", normalizedPath)
 		}
 	}
 	return nil

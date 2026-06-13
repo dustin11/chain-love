@@ -48,6 +48,10 @@ func TestReadRuntimeBuildResultValidatesManifest(t *testing.T) {
 		BundleHash:   bundleHash,
 		Integrity:    integrity,
 		SandboxEntry: "runtime/sandbox-entry.js",
+		StaticAssets: []string{
+			"assets/template.txt",
+			"assets/images/cover.png",
+		},
 		ExternalDependencies: []runtimeManifestDependency{
 			{Name: "three", Mode: "external"},
 		},
@@ -66,6 +70,41 @@ func TestReadRuntimeBuildResultValidatesManifest(t *testing.T) {
 	require.Equal(t, manifest.Integrity, result.Integrity)
 	require.Equal(t, []string{"three"}, result.ExternalDependencies)
 	require.Equal(t, []string{"lodash-es"}, result.BundledDependencies)
+}
+
+func TestReadRuntimeBuildResultRejectsInvalidStaticAssetPath(t *testing.T) {
+	outputDir := t.TempDir()
+	runtimeDir := filepath.Join(outputDir, "runtime")
+	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
+
+	entryContent := []byte("export default { pluginId: 'demo-plugin' };\n")
+	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "sandbox-entry.js"), entryContent, 0o644))
+	bundleHash, integrity := runtimeHashes(entryContent)
+
+	req := PluginBuildRequest{
+		PluginId:  "demo-plugin",
+		Version:   "1.2.3",
+		ReleaseId: 10001,
+	}
+
+	manifest := runtimeManifestFile{
+		PluginId:     req.PluginId,
+		Version:      req.Version,
+		ReleaseId:    "10001",
+		BundleHash:   bundleHash,
+		Integrity:    integrity,
+		SandboxEntry: "runtime/sandbox-entry.js",
+		StaticAssets: []string{
+			"runtime/sandbox-entry.js",
+		},
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(outputDir, "runtime-manifest.json"), manifestBytes, 0o644))
+
+	result, err := readRuntimeBuildResult(outputDir, req)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "staticAssets")
 }
 
 func TestReadRuntimeBuildResultRejectsInvalidDependencyMode(t *testing.T) {

@@ -252,6 +252,58 @@ async function fileExists(filePath) {
   }
 }
 
+// 统一静态资源相对路径格式，只允许保留 `assets/` 目录内的文件。
+function normalizeStaticAssetPath(relativePath) {
+  const normalized = toPosixPath(String(relativePath || '').trim())
+    .replace(/^\.?\/*/, '');
+  if (!normalized || normalized.includes('..')) {
+    return '';
+  }
+  if (!normalized.startsWith('assets/')) {
+    return '';
+  }
+  return normalized;
+}
+
+// 收集插件源码目录下需要随运行产物一起发布的静态资源列表。
+async function collectPluginStaticAssets(srcDir) {
+  const assetsDir = path.join(srcDir, 'assets');
+  if (!(await fileExists(assetsDir))) {
+    return [];
+  }
+
+  const collected = [];
+  const walk = async (currentDir) => {
+    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const nextPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(nextPath);
+        continue;
+      }
+      const relativePath = normalizeStaticAssetPath(
+        path.relative(srcDir, nextPath)
+      );
+      if (relativePath) {
+        collected.push(relativePath);
+      }
+    }
+  };
+
+  await walk(assetsDir);
+  return collected.sort();
+}
+
+// 将声明过的静态资源复制到最终运行产物目录，保持相对路径不变。
+async function copyPluginStaticAssets(srcDir, outDir, assetPaths) {
+  for (const assetPath of assetPaths) {
+    const sourcePath = path.join(srcDir, assetPath);
+    const targetPath = path.join(outDir, assetPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+  }
+}
+
 async function loadManifest(srcDir) {
   const snapshotPath = path.join(srcDir, 'manifest.snapshot.json');
   if (await fileExists(snapshotPath)) {
@@ -278,6 +330,7 @@ async function main() {
   if (!(await fileExists(entryFile))) {
     throw new Error(`entry file not found: ${entry}`);
   }
+  const staticAssets = await collectPluginStaticAssets(srcDir);
   const entryImportPath = (() => {
     const relativePath = toPosixPath(path.relative(srcDir, entryFile));
     return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
@@ -348,6 +401,7 @@ async function main() {
   const integrity = `sha384-${crypto.createHash('sha384').update(runtimeEntry).digest('base64')}`;
 
   const runtimeDependencies = collectRuntimeDependencies(sandboxBuildResult.metafile);
+  await copyPluginStaticAssets(srcDir, outDir, staticAssets);
   const runtimeManifest = {
     pluginId,
     version,
@@ -355,6 +409,7 @@ async function main() {
     bundleHash,
     integrity,
     sandboxEntry,
+    staticAssets,
     externalDependencies: runtimeDependencies.externalDependencies,
     bundledDependencies: runtimeDependencies.bundledDependencies,
   };

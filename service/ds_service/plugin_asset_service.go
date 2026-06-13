@@ -629,7 +629,96 @@ func ArchiveDraftPluginAssetsToFactAssets(user security.JwtUser, releaseId int64
 	return nil
 }
 
-// DeleteFactPluginAssetArtifacts 删除指定 fact 资源空间的数据库记录和静态目录。
+// 删除插件关联的 draft 资源记录和静态目录。
+func DeletePluginDraftArtifactsByPluginID(pluginId string) error {
+	normalizedPluginID := strings.TrimSpace(pluginId)
+	if normalizedPluginID == "" {
+		return nil
+	}
+	if err := ds.ValidatePluginAssetPathSegment("pluginId", normalizedPluginID); err != nil {
+		return err
+	}
+	var drafts []ds.PluginInstanceDraft
+	if err := domain.Db.Where("plugin_id = ?", normalizedPluginID).Find(&drafts).Error; err != nil {
+		return err
+	}
+	return deleteDraftArtifacts(drafts)
+}
+
+// 删除发布关联的 draft 资源记录和静态目录。
+func DeleteReleaseDraftArtifacts(releaseId int64) error {
+	if releaseId <= 0 {
+		return nil
+	}
+	var drafts []ds.PluginInstanceDraft
+	if err := domain.Db.Where("release_id = ?", releaseId).Find(&drafts).Error; err != nil {
+		return err
+	}
+	return deleteDraftArtifacts(drafts)
+}
+
+// 按草稿记录批量清理数据库和磁盘目录。
+func deleteDraftArtifacts(drafts []ds.PluginInstanceDraft) error {
+	scopes, draftIDs, err := buildDraftArtifactCleanupScopes(drafts)
+	if err != nil {
+		return err
+	}
+	if len(scopes) == 0 {
+		return nil
+	}
+	if err := domain.Db.Transaction(func(tx *gorm.DB) error {
+		for _, scope := range scopes {
+			if err := applyScopeFilter(tx, scope).Delete(&ds.PluginAssetBinding{}).Error; err != nil {
+				return err
+			}
+			if err := applyScopeFilter(tx, scope).Delete(&ds.PluginAsset{}).Error; err != nil {
+				return err
+			}
+			if err := applyScopeFilter(tx, scope).Delete(&ds.PluginInstanceState{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Where("id IN ?", draftIDs).Delete(&ds.PluginInstanceDraft{}).Error
+	}); err != nil {
+		return err
+	}
+	return removeDraftArtifactDirs(scopes)
+}
+
+// 将草稿记录转换为可删除的资源空间定义。
+func buildDraftArtifactCleanupScopes(drafts []ds.PluginInstanceDraft) ([]ds.PluginAssetScope, []uint64, error) {
+	scopes := make([]ds.PluginAssetScope, 0, len(drafts))
+	draftIDs := make([]uint64, 0, len(drafts))
+	for _, draft := range drafts {
+		scope := ds.PluginAssetScope{
+			Kind:          ds.PluginAssetScopeDraft,
+			OwnerKey:      strings.TrimSpace(draft.OwnerKey),
+			OwnerAddress:  strings.TrimSpace(draft.OwnerAddress),
+			ReleaseId:     draft.ReleaseId,
+			DraftId:       strings.TrimSpace(draft.DraftId),
+			PluginId:      strings.TrimSpace(draft.PluginId),
+			PluginVersion: strings.TrimSpace(draft.PluginVersion),
+		}
+		if err := scope.Validate(); err != nil {
+			return nil, nil, err
+		}
+		scopes = append(scopes, scope)
+		draftIDs = append(draftIDs, draft.Id)
+	}
+	return scopes, draftIDs, nil
+}
+
+// 删除草稿资源目录。
+func removeDraftArtifactDirs(scopes []ds.PluginAssetScope) error {
+	for _, scope := range scopes {
+		if err := os.RemoveAll(ds.PluginAssetInstanceDir(scope)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 删除指定 fact 资源空间的数据库记录和静态目录。
 func DeleteFactPluginAssetArtifacts(factAssetId int64) error {
 	if factAssetId <= 0 {
 		return nil
@@ -653,7 +742,7 @@ func DeleteFactPluginAssetArtifacts(factAssetId int64) error {
 	return os.RemoveAll(ds.PluginAssetInstanceDir(scope))
 }
 
-// DeletePluginAsset 删除插件资源并刷新静态快照。
+// 删除插件资源并刷新静态快照。
 func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64) (*PluginAssetSnapshot, error) {
 	if factAssetId <= 0 || assetID == 0 {
 		return nil, errors.New("插件资产实例或资源不能为空")
@@ -665,7 +754,7 @@ func DeletePluginAsset(user security.JwtUser, factAssetId int64, assetID uint64)
 	return DeletePluginAssetInScope(user, scope, assetID)
 }
 
-// DeletePluginAssetInScope 物理删除指定空间下的插件资源并刷新静态快照。
+// 物理删除指定空间下的插件资源并刷新静态快照。
 func DeletePluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, assetID uint64) (*PluginAssetSnapshot, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, err

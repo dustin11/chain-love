@@ -15,6 +15,15 @@
 - 不要擅自修改文件编码、换行风格或已有 API 语义。
 - 仔细执行每项任务，不遗漏文档中已经明确的需求点。
 
+本地执行环境规则：
+
+- 本地开发、测试、脚本探测使用的临时执行环境统一命名为 `ldev`，禁止新建或继续使用 `wdev` 前缀目录、缓存目录或脚本变量名。
+- 本地缓存目录命名统一使用 `ldev` 前缀，例如 `.ldev-go-cache`、`.ldev-gocache`；禁止新增 `.wdev-go-cache` 这类命名。
+- 一次性任务临时文件统一放在仓库内受控临时目录，例如 `.tmp/ldev/<task-id>/`，禁止散落到仓库根目录、测试目录或业务源码目录。
+- 禁止生成 `tmp_diff.txt`、`tmp_diff_code.txt`、`tmp_utf8_test.txt`、`*.go.<随机数字>` 这类散落型临时文件；如确需生成，必须放入 `.tmp/ldev/<task-id>/`。
+- 任务结束前必须主动删除本次生成的一次性临时文件和临时目录；仅允许保留可复用缓存目录。
+- 如需运行 Go 命令，优先把可复用缓存显式落到仓库内目录，例如 `GOCACHE=.ldev-gocache`、`GOMODCACHE=.ldev-go-cache`、`TMP=.tmp/ldev/system`、`TEMP=.tmp/ldev/system`。
+
 编码规则：
 
 - 所有源码文件必须保持 UTF-8 编码。
