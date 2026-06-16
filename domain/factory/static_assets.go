@@ -481,13 +481,15 @@ func assetMetaReferenceFile(ref string) string {
 }
 
 func copyPluginSourceJSONFile(srcRoot string, dstRoot string, rel string, release Release, templateFiles map[string]string) error {
-	src := firstExistingFile(pluginTemplateFileCandidates(srcRoot, rel))
+	src := firstExistingFile(pluginTemplateFileCandidates(srcRoot, rel, release))
 	if src == "" {
 		return fmt.Errorf("plugin template file not found: %s", rel)
 	}
 	dst := filepath.Join(dstRoot, rel)
-	if err := copyFile(src, dst); err != nil {
-		return err
+	if filepath.Clean(src) != filepath.Clean(dst) {
+		if err := copyFile(src, dst); err != nil {
+			return err
+		}
 	}
 	key := filepath.ToSlash(rel)
 	templateFiles[key] = FactoryStaticURL(
@@ -499,6 +501,27 @@ func copyPluginSourceJSONFile(srcRoot string, dstRoot string, rel string, releas
 	return nil
 }
 
+// 返回插件模板文件的候选路径。
+func pluginTemplateFileCandidates(srcRoot string, rel string, release Release) []string {
+	candidates := []string{filepath.Join(srcRoot, rel)}
+	entries, err := os.ReadDir(srcRoot)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			name := strings.ToLower(strings.TrimSpace(entry.Name()))
+			if !strings.Contains(name, "generator") {
+				continue
+			}
+			candidates = append(candidates, filepath.Join(srcRoot, entry.Name(), rel))
+		}
+	}
+
+	// 冻结阶段允许回退到当前发布静态目录，复用已生成的模板文件。
+	candidates = append(candidates, filepath.Join(ReleaseStaticDir(release), rel))
+	return candidates
+}
 // AssetMetaHasCollections 返回 asset.meta.json 是否声明了至少一个 collection。
 func AssetMetaHasCollections(path string) (bool, error) {
 	data, err := os.ReadFile(path)
@@ -510,26 +533,6 @@ func AssetMetaHasCollections(path string) (bool, error) {
 		return false, err
 	}
 	return len(probe.Collections) > 0, nil
-}
-
-// 返回插件模板文件的候选路径。
-func pluginTemplateFileCandidates(srcRoot string, rel string) []string {
-	candidates := []string{filepath.Join(srcRoot, rel)}
-	entries, err := os.ReadDir(srcRoot)
-	if err != nil {
-		return candidates
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := strings.ToLower(strings.TrimSpace(entry.Name()))
-		if !strings.Contains(name, "generator") {
-			continue
-		}
-		candidates = append(candidates, filepath.Join(srcRoot, entry.Name(), rel))
-	}
-	return candidates
 }
 
 // 返回第一个存在的目录。

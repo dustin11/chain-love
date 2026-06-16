@@ -79,16 +79,15 @@ func TestCleanupReleaseStaticStagingDirPrunesEmptyPluginDir(t *testing.T) {
 func TestEnsureFishTankReleaseStaticSnapshotCopiesRootTemplateFiles(t *testing.T) {
 	oldFactoryRoot := setting.Config.App.FilePath.Factory
 	oldRuntimeRoot := setting.Config.App.RuntimeRootPath
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
+	oldPluginSourceRoot := setting.Config.App.PluginSourceRoot
 	setting.Config.App.FilePath.Factory = t.TempDir()
 	setting.Config.App.RuntimeRootPath = ""
+	setting.Config.App.PluginSourceRoot = filepath.Join(t.TempDir(), "plugin-source")
 	t.Cleanup(func() {
 		setting.Config.App.FilePath.Factory = oldFactoryRoot
 		setting.Config.App.RuntimeRootPath = oldRuntimeRoot
-		require.NoError(t, os.Chdir(oldWd))
+		setting.Config.App.PluginSourceRoot = oldPluginSourceRoot
 	})
-	require.NoError(t, os.Chdir(findRepoRootWithWeb(t)))
 
 	release := Release{
 		Id:          910000000000001,
@@ -99,6 +98,44 @@ func TestEnsureFishTankReleaseStaticSnapshotCopiesRootTemplateFiles(t *testing.T
 		MintPer:     1,
 		MintPrice:   "0",
 	}
+	sourceDir := filepath.Join(setting.Config.App.PluginSourceRoot, release.PluginId, "910000000000001")
+	require.NoError(t, os.MkdirAll(filepath.Join(sourceDir, "generated", "fish"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "asset.meta.json"), []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "FishTank",
+  "collections": [
+    {
+      "label": "Tank",
+      "key": "tank",
+      "assetKind": "component",
+      "componentRole": "root",
+      "metadataRef": "defaultWaterMeta.json#tanks",
+      "unitPrice": "5"
+    },
+    {
+      "label": "Fish",
+      "key": "fish",
+      "assetKind": "component",
+      "componentRole": "child",
+      "parentKey": "tank",
+      "metadataRef": "generated/fish/{tier}.json",
+      "traitHashField": "traitHash",
+      "tierConfig": {
+        "common": { "price": "5", "supply": 1, "mintLimit": 1 },
+        "rare": { "price": "50", "supply": 1, "mintLimit": 1 },
+        "epic": { "price": "500", "supply": 1, "mintLimit": 1 },
+        "legendary": { "price": "-", "supply": 1, "mintLimit": 0 }
+      }
+    }
+  ]
+}
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "defaultWaterMeta.json"), []byte(`{"tanks":[{"id":"tank-1"}]}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "generated", "fish", "common.json"), []byte(`[{"id":"fish-common-1","tier":"common","traitHash":"hash-common"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "generated", "fish", "rare.json"), []byte(`[{"id":"fish-rare-1","tier":"rare","traitHash":"hash-rare"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "generated", "fish", "epic.json"), []byte(`[{"id":"fish-epic-1","tier":"epic","traitHash":"hash-epic"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "generated", "fish", "legendary.json"), []byte(`[{"id":"fish-legendary-1","tier":"legendary","traitHash":"hash-legendary"}]`), 0644))
+
 	require.NoError(t, EnsureReleaseStaticSnapshot(release))
 
 	finalDir := ReleaseStaticDir(release)
@@ -156,6 +193,81 @@ func TestEnsureReleaseStaticSnapshotSkipsEmptyAssetMetaTemplate(t *testing.T) {
 	require.NotContains(t, manifest.TemplateFiles, "asset.meta.json")
 	require.EqualValues(t, 1000, manifest.TotalSupply)
 	require.EqualValues(t, 2, manifest.MintPer)
+}
+
+func TestStageReleaseStaticSnapshotFallsBackToExistingReleaseFiles(t *testing.T) {
+	oldFactoryRoot := setting.Config.App.FilePath.Factory
+	oldRuntimeRoot := setting.Config.App.RuntimeRootPath
+	oldPluginSourceRoot := setting.Config.App.PluginSourceRoot
+	setting.Config.App.FilePath.Factory = t.TempDir()
+	setting.Config.App.RuntimeRootPath = ""
+	setting.Config.App.PluginSourceRoot = filepath.Join(t.TempDir(), "plugin-source")
+	t.Cleanup(func() {
+		setting.Config.App.FilePath.Factory = oldFactoryRoot
+		setting.Config.App.RuntimeRootPath = oldRuntimeRoot
+		setting.Config.App.PluginSourceRoot = oldPluginSourceRoot
+	})
+
+	release := Release{
+		Id:          910000000000001,
+		PluginId:    "FishTank",
+		Version:     "1.0.0",
+		RuntimeKind: ReleaseRuntimeKindBuiltin,
+		TotalSupply: 10000,
+		MintPer:     1,
+		MintPrice:   "10",
+	}
+
+	sourceDir := filepath.Join(setting.Config.App.PluginSourceRoot, release.PluginId, "910000000000001")
+	require.NoError(t, os.MkdirAll(sourceDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "asset.meta.json"), []byte(`{
+  "schema": "senspace.asset-meta.v2",
+  "pluginId": "FishTank",
+  "collections": [
+    {
+      "label": "Tank",
+      "key": "tank",
+      "assetKind": "component",
+      "componentRole": "root",
+      "metadataRef": "defaultWaterMeta.json#tanks",
+      "unitPrice": "5"
+    },
+    {
+      "label": "Fish",
+      "key": "fish",
+      "assetKind": "component",
+      "componentRole": "child",
+      "parentKey": "tank",
+      "metadataRef": "generated/fish/{tier}.json",
+      "traitHashField": "traitHash",
+      "tierConfig": {
+        "common": { "price": "5", "supply": 1, "mintLimit": 1 },
+        "rare": { "price": "50", "supply": 1, "mintLimit": 1 },
+        "epic": { "price": "500", "supply": 1, "mintLimit": 1 },
+        "legendary": { "price": "-", "supply": 1, "mintLimit": 0 }
+      }
+    }
+  ]
+}
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "defaultWaterMeta.json"), []byte(`{"tanks":[{"id":"tank-1"}]}`), 0644))
+
+	finalDir := ReleaseStaticDir(release)
+	require.NoError(t, os.MkdirAll(filepath.Join(finalDir, "generated", "fish"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(finalDir, "generated", "fish", "common.json"), []byte(`[{"id":"fish-common-1","tier":"common","traitHash":"hash-common"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(finalDir, "generated", "fish", "rare.json"), []byte(`[{"id":"fish-rare-1","tier":"rare","traitHash":"hash-rare"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(finalDir, "generated", "fish", "epic.json"), []byte(`[{"id":"fish-epic-1","tier":"epic","traitHash":"hash-epic"}]`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(finalDir, "generated", "fish", "legendary.json"), []byte(`[{"id":"fish-legendary-1","tier":"legendary","traitHash":"hash-legendary"}]`), 0644))
+
+	stagingDir, err := StageReleaseStaticSnapshot(release)
+	require.NoError(t, err)
+
+	require.FileExists(t, filepath.Join(stagingDir, "asset.meta.json"))
+	require.FileExists(t, filepath.Join(stagingDir, "defaultWaterMeta.json"))
+	require.FileExists(t, filepath.Join(stagingDir, "generated", "fish", "common.json"))
+	require.FileExists(t, filepath.Join(stagingDir, "generated", "fish", "rare.json"))
+	require.FileExists(t, filepath.Join(stagingDir, "generated", "fish", "epic.json"))
+	require.FileExists(t, filepath.Join(stagingDir, "generated", "fish", "legendary.json"))
 }
 
 func findRepoRootWithWeb(t *testing.T) string {
