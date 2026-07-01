@@ -39,6 +39,8 @@ const (
 	pluginStateSchema = "senspace.plugin-state.v1"
 	defaultImageKind  = "image"
 	defaultImageMime  = "image/jpeg"
+	defaultFileKind   = "file"
+	defaultFileMime   = "application/octet-stream"
 )
 
 // 资源绑定保存参数。
@@ -157,10 +159,11 @@ type pluginInstanceStateJSON struct {
 	Collections map[string][]pluginAssetBindingJSON `json:"collections"` // 分组资源配置。
 }
 
-// 处理后的上传图片。
-type processedPluginImage struct {
-	Original []byte // 原图字节。
-	Thumb    []byte // 缩略图字节。
+// 处理后的上传资源。
+type processedPluginAsset struct {
+	Kind     string // 资源类型。
+	Original []byte // 原始文件字节。
+	Thumb    []byte // 缩略图字节；非图片为空。
 	Mime     string // 输出媒体类型。
 	Ext      string // 输出文件后缀。
 	Hash     string // 内容哈希。
@@ -247,11 +250,11 @@ func UploadPluginAssetInScope(user security.JwtUser, scope ds.PluginAssetScope, 
 	if fileHeader == nil {
 		return nil, errors.New("上传文件不能为空")
 	}
-	processed, err := processUploadedPluginImage(fileHeader)
+	processed, err := processUploadedPluginAsset(fileHeader)
 	if err != nil {
 		return nil, err
 	}
-	return saveProcessedPluginImageAsset(user, scope, collectionKey, processed)
+	return saveProcessedPluginAsset(user, scope, collectionKey, processed)
 }
 
 // ImportPluginAssetImageInScope 从用户素材库导入图片到插件资源空间。
@@ -278,25 +281,29 @@ func ImportPluginAssetImageInScope(user security.JwtUser, scope ds.PluginAssetSc
 	if err != nil {
 		return nil, err
 	}
-	return saveProcessedPluginImageAsset(user, scope, collectionKey, processed)
+	return saveProcessedPluginAsset(user, scope, collectionKey, processed)
 }
 
-func saveProcessedPluginImageAsset(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, processed *processedPluginImage) (*PluginAssetUploadResult, error) {
+func saveProcessedPluginAsset(user security.JwtUser, scope ds.PluginAssetScope, collectionKey string, processed *processedPluginAsset) (*PluginAssetUploadResult, error) {
 	collectionKey, err := normalizeCollectionKey(collectionKey)
 	if err != nil {
 		return nil, err
 	}
 	if processed == nil {
-		return nil, errors.New("图片处理结果为空")
+		return nil, errors.New("资源处理结果为空")
 	}
 	assetID := generatePluginAssetID()
 	assetDir := ds.PluginAssetDir(scope, assetID)
 	originalName := "original" + processed.Ext
-	thumbName := "thumb" + processed.Ext
 	publicURL := ds.PluginAssetStaticURL(append(scope.StaticPathParts(), "assets", strconv.FormatUint(assetID, 10), originalName)...)
-	thumbURL := ds.PluginAssetStaticURL(append(scope.StaticPathParts(), "assets", strconv.FormatUint(assetID, 10), thumbName)...)
+	thumbURL := ""
+	thumbName := ""
+	if len(processed.Thumb) > 0 {
+		thumbName = "thumb" + processed.Ext
+		thumbURL = ds.PluginAssetStaticURL(append(scope.StaticPathParts(), "assets", strconv.FormatUint(assetID, 10), thumbName)...)
+	}
 	storagePath := filepath.Join(assetDir, originalName)
-	if err := writeUploadedPluginImageFiles(assetDir, originalName, thumbName, processed); err != nil {
+	if err := writeUploadedPluginAssetFiles(assetDir, originalName, thumbName, processed); err != nil {
 		return nil, err
 	}
 
@@ -312,7 +319,7 @@ func saveProcessedPluginImageAsset(user security.JwtUser, scope ds.PluginAssetSc
 			PluginVersion: scope.PluginVersion,
 			ReleaseId:     nullableInt64(scope.ReleaseId),
 			DraftId:       scope.DraftId,
-			Kind:          defaultImageKind,
+			Kind:          processed.Kind,
 			Mime:          processed.Mime,
 			Hash:          processed.Hash,
 			SizeBytes:     int64(len(processed.Original)),
@@ -888,7 +895,7 @@ func resolveUserImageStoragePath(imageURL string) (string, error) {
 	return target, nil
 }
 
-func processPluginImageBytes(data []byte) (*processedPluginImage, error) {
+func processPluginImageBytes(data []byte) (*processedPluginAsset, error) {
 	if len(data) == 0 {
 		return nil, errors.New("上传文件为空")
 	}
@@ -935,7 +942,8 @@ func processPluginImageBytes(data []byte) (*processedPluginImage, error) {
 		return nil, err
 	}
 	sum := sha256.Sum256(original.Bytes())
-	return &processedPluginImage{
+	return &processedPluginAsset{
+		Kind:     defaultImageKind,
 		Original: original.Bytes(),
 		Thumb:    thumbBuffer.Bytes(),
 		Mime:     mime,
@@ -943,6 +951,24 @@ func processPluginImageBytes(data []byte) (*processedPluginImage, error) {
 		Hash:     "sha256:" + hex.EncodeToString(sum[:]),
 		Width:    src.Bounds().Dx(),
 		Height:   src.Bounds().Dy(),
+	}, nil
+}
+
+func processPluginFileBytes(data []byte, filename string) (*processedPluginAsset, error) {
+	if len(data) == 0 {
+		return nil, errors.New("上传文件为空")
+	}
+	mime := strings.TrimSpace(http.DetectContentType(data[:minInt(len(data), 512)]))
+	if mime == "" {
+		mime = defaultFileMime
+	}
+	sum := sha256.Sum256(data)
+	return &processedPluginAsset{
+		Kind:     defaultFileKind,
+		Original: data,
+		Mime:     mime,
+		Ext:      normalizePluginAssetFileExt(filename),
+		Hash:     "sha256:" + hex.EncodeToString(sum[:]),
 	}, nil
 }
 
@@ -1003,7 +1029,7 @@ func resolveOwnedFactoryAsset(db *gorm.DB, user security.JwtUser, factAssetId in
 	return &asset, nil
 }
 
-func processUploadedPluginImage(fileHeader *multipart.FileHeader) (*processedPluginImage, error) {
+func processUploadedPluginAsset(fileHeader *multipart.FileHeader) (*processedPluginAsset, error) {
 	if fileHeader.Size <= 0 {
 		return nil, errors.New("上传文件为空")
 	}
@@ -1016,17 +1042,40 @@ func processUploadedPluginImage(fileHeader *multipart.FileHeader) (*processedPlu
 	if err != nil {
 		return nil, err
 	}
-	return processPluginImageBytes(data)
+	ctype := strings.TrimSpace(http.DetectContentType(data[:minInt(len(data), 512)]))
+	if strings.HasPrefix(ctype, "image/") {
+		return processPluginImageBytes(data)
+	}
+	return processPluginFileBytes(data, fileHeader.Filename)
 }
 
-func writeUploadedPluginImageFiles(assetDir string, originalName string, thumbName string, processed *processedPluginImage) error {
+func writeUploadedPluginAssetFiles(assetDir string, originalName string, thumbName string, processed *processedPluginAsset) error {
 	if err := os.MkdirAll(assetDir, os.ModePerm); err != nil {
 		return err
 	}
 	if err := writeFileAtomic(filepath.Join(assetDir, originalName), processed.Original); err != nil {
 		return err
 	}
+	if thumbName == "" || len(processed.Thumb) == 0 {
+		return nil
+	}
 	return writeFileAtomic(filepath.Join(assetDir, thumbName), processed.Thumb)
+}
+
+func normalizePluginAssetFileExt(filename string) string {
+	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(filename)))
+	if ext == "" || ext == "." {
+		return ".bin"
+	}
+	if len(ext) > 16 {
+		return ".bin"
+	}
+	for _, ch := range ext[1:] {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') {
+			return ".bin"
+		}
+	}
+	return ext
 }
 
 func buildCommittedPluginAssetBindings(bindings []PluginAssetCommitBindingInput, localFiles []PluginAssetCommitLocalFileInput, localAssetIds map[string]string) ([]PluginAssetBindingInput, map[uint64]struct{}, error) {

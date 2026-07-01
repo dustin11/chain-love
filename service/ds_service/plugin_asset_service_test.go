@@ -9,6 +9,34 @@ import (
 	"senspace/pkg/setting"
 )
 
+func TestProcessPluginFileBytesPreservesTextFileMetadata(t *testing.T) {
+	data := []byte("[00:01.00]hello world\n")
+
+	processed, err := processPluginFileBytes(data, "lyrics.lrc")
+	if err != nil {
+		t.Fatalf("process plugin file bytes: %v", err)
+	}
+
+	if processed.Kind != defaultFileKind {
+		t.Fatalf("expected kind %q, got %q", defaultFileKind, processed.Kind)
+	}
+	if processed.Mime != "text/plain; charset=utf-8" {
+		t.Fatalf("unexpected mime: %q", processed.Mime)
+	}
+	if processed.Ext != ".lrc" {
+		t.Fatalf("expected .lrc ext, got %q", processed.Ext)
+	}
+	if len(processed.Thumb) != 0 {
+		t.Fatalf("expected no thumb for text file")
+	}
+	if processed.Width != 0 || processed.Height != 0 {
+		t.Fatalf("expected zero dimensions, got %dx%d", processed.Width, processed.Height)
+	}
+	if len(processed.Original) != len(data) {
+		t.Fatalf("expected original bytes preserved")
+	}
+}
+
 func TestBuildDraftArtifactCleanupScopes(t *testing.T) {
 	drafts := []ds.PluginInstanceDraft{
 		{
