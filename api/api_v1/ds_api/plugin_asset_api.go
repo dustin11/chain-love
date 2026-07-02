@@ -9,7 +9,26 @@ import (
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/e"
 	"senspace/service/ds_service"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 )
+
+const defaultPluginUploadMaxSize = 30 * 1024 * 1024
+
+func resolvePluginUploadMaxSize() int64 {
+	if setting.Config.App.PluginUploadMaxSize > 0 {
+		return setting.Config.App.PluginUploadMaxSize
+	}
+	return defaultPluginUploadMaxSize
+}
+
+func preparePluginAssetMultipartBody(ctx *contextx.AppContext) {
+	err := util.LimitRequestBodyBytes(ctx.Gin.Writer, ctx.Gin.Request, resolvePluginUploadMaxSize())
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
+	e.PanicServerErr(err)
+}
 
 func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstanceStateInput {
 	var req ds_service.PluginInstanceStateInput
@@ -30,11 +49,18 @@ func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstan
 func bindPluginAssetCommitInput(ctx *contextx.AppContext) (ds_service.PluginAssetCommitInput, map[string]*multipart.FileHeader) {
 	var req ds_service.PluginAssetCommitInput
 	payload := ctx.Gin.PostForm("payload")
+	if payload == "" {
+		preparePluginAssetMultipartBody(ctx)
+		payload = ctx.Gin.PostForm("payload")
+	}
 	e.PanicIfParameterError(payload == "", "payload不能为空")
 	err := json.Unmarshal([]byte(payload), &req)
 	e.PanicParameterError(err)
 	files := map[string]*multipart.FileHeader{}
 	form, err := ctx.Gin.MultipartForm()
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
 	if err == nil && form != nil {
 		for key, list := range form.File {
 			if len(list) > 0 {
@@ -86,7 +112,11 @@ func (req pluginAssetImportImageInput) parseImageID() (uint64, error) {
 func PluginAssetUploadFact(ctx *contextx.AppContext) {
 	factAssetId, err := strconv.ParseInt(ctx.Gin.Param("factAssetId"), 10, 64)
 	e.PanicParameterError(err)
+	preparePluginAssetMultipartBody(ctx)
 	file, err := ctx.Gin.FormFile("file")
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
 	e.PanicParameterErrorTipMsg(err, "file missing")
 	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
 	e.PanicServerErr(err)
@@ -106,7 +136,11 @@ func PluginAssetUploadFact(ctx *contextx.AppContext) {
 func PluginAssetUploadDev(ctx *contextx.AppContext) {
 	pluginId := ctx.Gin.Param("pluginId")
 	version := ctx.Gin.Param("version")
+	preparePluginAssetMultipartBody(ctx)
 	file, err := ctx.Gin.FormFile("file")
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
 	e.PanicParameterErrorTipMsg(err, "file missing")
 	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, pluginId, version)
 	e.PanicServerErr(err)
@@ -195,6 +229,7 @@ func PluginAssetCommitFact(ctx *contextx.AppContext) {
 	e.PanicParameterError(err)
 	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
 	e.PanicServerErr(err)
+	preparePluginAssetMultipartBody(ctx)
 	req, files := bindPluginAssetCommitInput(ctx)
 	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)
@@ -212,6 +247,7 @@ func PluginAssetCommitFact(ctx *contextx.AppContext) {
 func PluginAssetCommitDev(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, ctx.Gin.Param("pluginId"), ctx.Gin.Param("version"))
 	e.PanicServerErr(err)
+	preparePluginAssetMultipartBody(ctx)
 	req, files := bindPluginAssetCommitInput(ctx)
 	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)
@@ -231,6 +267,7 @@ func PluginAssetCommitDraft(ctx *contextx.AppContext) {
 	e.PanicParameterError(err)
 	scope, err := ds_service.ResolveDraftPluginAssetScope(*ctx.User, releaseId, ctx.Gin.Param("draftId"))
 	e.PanicServerErr(err)
+	preparePluginAssetMultipartBody(ctx)
 	req, files := bindPluginAssetCommitInput(ctx)
 	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)

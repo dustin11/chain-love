@@ -38,9 +38,10 @@ type App struct {
 
 	RuntimeRootPath string `yaml:"runtimerootpath"`
 
-	ImageSavePath string   `yaml:"imageSavePath"`
-	ImageMaxSize  int64    `yaml:"imageMaxSize"`
-	ImageExts     []string `yaml:"imageExts"`
+	ImageSavePath      string   `yaml:"imageSavePath"`
+	ImageMaxSize       int64    `yaml:"imageMaxSize"`
+	PluginUploadMaxSize int64   `yaml:"pluginUploadMaxSize"`
+	ImageExts          []string `yaml:"imageExts"`
 
 	PluginSourceRoot      string `yaml:"pluginSourceRoot"`
 	PluginRuntimeRoot     string `yaml:"pluginRuntimeRoot"`

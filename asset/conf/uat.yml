@@ -15,6 +15,7 @@ app:
   imagesavepath: upload/images/
   # MB
   imageMaxSize: 5
+  pluginUploadMaxSize: 31457280
   imageexts: [.jpg,.jpeg,.png]
   exportSavePath: export/
   qrCodeSavePath: qrcode/

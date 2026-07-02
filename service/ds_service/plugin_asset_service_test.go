@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/text/encoding/simplifiedchinese"
+
 	"senspace/domain/ds"
 	"senspace/pkg/setting"
 )
@@ -34,6 +36,26 @@ func TestProcessPluginFileBytesPreservesTextFileMetadata(t *testing.T) {
 	}
 	if len(processed.Original) != len(data) {
 		t.Fatalf("expected original bytes preserved")
+	}
+}
+
+func TestProcessPluginFileBytesConvertsGBKTextToUTF8(t *testing.T) {
+	sourceText := "[00:00.50]给我一个理由忘记\n"
+	data, err := simplifiedchinese.GB18030.NewEncoder().Bytes([]byte(sourceText))
+	if err != nil {
+		t.Fatalf("encode gb18030 text: %v", err)
+	}
+
+	processed, err := processPluginFileBytes(data, "lyrics.lrc")
+	if err != nil {
+		t.Fatalf("process plugin file bytes: %v", err)
+	}
+
+	if processed.Mime != "text/plain; charset=utf-8" {
+		t.Fatalf("unexpected mime: %q", processed.Mime)
+	}
+	if string(processed.Original) != sourceText {
+		t.Fatalf("expected utf-8 normalized text, got %q", string(processed.Original))
 	}
 }
 

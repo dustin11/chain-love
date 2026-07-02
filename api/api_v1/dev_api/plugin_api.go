@@ -6,11 +6,30 @@ import (
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/bizerr"
 	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 	"senspace/service/dev_service"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
+
+const defaultPluginUploadMaxSize = 30 * 1024 * 1024
+
+func resolvePluginUploadMaxSize() int64 {
+	if setting.Config.App.PluginUploadMaxSize > 0 {
+		return setting.Config.App.PluginUploadMaxSize
+	}
+	return defaultPluginUploadMaxSize
+}
+
+func preparePluginMultipartBody(c *gin.Context) {
+	err := util.LimitRequestBodyBytes(c.Writer, c.Request, resolvePluginUploadMaxSize())
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
+	e.PanicServerErr(err)
+}
 
 func GetPluginList(c *gin.Context) {
 	var plugin dev.Plugin
@@ -44,7 +63,11 @@ func GetPluginTree(c *gin.Context) {
 func UploadFile(c *gin.Context) {
 	pluginId := c.Query("pluginId")
 	path := c.Query("path")
+	preparePluginMultipartBody(c)
 	file, err := c.FormFile("file")
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
 	e.PanicParameterErrorTipMsg(err, "file missing")
 	err = dev_service.UploadFile(pluginId, path, file)
 	e.PanicServerErr(err)
@@ -102,7 +125,11 @@ func DeletePlugin(c *contextx.AppContext) {
 
 func SavePlugin(c *contextx.AppContext) {
 	pluginId := c.Gin.Query("pluginId")
+	preparePluginMultipartBody(c.Gin)
 	form, err := c.Gin.MultipartForm()
+	if util.IsRequestBodyTooLargeError(err) {
+		e.PanicParameterErrorTipMsg(err, "上传内容超过 30 MB 限制")
+	}
 	e.PanicParameterErrorTipMsg(err, "invalid multipart form")
 
 	res, err := dev_service.SavePlugin(c, pluginId, form)

@@ -2,10 +2,6 @@ package service
 
 import (
 	"bytes"
-	context "senspace/pkg/app/contextx"
-	"senspace/pkg/e"
-	"senspace/pkg/setting"
-	"senspace/pkg/util"
 	"fmt"
 	"image"
 	"image/gif"
@@ -19,6 +15,11 @@ import (
 	"time"
 
 	"github.com/disintegration/imaging"
+
+	context "senspace/pkg/app/contextx"
+	"senspace/pkg/e"
+	"senspace/pkg/setting"
+	"senspace/pkg/util"
 )
 
 // UploadFormFiles 保存表单中所有文件（返回 map[fieldName]savedFileName）
@@ -83,7 +84,7 @@ func UploadFormFiles(ctx *context.AppContext) map[string]string {
 			upImg = imaging.Resize(upImg, 1000, 0, imaging.CatmullRom)
 		}
 		// 若原为 png 且无透明则转为 jpeg（节省空间）
-		if (format == "png" && !hasAlpha(upImg)) || format == "jpeg" {
+		if (format == "png" && !util.HasImageAlpha(upImg)) || format == "jpeg" {
 			format = "jpg"
 		}
 		fileName := fmt.Sprintf("%d%s", time.Now().UnixNano(), "."+format)
@@ -116,42 +117,4 @@ func DeleteImageFile(url string) {
 	imgPath := fmt.Sprintf("%s/%s", setting.Config.App.FilePath.Image, url)
 	err := util.RemoveIfExists(imgPath)
 	e.PanicIfErr(err)
-}
-
-// helper: 检测是否包含透明像素（简单采样）
-func hasAlpha(img image.Image) bool {
-	switch im := img.(type) {
-	case *image.NRGBA:
-		for i := 3; i < len(im.Pix); i += 4 {
-			if im.Pix[i] != 0xFF {
-				return true
-			}
-		}
-		return false
-	case *image.NRGBA64:
-		for i := 3; i < len(im.Pix); i += 4 {
-			if im.Pix[i] != 0xFF {
-				return true
-			}
-		}
-		return false
-	default:
-		b := img.Bounds()
-		for y := b.Min.Y; y < b.Max.Y; y += max(1, (b.Dy() / 10)) {
-			for x := b.Min.X; x < b.Max.X; x += max(1, (b.Dx() / 10)) {
-				_, _, _, a := img.At(x, y).RGBA()
-				if a != 0xFFFF {
-					return true
-				}
-			}
-		}
-		return false
-	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

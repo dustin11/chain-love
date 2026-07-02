@@ -14,6 +14,7 @@ app:
   pluginBuildPidsLimit: 128
   pluginBuildTmpfs: /tmp:rw,noexec,nosuid,size=256m
   imageMaxSize: 20024000
+  pluginUploadMaxSize: 31457280
   imageExts: [jpg,jpeg,png,gif]
   logSavePath: F:\project\senspace\runtime\wdev\logs\
   logSaveName: log

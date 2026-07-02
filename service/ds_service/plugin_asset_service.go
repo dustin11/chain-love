@@ -1,16 +1,11 @@
 package ds_service
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -21,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/disintegration/imaging"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -38,7 +32,6 @@ const (
 	pluginAssetSchema = "senspace.plugin-assets.v1"
 	pluginStateSchema = "senspace.plugin-state.v1"
 	defaultImageKind  = "image"
-	defaultImageMime  = "image/jpeg"
 	defaultFileKind   = "file"
 	defaultFileMime   = "application/octet-stream"
 )
@@ -896,61 +889,26 @@ func resolveUserImageStoragePath(imageURL string) (string, error) {
 }
 
 func processPluginImageBytes(data []byte) (*processedPluginAsset, error) {
-	if len(data) == 0 {
-		return nil, errors.New("上传文件为空")
-	}
-	if setting.Config.App.ImageMaxSize > 0 && int64(len(data)) > setting.Config.App.ImageMaxSize {
-		return nil, errors.New("图片超过最大限制")
-	}
-	ctype := http.DetectContentType(data[:minInt(len(data), 512)])
-	if !strings.HasPrefix(ctype, "image/") {
-		return nil, errors.New("不是图片文件")
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	processedImage, err := util.ProcessImageBytes(data, util.ImageProcessOptions{
+		MaxBytes:          setting.Config.App.ImageMaxSize,
+		MaxDimension:      1600,
+		ThumbMaxDimension: 360,
+		JPEGQuality:       82,
+		ThumbJPEGQuality:  78,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Width > 10000 || cfg.Height > 10000 {
-		return nil, errors.New("图片分辨率太大")
-	}
-	src, err := imaging.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	if src.Bounds().Dx() > 1600 || src.Bounds().Dy() > 1600 {
-		src = imaging.Resize(src, 1600, 0, imaging.CatmullRom)
-	}
-	mime := defaultImageMime
-	ext := ".jpg"
-	var original bytes.Buffer
-	if hasImageAlpha(src) {
-		mime = "image/png"
-		ext = ".png"
-		if err := png.Encode(&original, src); err != nil {
-			return nil, err
-		}
-	} else if err := jpeg.Encode(&original, src, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, err
-	}
-	thumb := imaging.Thumbnail(src, 360, 360, imaging.CatmullRom)
-	var thumbBuffer bytes.Buffer
-	if mime == "image/png" {
-		if err := png.Encode(&thumbBuffer, thumb); err != nil {
-			return nil, err
-		}
-	} else if err := jpeg.Encode(&thumbBuffer, thumb, &jpeg.Options{Quality: 78}); err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256(original.Bytes())
+	sum := sha256.Sum256(processedImage.Original)
 	return &processedPluginAsset{
 		Kind:     defaultImageKind,
-		Original: original.Bytes(),
-		Thumb:    thumbBuffer.Bytes(),
-		Mime:     mime,
-		Ext:      ext,
+		Original: processedImage.Original,
+		Thumb:    processedImage.Thumb,
+		Mime:     processedImage.Mime,
+		Ext:      processedImage.Ext,
 		Hash:     "sha256:" + hex.EncodeToString(sum[:]),
-		Width:    src.Bounds().Dx(),
-		Height:   src.Bounds().Dy(),
+		Width:    processedImage.Width,
+		Height:   processedImage.Height,
 	}, nil
 }
 
@@ -961,6 +919,15 @@ func processPluginFileBytes(data []byte, filename string) (*processedPluginAsset
 	mime := strings.TrimSpace(http.DetectContentType(data[:minInt(len(data), 512)]))
 	if mime == "" {
 		mime = defaultFileMime
+	}
+	normalizedData, normalizedMime, normalized := util.NormalizeTextFileBytes(
+		data,
+		filename,
+		mime,
+	)
+	if normalized {
+		data = normalizedData
+		mime = normalizedMime
 	}
 	sum := sha256.Sum256(data)
 	return &processedPluginAsset{
@@ -1715,19 +1682,6 @@ func decodeJSONObject(raw string) map[string]interface{} {
 		return map[string]interface{}{}
 	}
 	return decoded
-}
-
-func hasImageAlpha(img image.Image) bool {
-	bounds := img.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			_, _, _, alpha := img.At(x, y).RGBA()
-			if alpha != uint32(color.Opaque.A) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func generatePluginAssetID() uint64 {
