@@ -8,9 +8,9 @@ import (
 	"senspace/pkg/app"
 	"senspace/pkg/app/contextx"
 	"senspace/pkg/e"
-	"senspace/service/ds_service"
 	"senspace/pkg/setting"
 	"senspace/pkg/util"
+	"senspace/service/ds_service"
 )
 
 const defaultPluginUploadMaxSize = 30 * 1024 * 1024
@@ -30,10 +30,14 @@ func preparePluginAssetMultipartBody(ctx *contextx.AppContext) {
 	e.PanicServerErr(err)
 }
 
-func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstanceStateInput {
-	var req ds_service.PluginInstanceStateInput
+func bindPluginStateInput(ctx *contextx.AppContext) ds_service.PluginStateInput {
+	var req ds_service.PluginStateInput
 	err := ctx.Gin.ShouldBindJSON(&req)
 	e.PanicParameterError(err)
+	e.PanicIfParameterError(
+		req.State != nil && (req.ResourceState != nil || req.Bindings != nil),
+		"实例状态和资源状态不能同时保存",
+	)
 	for index, binding := range req.Bindings {
 		if binding.AssetId == 0 {
 			e.PanicIfParameterError(true, "资源ID不能为空")
@@ -46,8 +50,8 @@ func bindPluginAssetStateInput(ctx *contextx.AppContext) ds_service.PluginInstan
 	return req
 }
 
-func bindPluginAssetCommitInput(ctx *contextx.AppContext) (ds_service.PluginAssetCommitInput, map[string]*multipart.FileHeader) {
-	var req ds_service.PluginAssetCommitInput
+func bindResourceStateCommitInput(ctx *contextx.AppContext) (ds_service.ResourceStateCommitInput, map[string]*multipart.FileHeader) {
+	var req ds_service.ResourceStateCommitInput
 	payload := ctx.Gin.PostForm("payload")
 	if payload == "" {
 		preparePluginAssetMultipartBody(ctx)
@@ -189,7 +193,7 @@ func PluginAssetImportImageDev(ctx *contextx.AppContext) {
 // @Summary 保存 fact 插件实例状态
 // @Tags 插件资源
 // @Param factAssetId path string true "插件资产实例ID"
-// @Param body body ds_service.PluginInstanceStateInput true "实例状态"
+// @Param body body ds_service.PluginStateInput true "实例状态"
 // @Security ApiKeyAuth
 // @Router /api/v1/plugin-assets/fact/{factAssetId}/state [put]
 func PluginAssetSaveStateFact(ctx *contextx.AppContext) {
@@ -197,7 +201,20 @@ func PluginAssetSaveStateFact(ctx *contextx.AppContext) {
 	e.PanicParameterError(err)
 	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
 	e.PanicServerErr(err)
-	snapshot, err := ds_service.SavePluginInstanceStateInScope(*ctx.User, scope, bindPluginAssetStateInput(ctx))
+	req := bindPluginStateInput(ctx)
+	var snapshot *ds_service.PluginAssetSnapshot
+	if req.ResourceState != nil || req.Bindings != nil {
+		snapshot, err = ds_service.SaveResourceStateInScope(*ctx.User, scope, ds_service.ResourceStateSaveInput{
+			ExpectedRevision: req.ExpectedRevision,
+			ResourceState:    req.ResourceState,
+			Bindings:         req.Bindings,
+		})
+	} else {
+		snapshot, err = ds_service.SaveStateInScope(*ctx.User, scope, ds_service.StateSaveInput{
+			ExpectedRevision: req.ExpectedRevision,
+			State:            req.State,
+		})
+	}
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(snapshot))
 }
@@ -206,13 +223,26 @@ func PluginAssetSaveStateFact(ctx *contextx.AppContext) {
 // @Tags 插件资源
 // @Param pluginId path string true "插件ID"
 // @Param version path string true "插件版本"
-// @Param body body ds_service.PluginInstanceStateInput true "实例状态"
+// @Param body body ds_service.PluginStateInput true "实例状态"
 // @Security ApiKeyAuth
 // @Router /api/v1/plugin-assets/dev/{pluginId}/{version}/state [put]
 func PluginAssetSaveStateDev(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, ctx.Gin.Param("pluginId"), ctx.Gin.Param("version"))
 	e.PanicServerErr(err)
-	snapshot, err := ds_service.SavePluginInstanceStateInScope(*ctx.User, scope, bindPluginAssetStateInput(ctx))
+	req := bindPluginStateInput(ctx)
+	var snapshot *ds_service.PluginAssetSnapshot
+	if req.ResourceState != nil || req.Bindings != nil {
+		snapshot, err = ds_service.SaveResourceStateInScope(*ctx.User, scope, ds_service.ResourceStateSaveInput{
+			ExpectedRevision: req.ExpectedRevision,
+			ResourceState:    req.ResourceState,
+			Bindings:         req.Bindings,
+		})
+	} else {
+		snapshot, err = ds_service.SaveStateInScope(*ctx.User, scope, ds_service.StateSaveInput{
+			ExpectedRevision: req.ExpectedRevision,
+			State:            req.State,
+		})
+	}
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(snapshot))
 }
@@ -230,8 +260,8 @@ func PluginAssetCommitFact(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveFactPluginAssetScope(*ctx.User, factAssetId)
 	e.PanicServerErr(err)
 	preparePluginAssetMultipartBody(ctx)
-	req, files := bindPluginAssetCommitInput(ctx)
-	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	req, files := bindResourceStateCommitInput(ctx)
+	result, err := ds_service.CommitResourceStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
@@ -248,8 +278,8 @@ func PluginAssetCommitDev(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveDevPluginAssetScope(*ctx.User, ctx.Gin.Param("pluginId"), ctx.Gin.Param("version"))
 	e.PanicServerErr(err)
 	preparePluginAssetMultipartBody(ctx)
-	req, files := bindPluginAssetCommitInput(ctx)
-	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	req, files := bindResourceStateCommitInput(ctx)
+	result, err := ds_service.CommitResourceStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
@@ -268,8 +298,8 @@ func PluginAssetCommitDraft(ctx *contextx.AppContext) {
 	scope, err := ds_service.ResolveDraftPluginAssetScope(*ctx.User, releaseId, ctx.Gin.Param("draftId"))
 	e.PanicServerErr(err)
 	preparePluginAssetMultipartBody(ctx)
-	req, files := bindPluginAssetCommitInput(ctx)
-	result, err := ds_service.CommitPluginAssetStateInScope(*ctx.User, scope, req, files)
+	req, files := bindResourceStateCommitInput(ctx)
+	result, err := ds_service.CommitResourceStateInScope(*ctx.User, scope, req, files)
 	e.PanicServerErr(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }

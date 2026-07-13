@@ -49,6 +49,11 @@ func InitTable(db *gorm.DB) {
 			}
 			log.Printf("create table %v success.", table)
 		}
+		if _, ok := table.(*ds.PluginInstanceState); ok {
+			if err := migratePluginInstanceStateColumns(db); err != nil {
+				log.Printf("migrate plugin instance state columns failed: %v", err)
+			}
+		}
 		// auto‑migrate – 保证结构体中的新字段自动加入已有表
 		if err := db.AutoMigrate(table); err != nil {
 			log.Printf("automigrate %T failed: %v", table, err)
@@ -73,6 +78,24 @@ func InitTable(db *gorm.DB) {
 	}
 
 	factory.SeedBuiltinReleases(db)
+}
+
+// migratePluginInstanceStateColumns 将旧资源状态和位姿字段迁移到新的状态字段。
+func migratePluginInstanceStateColumns(db *gorm.DB) error {
+	table := &ds.PluginInstanceState{}
+	if db.Migrator().HasColumn(table, "state_json") &&
+		!db.Migrator().HasColumn(table, "resource_state_json") {
+		if err := db.Migrator().RenameColumn(table, "state_json", "resource_state_json"); err != nil {
+			return err
+		}
+	}
+	if db.Migrator().HasColumn(table, "pose_json") &&
+		!db.Migrator().HasColumn(table, "state_json") {
+		if err := db.Migrator().RenameColumn(table, "pose_json", "state_json"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrateAuditTimeColumns 将旧审计字段 created_on/updated_on 迁移到 CreatedAt/UpdatedAt 对应列。

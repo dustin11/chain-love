@@ -67,19 +67,19 @@ func (PluginAssetBinding) TableName() string {
 
 // 插件实例整体运行状态。
 type PluginInstanceState struct {
-	Id            uint64               `json:"id,string" gorm:"primaryKey;autoIncrement;comment:状态ID"`                                                        // 状态ID。
-	ScopeKind     PluginAssetScopeKind `json:"scopeKind" gorm:"type:varchar(16);not null;index:idx_plugin_instance_state_scope,priority:1;comment:资源空间类型"`    // 资源空间类型。
-	OwnerKey      string               `json:"ownerKey" gorm:"type:varchar(128);not null;index:idx_plugin_instance_state_scope,priority:2;comment:钱包索引键"`     // 钱包索引键。
-	FactAssetId   *int64               `json:"factAssetId,string,omitempty" gorm:"index:idx_plugin_instance_state_scope,priority:3;comment:插件资产实例ID"`         // 插件资产实例ID。
-	PluginId      string               `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_plugin_instance_state_scope,priority:4;comment:插件业务ID"`    // 插件业务ID。
-	PluginVersion string               `json:"pluginVersion" gorm:"type:varchar(64);not null;index:idx_plugin_instance_state_scope,priority:5;comment:插件版本号"` // 插件版本号。
-	ReleaseId     *int64               `json:"releaseId,string,omitempty" gorm:"index:idx_plugin_instance_state_release;comment:发布记录ID"`                      // 发布记录ID。
-	DraftId       string               `json:"draftId,omitempty" gorm:"type:varchar(128);index:idx_plugin_instance_state_draft;comment:草稿ID"`                 // 草稿ID。
-	SpaceId       string               `json:"spaceId,omitempty" gorm:"type:varchar(128);index:idx_plugin_instance_state_space;comment:空间ID"`                 // 空间ID。
-	SurfaceId     string               `json:"surfaceId,omitempty" gorm:"type:varchar(128);comment:活动区域ID"`                                                   // 活动区域ID。
-	PoseJson      string               `json:"poseJson,omitempty" gorm:"type:json;comment:位姿JSON"`                                                            // 位姿JSON。
-	StateJson     string               `json:"stateJson,omitempty" gorm:"type:json;comment:实例状态JSON"`                                                         // 实例状态JSON。
-	Revision      int64                `json:"revision" gorm:"not null;comment:状态版本号"`                                                                        // 状态版本号。
+	Id                uint64               `json:"id,string" gorm:"primaryKey;autoIncrement;comment:状态ID"`                                                        // 状态ID。
+	ScopeKind         PluginAssetScopeKind `json:"scopeKind" gorm:"type:varchar(16);not null;index:idx_plugin_instance_state_scope,priority:1;comment:资源空间类型"`    // 资源空间类型。
+	OwnerKey          string               `json:"ownerKey" gorm:"type:varchar(128);not null;index:idx_plugin_instance_state_scope,priority:2;comment:钱包索引键"`     // 钱包索引键。
+	FactAssetId       *int64               `json:"factAssetId,string,omitempty" gorm:"index:idx_plugin_instance_state_scope,priority:3;comment:插件资产实例ID"`         // 插件资产实例ID。
+	PluginId          string               `json:"pluginId" gorm:"type:varchar(128);not null;index:idx_plugin_instance_state_scope,priority:4;comment:插件业务ID"`    // 插件业务ID。
+	PluginVersion     string               `json:"pluginVersion" gorm:"type:varchar(64);not null;index:idx_plugin_instance_state_scope,priority:5;comment:插件版本号"` // 插件版本号。
+	ReleaseId         *int64               `json:"releaseId,string,omitempty" gorm:"index:idx_plugin_instance_state_release;comment:发布记录ID"`                      // 发布记录ID。
+	DraftId           string               `json:"draftId,omitempty" gorm:"type:varchar(128);index:idx_plugin_instance_state_draft;comment:草稿ID"`                 // 草稿ID。
+	SpaceId           string               `json:"spaceId,omitempty" gorm:"type:varchar(128);index:idx_plugin_instance_state_space;comment:空间ID"`                 // 空间ID。
+	SurfaceId         string               `json:"surfaceId,omitempty" gorm:"type:varchar(128);comment:活动区域ID"`                                                   // 活动区域ID。
+	ResourceStateJson string               `json:"resourceStateJson,omitempty" gorm:"type:json;comment:资源状态JSON"`                                                 // 资源状态JSON。
+	StateJson         string               `json:"stateJson,omitempty" gorm:"type:json;comment:实例状态JSON"`                                                         // 实例状态JSON。
+	Revision          int64                `json:"revision" gorm:"not null;comment:状态版本号"`                                                                        // 状态版本号。
 	domain.CreatInfo
 	domain.UpdateInfo
 }

@@ -30,30 +30,43 @@ import (
 
 const (
 	pluginAssetSchema = "senspace.plugin-assets.v1"
-	pluginStateSchema = "senspace.plugin-state.v1"
+	pluginStateSchema = "senspace.plugin-state.v2"
 	defaultImageKind  = "image"
 	defaultFileKind   = "file"
 	defaultFileMime   = "application/octet-stream"
 )
 
 // 资源绑定保存参数。
-type PluginAssetBindingInput struct {
+type ResourceStateBindingInput struct {
 	AssetId       uint64          `json:"assetId,string"`   // 资源ID。
 	CollectionKey string          `json:"collectionKey"`    // 资源集合键。
 	SortOrder     int             `json:"sortOrder"`        // 展示排序。
 	Config        json.RawMessage `json:"config,omitempty"` // 资源展示配置。
 }
 
-// 插件实例状态保存参数。
-type PluginInstanceStateInput struct {
-	ExpectedRevision *int64                    `json:"expectedRevision,omitempty"` // 期望状态版本。
-	State            map[string]interface{}    `json:"state,omitempty"`            // 插件整体状态。
-	Pose             map[string]interface{}    `json:"pose,omitempty"`             // 预留位姿状态。
-	Bindings         []PluginAssetBindingInput `json:"bindings,omitempty"`         // 资源绑定配置。
+// 插件状态保存请求。
+type PluginStateInput struct {
+	ExpectedRevision *int64                      `json:"expectedRevision,omitempty"` // 期望状态版本。
+	State            map[string]interface{}      `json:"state,omitempty"`            // 实例持久化状态。
+	ResourceState    map[string]interface{}      `json:"resource_state,omitempty"`   // 资源相关状态。
+	Bindings         []ResourceStateBindingInput `json:"bindings,omitempty"`         // 资源绑定配置。
+}
+
+// 实例状态保存参数。
+type StateSaveInput struct {
+	ExpectedRevision *int64                 `json:"expectedRevision,omitempty"` // 期望状态版本。
+	State            map[string]interface{} `json:"state,omitempty"`            // 实例持久化状态。
+}
+
+// 资源状态保存参数。
+type ResourceStateSaveInput struct {
+	ExpectedRevision *int64                      `json:"expectedRevision,omitempty"` // 期望状态版本。
+	ResourceState    map[string]interface{}      `json:"resource_state,omitempty"`   // 资源相关状态。
+	Bindings         []ResourceStateBindingInput `json:"bindings,omitempty"`         // 资源绑定配置。
 }
 
 // 资源提交绑定参数。
-type PluginAssetCommitBindingInput struct {
+type ResourceStateCommitBindingInput struct {
 	AssetId       string          `json:"assetId"`          // 资源ID，支持真实ID或local-*。
 	CollectionKey string          `json:"collectionKey"`    // 资源集合键。
 	SortOrder     int             `json:"sortOrder"`        // 展示排序。
@@ -61,7 +74,7 @@ type PluginAssetCommitBindingInput struct {
 }
 
 // 本地文件提交参数。
-type PluginAssetCommitLocalFileInput struct {
+type ResourceStateCommitLocalFileInput struct {
 	LocalId       string          `json:"localId"`          // 本地临时资源ID。
 	FileKey       string          `json:"fileKey"`          // multipart文件字段名。
 	CollectionKey string          `json:"collectionKey"`    // 资源集合键。
@@ -70,34 +83,33 @@ type PluginAssetCommitLocalFileInput struct {
 }
 
 // 插件实例资源提交参数。
-type PluginAssetCommitInput struct {
-	ExpectedRevision *int64                            `json:"expectedRevision,omitempty"` // 期望状态版本。
-	State            map[string]interface{}            `json:"state,omitempty"`            // 插件整体状态。
-	Pose             map[string]interface{}            `json:"pose,omitempty"`             // 预留位姿状态。
-	Bindings         []PluginAssetCommitBindingInput   `json:"bindings,omitempty"`         // 最终资源绑定。
-	LocalFiles       []PluginAssetCommitLocalFileInput `json:"localFiles,omitempty"`       // 本地待上传文件。
-	DeletedAssetIds  []uint64                          `json:"deletedAssetIds,omitempty"`  // 待删除资源ID。
+type ResourceStateCommitInput struct {
+	ExpectedRevision *int64                              `json:"expectedRevision,omitempty"` // 期望状态版本。
+	ResourceState    map[string]interface{}              `json:"resource_state,omitempty"`   // 资源相关状态。
+	Bindings         []ResourceStateCommitBindingInput   `json:"bindings,omitempty"`         // 最终资源绑定。
+	LocalFiles       []ResourceStateCommitLocalFileInput `json:"localFiles,omitempty"`       // 本地待上传文件。
+	DeletedAssetIds  []uint64                            `json:"deletedAssetIds,omitempty"`  // 待删除资源ID。
 }
 
 // 本地资源提交结果。
-type PluginAssetCommittedLocalFile struct {
+type ResourceStateCommittedLocalFile struct {
 	LocalId string          `json:"localId"` // 本地临时资源ID。
 	Asset   pluginAssetJSON `json:"asset"`   // 服务端资源信息。
 }
 
 // 插件实例资源提交结果。
-type PluginAssetCommitResult struct {
-	Snapshot PluginAssetSnapshot             `json:"snapshot"` // 最新静态快照。
-	State    map[string]interface{}          `json:"state"`    // 替换资源ID后的状态。
-	Uploaded []PluginAssetCommittedLocalFile `json:"uploaded"` // 本次上传资源。
+type ResourceStateCommitResult struct {
+	Snapshot      PluginAssetSnapshot               `json:"snapshot"`       // 最新静态快照。
+	ResourceState map[string]interface{}            `json:"resource_state"` // 替换资源ID后的资源状态。
+	Uploaded      []ResourceStateCommittedLocalFile `json:"uploaded"`       // 本次上传资源。
 }
 
 // 插件实例草稿快照。
 type PluginInstanceDraftSnapshot struct {
-	DraftId  string                 `json:"draftId"`  // 草稿ID。
-	Scope    ds.PluginAssetScope    `json:"scope"`    // 草稿资源空间。
-	Snapshot PluginAssetSnapshot    `json:"snapshot"` // 最新静态快照。
-	State    map[string]interface{} `json:"state"`    // 已保存实例状态。
+	DraftId       string                 `json:"draftId"`        // 草稿ID。
+	Scope         ds.PluginAssetScope    `json:"scope"`          // 草稿资源空间。
+	Snapshot      PluginAssetSnapshot    `json:"snapshot"`       // 最新静态快照。
+	ResourceState map[string]interface{} `json:"resource_state"` // 已保存资源状态。
 }
 
 // 静态快照返回信息。
@@ -144,11 +156,17 @@ type pluginAssetBindingJSON struct {
 
 // 插件实例状态静态文件。
 type pluginInstanceStateJSON struct {
-	Schema      string                              `json:"schema"`      // 协议版本。
-	Scope       ds.PluginAssetScope                 `json:"scope"`       // 资源空间。
-	Revision    int64                               `json:"revision"`    // 状态版本号。
-	UpdatedAt   string                              `json:"updatedAt"`   // 更新时间。
-	State       interface{}                         `json:"state"`       // 插件整体状态。
+	Schema        string                       `json:"schema"`         // 协议版本。
+	Scope         ds.PluginAssetScope          `json:"scope"`          // 资源空间。
+	Revision      int64                        `json:"revision"`       // 状态版本号。
+	UpdatedAt     string                       `json:"updatedAt"`      // 更新时间。
+	State         interface{}                  `json:"state"`          // 实例持久化状态。
+	ResourceState pluginAssetResourceStateJSON `json:"resource_state"` // 资源相关状态。
+}
+
+// 静态文件中的资源状态分区。
+type pluginAssetResourceStateJSON struct {
+	State       interface{}                         `json:"state"`       // 资源配置状态。
 	Collections map[string][]pluginAssetBindingJSON `json:"collections"` // 分组资源配置。
 }
 
@@ -364,17 +382,17 @@ func saveProcessedPluginAsset(user security.JwtUser, scope ds.PluginAssetScope, 
 	return &PluginAssetUploadResult{Snapshot: *snapshot, Asset: assetJSON}, nil
 }
 
-// SavePluginInstanceState 保存插件实例状态并刷新静态快照。
-func SavePluginInstanceState(user security.JwtUser, factAssetId int64, input PluginInstanceStateInput) (*PluginAssetSnapshot, error) {
+// SaveState 保存实例状态并刷新静态快照。
+func SaveState(user security.JwtUser, factAssetId int64, input StateSaveInput) (*PluginAssetSnapshot, error) {
 	scope, err := ResolveFactPluginAssetScope(user, factAssetId)
 	if err != nil {
 		return nil, err
 	}
-	return SavePluginInstanceStateInScope(user, scope, input)
+	return SaveStateInScope(user, scope, input)
 }
 
-// SavePluginInstanceStateInScope 保存指定空间下的插件实例状态并刷新静态快照。
-func SavePluginInstanceStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input PluginInstanceStateInput) (*PluginAssetSnapshot, error) {
+// SaveStateInScope 保存指定空间下的实例状态并刷新静态快照。
+func SaveStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input StateSaveInput) (*PluginAssetSnapshot, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
@@ -386,17 +404,9 @@ func SavePluginInstanceStateInScope(user security.JwtUser, scope ds.PluginAssetS
 		if input.ExpectedRevision != nil && state.Revision != *input.ExpectedRevision {
 			return fmt.Errorf("状态版本已变化，请刷新后重试")
 		}
-		if input.Bindings != nil {
-			if err := replacePluginAssetBindings(tx, user.Id, scope, input.Bindings); err != nil {
-				return err
-			}
-		}
 		applyScopeToPluginInstanceState(&state, scope)
 		if input.State != nil {
 			state.StateJson = encodeJSONOrEmpty(input.State)
-		}
-		if input.Pose != nil {
-			state.PoseJson = encodeJSONOrEmpty(input.Pose)
 		}
 		state.Revision += 1
 		state.UpdatedBy = user.Id
@@ -418,13 +428,64 @@ func SavePluginInstanceStateInScope(user security.JwtUser, scope ds.PluginAssetS
 	return RebuildPluginAssetSnapshot(scope)
 }
 
-// CommitPluginAssetStateInScope 提交本地资源、删除资源并保存实例状态。
-func CommitPluginAssetStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input PluginAssetCommitInput, files map[string]*multipart.FileHeader) (*PluginAssetCommitResult, error) {
+// SaveResourceState 保存资源状态并刷新静态快照。
+func SaveResourceState(user security.JwtUser, factAssetId int64, input ResourceStateSaveInput) (*PluginAssetSnapshot, error) {
+	scope, err := ResolveFactPluginAssetScope(user, factAssetId)
+	if err != nil {
+		return nil, err
+	}
+	return SaveResourceStateInScope(user, scope, input)
+}
+
+// SaveResourceStateInScope 保存指定空间下的资源状态并刷新静态快照。
+func SaveResourceStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input ResourceStateSaveInput) (*PluginAssetSnapshot, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	err := domain.Db.Transaction(func(tx *gorm.DB) error {
+		state, err := lockPluginInstanceState(tx, scope)
+		if err != nil {
+			return err
+		}
+		if input.ExpectedRevision != nil && state.Revision != *input.ExpectedRevision {
+			return fmt.Errorf("状态版本已变化，请刷新后重试")
+		}
+		if input.Bindings != nil {
+			if err := replacePluginAssetBindings(tx, user.Id, scope, input.Bindings); err != nil {
+				return err
+			}
+		}
+		applyScopeToPluginInstanceState(&state, scope)
+		if input.ResourceState != nil {
+			state.ResourceStateJson = encodeJSONOrEmpty(input.ResourceState)
+		}
+		state.Revision += 1
+		state.UpdatedBy = user.Id
+		if state.Id == 0 {
+			state.CreatedBy = user.Id
+			if err := tx.Create(&state).Error; err != nil {
+				return err
+			}
+			return upsertActivePluginInstanceDraft(tx, user, scope)
+		}
+		if err := tx.Save(&state).Error; err != nil {
+			return err
+		}
+		return upsertActivePluginInstanceDraft(tx, user, scope)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return RebuildPluginAssetSnapshot(scope)
+}
+
+// CommitResourceStateInScope 提交本地资源、删除资源并保存资源状态。
+func CommitResourceStateInScope(user security.JwtUser, scope ds.PluginAssetScope, input ResourceStateCommitInput, files map[string]*multipart.FileHeader) (*ResourceStateCommitResult, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
 	localAssetIds := map[string]string{}
-	uploaded := make([]PluginAssetCommittedLocalFile, 0, len(input.LocalFiles))
+	uploaded := make([]ResourceStateCommittedLocalFile, 0, len(input.LocalFiles))
 	for _, item := range input.LocalFiles {
 		localId := strings.TrimSpace(item.LocalId)
 		fileKey := strings.TrimSpace(item.FileKey)
@@ -440,7 +501,7 @@ func CommitPluginAssetStateInScope(user security.JwtUser, scope ds.PluginAssetSc
 			return nil, err
 		}
 		localAssetIds[localId] = result.Asset.AssetId
-		uploaded = append(uploaded, PluginAssetCommittedLocalFile{
+		uploaded = append(uploaded, ResourceStateCommittedLocalFile{
 			LocalId: localId,
 			Asset:   result.Asset,
 		})
@@ -456,20 +517,19 @@ func CommitPluginAssetStateInScope(user security.JwtUser, scope ds.PluginAssetSc
 		}
 	}
 
-	state := replaceLocalPluginAssetIDs(input.State, localAssetIds)
-	snapshot, err := SavePluginInstanceStateInScope(user, scope, PluginInstanceStateInput{
+	resourceState := replaceLocalPluginAssetIDs(input.ResourceState, localAssetIds)
+	snapshot, err := SaveResourceStateInScope(user, scope, ResourceStateSaveInput{
 		ExpectedRevision: input.ExpectedRevision,
-		State:            state,
-		Pose:             input.Pose,
+		ResourceState:    resourceState,
 		Bindings:         finalBindings,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &PluginAssetCommitResult{
-		Snapshot: *snapshot,
-		State:    state,
-		Uploaded: uploaded,
+	return &ResourceStateCommitResult{
+		Snapshot:      *snapshot,
+		ResourceState: resourceState,
+		Uploaded:      uploaded,
 	}, nil
 }
 
@@ -504,10 +564,10 @@ func GetActivePluginInstanceDraft(user security.JwtUser, releaseId int64) (*Plug
 		return nil, err
 	}
 	return &PluginInstanceDraftSnapshot{
-		DraftId:  draft.DraftId,
-		Scope:    scope,
-		Snapshot: *snapshot,
-		State:    decodeJSONObject(state.StateJson),
+		DraftId:       draft.DraftId,
+		Scope:         scope,
+		Snapshot:      *snapshot,
+		ResourceState: decodeJSONObject(state.ResourceStateJson),
 	}, nil
 }
 
@@ -575,7 +635,7 @@ func ArchiveDraftPluginAssetsToFactAssets(user security.JwtUser, releaseId int64
 			if err := replacePluginAssetBindings(tx, user.Id, plan.Scope, bindings); err != nil {
 				return err
 			}
-			stateSource := decodeJSONObject(draftState.StateJson)
+			stateSource := decodeJSONObject(draftState.ResourceStateJson)
 			if stateOverride != nil {
 				stateSource = stateOverride
 			}
@@ -585,7 +645,8 @@ func ArchiveDraftPluginAssetsToFactAssets(user security.JwtUser, releaseId int64
 				return err
 			}
 			applyScopeToPluginInstanceState(&state, plan.Scope)
-			state.StateJson = encodeJSONOrEmpty(statePayload)
+			state.ResourceStateJson = encodeJSONOrEmpty(statePayload)
+			state.StateJson = encodeJSONOrEmpty(decodeJSONObject(draftState.StateJson))
 			state.Revision += 1
 			state.UpdatedBy = user.Id
 			if state.Id == 0 {
@@ -1045,8 +1106,8 @@ func normalizePluginAssetFileExt(filename string) string {
 	return ext
 }
 
-func buildCommittedPluginAssetBindings(bindings []PluginAssetCommitBindingInput, localFiles []PluginAssetCommitLocalFileInput, localAssetIds map[string]string) ([]PluginAssetBindingInput, map[uint64]struct{}, error) {
-	result := make([]PluginAssetBindingInput, 0, len(bindings)+len(localFiles))
+func buildCommittedPluginAssetBindings(bindings []ResourceStateCommitBindingInput, localFiles []ResourceStateCommitLocalFileInput, localAssetIds map[string]string) ([]ResourceStateBindingInput, map[uint64]struct{}, error) {
+	result := make([]ResourceStateBindingInput, 0, len(bindings)+len(localFiles))
 	referenced := map[uint64]struct{}{}
 	for _, input := range bindings {
 		assetID, ok, err := resolveCommittedAssetID(input.AssetId, localAssetIds)
@@ -1057,7 +1118,7 @@ func buildCommittedPluginAssetBindings(bindings []PluginAssetCommitBindingInput,
 			continue
 		}
 		referenced[assetID] = struct{}{}
-		result = append(result, PluginAssetBindingInput{
+		result = append(result, ResourceStateBindingInput{
 			AssetId:       assetID,
 			CollectionKey: input.CollectionKey,
 			SortOrder:     input.SortOrder,
@@ -1071,7 +1132,7 @@ func buildCommittedPluginAssetBindings(bindings []PluginAssetCommitBindingInput,
 			return nil, nil, fmt.Errorf("本地资源未完成上传: %s", input.LocalId)
 		}
 		referenced[assetID] = struct{}{}
-		result = append(result, PluginAssetBindingInput{
+		result = append(result, ResourceStateBindingInput{
 			AssetId:       assetID,
 			CollectionKey: input.CollectionKey,
 			SortOrder:     input.SortOrder,
@@ -1150,7 +1211,7 @@ func replaceLocalPluginAssetIDValue(value interface{}, localAssetIds map[string]
 	}
 }
 
-func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAssetScope, bindings []PluginAssetBindingInput) error {
+func replacePluginAssetBindings(tx *gorm.DB, userID uint64, scope ds.PluginAssetScope, bindings []ResourceStateBindingInput) error {
 	if err := applyScopeFilter(tx.Model(&ds.PluginAssetBinding{}), scope).
 		Delete(&ds.PluginAssetBinding{}).Error; err != nil {
 		return err
@@ -1201,6 +1262,7 @@ func bumpPluginInstanceState(tx *gorm.DB, userID uint64, scope ds.PluginAssetSco
 	state.UpdatedBy = userID
 	if state.Id == 0 {
 		state.CreatedBy = userID
+		state.ResourceStateJson = "{}"
 		state.StateJson = "{}"
 		if err := tx.Create(&state).Error; err != nil {
 			return err
@@ -1258,9 +1320,9 @@ func lockPluginInstanceState(tx *gorm.DB, scope ds.PluginAssetScope) (ds.PluginI
 		First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		state = ds.PluginInstanceState{
-			StateJson: "{}",
-			PoseJson:  "{}",
-			Revision:  0,
+			ResourceStateJson: "{}",
+			StateJson:         "{}",
+			Revision:          0,
 		}
 		applyScopeToPluginInstanceState(&state, scope)
 		return state, nil
@@ -1294,7 +1356,7 @@ func buildPluginAssetSnapshotPayload(db *gorm.DB, scope ds.PluginAssetScope) (*p
 	var state ds.PluginInstanceState
 	err := applyScopeFilter(db.Model(&ds.PluginInstanceState{}), scope).First(&state).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		state = ds.PluginInstanceState{StateJson: "{}", PoseJson: "{}", Revision: 0}
+		state = ds.PluginInstanceState{ResourceStateJson: "{}", StateJson: "{}", Revision: 0}
 		applyScopeToPluginInstanceState(&state, scope)
 	} else if err != nil {
 		return nil, nil, 0, err
@@ -1326,12 +1388,15 @@ func buildPluginAssetSnapshotPayload(db *gorm.DB, scope ds.PluginAssetScope) (*p
 		Assets:    manifestAssets,
 	}
 	stateJSON := &pluginInstanceStateJSON{
-		Schema:      pluginStateSchema,
-		Scope:       scope,
-		Revision:    state.Revision,
-		UpdatedAt:   now,
-		State:       decodeJSONValue(state.StateJson),
-		Collections: collections,
+		Schema:    pluginStateSchema,
+		Scope:     scope,
+		Revision:  state.Revision,
+		UpdatedAt: now,
+		State:     decodeJSONValue(state.StateJson),
+		ResourceState: pluginAssetResourceStateJSON{
+			State:       decodeJSONValue(state.ResourceStateJson),
+			Collections: collections,
+		},
 	}
 	return manifest, stateJSON, state.Revision, nil
 }
@@ -1409,15 +1474,15 @@ func buildDraftArchivePlans(draftScope ds.PluginAssetScope, factScopes []ds.Plug
 	return plans, nil
 }
 
-func buildArchivedPluginAssetBindings(bindings []ds.PluginAssetBinding, assetIdMap map[string]string) []PluginAssetBindingInput {
-	result := make([]PluginAssetBindingInput, 0, len(bindings))
+func buildArchivedPluginAssetBindings(bindings []ds.PluginAssetBinding, assetIdMap map[string]string) []ResourceStateBindingInput {
+	result := make([]ResourceStateBindingInput, 0, len(bindings))
 	for _, binding := range bindings {
 		nextAssetIDText := assetIdMap[strconv.FormatUint(binding.AssetId, 10)]
 		nextAssetID, err := strconv.ParseUint(nextAssetIDText, 10, 64)
 		if err != nil || nextAssetID == 0 {
 			continue
 		}
-		result = append(result, PluginAssetBindingInput{
+		result = append(result, ResourceStateBindingInput{
 			AssetId:       nextAssetID,
 			CollectionKey: binding.CollectionKey,
 			SortOrder:     binding.SortOrder,
