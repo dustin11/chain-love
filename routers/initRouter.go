@@ -11,6 +11,7 @@ import (
 	"senspace/pkg/e"
 	"senspace/pkg/setting"
 	"senspace/pkg/util"
+	"senspace/service/plugin_share_service"
 	"strings"
 	"time"
 
@@ -44,7 +45,7 @@ func SetupRouter() *gin.Engine {
 
 	corsCfg := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Plugin-Share-Token"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,           // 必须启用，浏览器才能发送/接收带凭证的跨域 Cookie
 		MaxAge:           12 * time.Hour, // 预检请求的缓存时间
@@ -77,6 +78,8 @@ func SetupRouter() *gin.Engine {
 	router.StaticFS("/static/images", gin.Dir(setting.Config.App.FilePath.Image, false))
 	// 用户插件实例资源：上传文件、实例状态与运行快照。
 	router.StaticFS("/static/plugin-assets", gin.Dir(ds.PluginAssetsRoot(), false))
+	// 插件分享背景：只包含随机文件名的公开静态图片。
+	router.StaticFS("/static/plugin-shared", gin.Dir(plugin_share_service.SharedStaticRoot(), false))
 	// 数字工厂静态资产：发布模板、铸造 NFT 元数据、owner hash 索引。
 	router.StaticFS("/static/factory", gin.Dir(factory.FactoryStaticRoot(), false))
 	//swagger

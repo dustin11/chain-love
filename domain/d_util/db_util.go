@@ -30,6 +30,7 @@ var tables = []interface{}{
 	&ds.PluginInstanceState{},
 	&ds.PluginInstanceDraft{},
 	&ds.PluginComment{},
+	&ds.PluginShare{},
 
 	&active.Like{},
 

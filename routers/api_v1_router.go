@@ -7,6 +7,7 @@ import (
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
 	"senspace/api/api_v1/plugin_comment_api"
+	"senspace/api/api_v1/plugin_share_api"
 	"senspace/api/api_v1/sys_api"
 	"senspace/api/api_v1/task_api"
 	"senspace/middleware"
@@ -61,6 +62,22 @@ func SetupApiV1Router(router *gin.Engine) {
 			context.WithAppContext(plugin_comment_api.ListComments),
 		)
 	}
+	pluginSharePublicRouter := router.Group(
+		"/api/v1/plugin-shares",
+		middleware.OptionalAuth(),
+	)
+	{
+		pluginSharePublicRouter.GET(
+			"/:shareToken/bootstrap",
+			context.WithAppContext(plugin_share_api.GetBootstrap),
+		)
+	}
+	// 资源路径与公开分享地址同域，但只由服务端解析随机别名。
+	router.GET(
+		"/plugin-share/:shareToken/resources/:resourceAlias",
+		middleware.OptionalAuth(),
+		context.WithAppContext(plugin_share_api.GetResource),
+	)
 
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
@@ -153,6 +170,11 @@ func SetupApiV1Router(router *gin.Engine) {
 		pluginCommentRouter.POST("/create", context.WithAppContext(plugin_comment_api.CreateComment))
 		pluginCommentRouter.POST("/like", context.WithAppContext(plugin_comment_api.LikeComment))
 		pluginCommentRouter.POST("/cleanup", context.WithAppContext(plugin_comment_api.CleanupComments))
+	}
+	pluginShareRouter := apiRouter.Group("/plugin-shares")
+	{
+		pluginShareRouter.POST("", context.WithAppContext(plugin_share_api.CreateShare))
+		pluginShareRouter.DELETE("/:shareToken", context.WithAppContext(plugin_share_api.RevokeShare))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")

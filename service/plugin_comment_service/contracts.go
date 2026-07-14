@@ -5,6 +5,7 @@ type CommentAnchor map[string]any
 
 // 评论分页筛选参数。
 type ListRequest struct {
+	ShareToken string        `json:"-"`
 	InstanceId string        `json:"instanceId"`
 	Mode       string        `json:"mode"`
 	Anchor     CommentAnchor `json:"anchor"`
@@ -14,6 +15,7 @@ type ListRequest struct {
 
 // 新建评论参数。
 type CreateRequest struct {
+	ShareToken      string        `json:"-"`
 	Anchor          CommentAnchor `json:"anchor"`
 	Content         string        `json:"content"`
 	ParentId        string        `json:"parentId"`
@@ -22,6 +24,7 @@ type CreateRequest struct {
 
 // 评论级联清理参数。
 type CleanupRequest struct {
+	ShareToken string        `json:"-"`
 	InstanceId string        `json:"instanceId"`
 	DeleteAll  bool          `json:"deleteAll,omitempty"`
 	Items      []CleanupItem `json:"items"`
@@ -36,7 +39,8 @@ type CleanupItem struct {
 
 // 评论点赞参数。
 type LikeRequest struct {
-	Id string `json:"id"`
+	Id         string `json:"id"`
+	ShareToken string `json:"-"`
 }
 
 // 评论作者展示数据。

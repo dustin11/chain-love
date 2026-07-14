@@ -14,6 +14,7 @@ import (
 	"senspace/domain/ds/enum"
 	"senspace/domain/sys"
 	"senspace/pkg/app/security"
+	"senspace/service/plugin_share_service"
 
 	"gorm.io/gorm"
 )
@@ -42,6 +43,16 @@ func ListComments(req ListRequest, user *security.JwtUser) (*ListResult, error) 
 	}
 	if instanceId == "" {
 		return nil, errors.New("instanceId不能为空")
+	}
+	if strings.TrimSpace(req.ShareToken) != "" {
+		instanceId, _, err = plugin_share_service.ResolveCommentInstance(
+			req.ShareToken,
+			instanceId,
+			user,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	page, pageSize := normalizePage(req.Page, req.PageSize)
 
@@ -72,6 +83,9 @@ func ListComments(req ListRequest, user *security.JwtUser) (*ListResult, error) 
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(req.ShareToken) != "" {
+		projectCommentViews(items)
+	}
 	return &ListResult{
 		Total:    total,
 		Page:     page,
@@ -99,6 +113,17 @@ func CreateComment(req CreateRequest, user *security.JwtUser) (*CommentView, err
 	instanceId := anchorString(req.Anchor, "instanceId")
 	if instanceId == "" {
 		return nil, errors.New("评论锚点缺少 instanceId")
+	}
+	if strings.TrimSpace(req.ShareToken) != "" {
+		instanceId, _, err = plugin_share_service.ResolveCommentInstance(
+			req.ShareToken,
+			instanceId,
+			user,
+		)
+		if err != nil {
+			return nil, err
+		}
+		req.Anchor["instanceId"] = instanceId
 	}
 	anchorJson, err := marshalAnchor(req.Anchor)
 	if err != nil {
@@ -164,6 +189,9 @@ func CreateComment(req CreateRequest, user *security.JwtUser) (*CommentView, err
 	if len(views) == 0 {
 		return nil, errors.New("评论创建失败")
 	}
+	if strings.TrimSpace(req.ShareToken) != "" {
+		projectCommentViews(views)
+	}
 	return &views[0], nil
 }
 
@@ -179,6 +207,22 @@ func CleanupComments(req CleanupRequest, user *security.JwtUser) (*CleanupResult
 	instanceID := strings.TrimSpace(req.InstanceId)
 	if instanceID == "" {
 		return nil, errors.New("instanceId不能为空")
+	}
+	canManageComments := false
+	if strings.TrimSpace(req.ShareToken) != "" {
+		var permissions plugin_share_service.Permissions
+		instanceID, permissions, err = plugin_share_service.ResolveCommentInstance(
+			req.ShareToken,
+			instanceID,
+			user,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if (req.DeleteAll || hasAnchorCleanupItem(req.Items)) && !permissions.CanManageComments {
+			return nil, errors.New("无权限管理该分享的评论")
+		}
+		canManageComments = permissions.CanManageComments
 	}
 	if req.DeleteAll {
 		return cleanupAllInstanceComments(tx, instanceID)
@@ -196,6 +240,7 @@ func CleanupComments(req CleanupRequest, user *security.JwtUser) (*CleanupResult
 				instanceID,
 				commentID,
 				user.Id,
+				canManageComments,
 			)
 			if queryErr != nil {
 				return nil, queryErr
@@ -288,6 +333,19 @@ func LikeComment(req LikeRequest, user *security.JwtUser) (*LikeResult, error) {
 			return nil, errors.New("评论不存在")
 		}
 		return nil, err
+	}
+	if strings.TrimSpace(req.ShareToken) != "" {
+		instanceID, _, resolveErr := plugin_share_service.ResolveCommentInstance(
+			req.ShareToken,
+			"shared-plugin-1",
+			user,
+		)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if comment.InstanceId != instanceID {
+			return nil, errors.New("评论不存在")
+		}
 	}
 	bizType := uint8(enum.PluginComment)
 	if err := (&active.Like{Id: id, BizType: bizType}).Add(user); err != nil {
@@ -526,6 +584,7 @@ func listCommentSubtreeIDsByCommentID(
 	instanceID string,
 	commentID string,
 	userID uint64,
+	canManageComments bool,
 ) ([]uint64, error) {
 	id, err := parseUintID(commentID)
 	if err != nil {
@@ -553,7 +612,7 @@ func listCommentSubtreeIDsByCommentID(
 	if !ok {
 		return nil, errors.New("评论不存在")
 	}
-	if target.CreatedBy != userID {
+	if target.CreatedBy != userID && !canManageComments {
 		return nil, errors.New("只能删除自己的评论")
 	}
 
@@ -618,6 +677,21 @@ func dedupeCommentIDs(ids []uint64) []uint64 {
 		result = append(result, id)
 	}
 	return result
+}
+
+func hasAnchorCleanupItem(items []CleanupItem) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.ItemId) != "" || item.Index != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func projectCommentViews(items []CommentView) {
+	for index := range items {
+		items[index].Anchor = plugin_share_service.ProjectCommentAnchor(items[index].Anchor)
+	}
 }
 
 func deleteCommentLikes(tx *gorm.DB, commentIDs []uint64) (int64, error) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"senspace/pkg/app"
 	"senspace/pkg/app/contextx"
+	"senspace/pkg/bizerr"
 	"senspace/pkg/e"
 	"senspace/service/plugin_comment_service"
 )
@@ -12,8 +13,9 @@ import (
 func ListComments(ctx *contextx.AppContext) {
 	var req plugin_comment_service.ListRequest
 	e.PanicParameterError(ctx.Gin.ShouldBindJSON(&req))
+	req.ShareToken = ctx.Gin.GetHeader("X-Plugin-Share-Token")
 	result, err := plugin_comment_service.ListComments(req, ctx.User)
-	e.PanicServerErrTipMsg(err, errString(err))
+	panicIfPluginCommentError(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
@@ -21,8 +23,9 @@ func ListComments(ctx *contextx.AppContext) {
 func CreateComment(ctx *contextx.AppContext) {
 	var req plugin_comment_service.CreateRequest
 	e.PanicParameterError(ctx.Gin.ShouldBindJSON(&req))
+	req.ShareToken = ctx.Gin.GetHeader("X-Plugin-Share-Token")
 	result, err := plugin_comment_service.CreateComment(req, ctx.User)
-	e.PanicServerErrTipMsg(err, errString(err))
+	panicIfPluginCommentError(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
@@ -30,6 +33,7 @@ func CreateComment(ctx *contextx.AppContext) {
 func LikeComment(ctx *contextx.AppContext) {
 	var req plugin_comment_service.LikeRequest
 	e.PanicParameterError(ctx.Gin.ShouldBindJSON(&req))
+	req.ShareToken = ctx.Gin.GetHeader("X-Plugin-Share-Token")
 	result, err := plugin_comment_service.LikeComment(req, ctx.User)
 	panicIfPluginCommentError(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
@@ -39,8 +43,9 @@ func LikeComment(ctx *contextx.AppContext) {
 func CleanupComments(ctx *contextx.AppContext) {
 	var req plugin_comment_service.CleanupRequest
 	e.PanicParameterError(ctx.Gin.ShouldBindJSON(&req))
+	req.ShareToken = ctx.Gin.GetHeader("X-Plugin-Share-Token")
 	result, err := plugin_comment_service.CleanupComments(req, ctx.User)
-	e.PanicServerErrTipMsg(err, errString(err))
+	panicIfPluginCommentError(err)
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
@@ -55,6 +60,17 @@ func errString(err error) string {
 func panicIfPluginCommentError(err error) {
 	if err == nil {
 		return
+	}
+	for _, kind := range []bizerr.Kind{
+		bizerr.KindParameter,
+		bizerr.KindUnauthorized,
+		bizerr.KindForbidden,
+		bizerr.KindNotFound,
+		bizerr.KindConflict,
+	} {
+		if bizerr.IsKind(err, kind) {
+			bizerr.PanicHTTP(err)
+		}
 	}
 
 	var serviceErr *e.Error
