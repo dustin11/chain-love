@@ -20,6 +20,7 @@ const (
 type PluginShare struct {
 	Id                     uint64               `json:"-" gorm:"primaryKey;autoIncrement;comment:分享ID"`
 	TokenHash              string               `json:"-" gorm:"type:char(64);not null;uniqueIndex:uk_plugin_share_token_hash;comment:分享令牌哈希"`
+	TokenCiphertext        string               `json:"-" gorm:"type:text;comment:创建者管理用分享令牌密文"`
 	CreatorUserId          uint64               `json:"-" gorm:"not null;index:idx_plugin_share_creator;comment:创建用户ID"`
 	SourcePlanetId         int                  `json:"-" gorm:"not null;index:idx_plugin_share_planet;comment:源星球ID"`
 	SourcePluginInstanceId string               `json:"-" gorm:"type:varchar(128);not null;comment:源插件实例ID"`

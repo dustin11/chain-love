@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"senspace/pkg/app"
@@ -47,10 +48,31 @@ func GetBootstrap(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
-// RevokeShare 撤销当前用户创建的分享。
-func RevokeShare(ctx *contextx.AppContext) {
+// DeleteShare 物理删除当前用户创建的分享及其专属资源。
+func DeleteShare(ctx *contextx.AppContext) {
 	e.PanicIfParameterError(ctx.User == nil, "请先登录")
-	err := plugin_share_service.RevokeShare(ctx.Gin.Param("shareToken"), *ctx.User)
+	err := plugin_share_service.DeleteShare(ctx.Gin.Param("shareToken"), *ctx.User)
+	bizerr.PanicHTTP(err)
+	app.Response(ctx.Gin, e.Success)
+}
+
+// ListMyShares 返回当前登录用户创建的分享管理列表。
+func ListMyShares(ctx *contextx.AppContext) {
+	e.PanicIfParameterError(ctx.User == nil, "请先登录")
+	result, err := plugin_share_service.ListMyShares(*ctx.User, plugin_share_service.ShareListQuery{
+		Page:     parseQueryInt(ctx.Gin.Query("page"), 1),
+		PageSize: parseQueryInt(ctx.Gin.Query("pageSize"), 20),
+		Status:   ctx.Gin.Query("status"),
+	})
+	bizerr.PanicHTTP(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
+// DeleteManagedShare 按分享管理 ID 物理删除当前用户创建的分享及其专属资源。
+func DeleteManagedShare(ctx *contextx.AppContext) {
+	e.PanicIfParameterError(ctx.User == nil, "请先登录")
+	e.PanicIfParameterError(strings.TrimSpace(ctx.Gin.Param("shareId")) == "", "分享 ID 不能为空")
+	err := plugin_share_service.DeleteShareByID(ctx.Gin.Param("shareId"), *ctx.User)
 	bizerr.PanicHTTP(err)
 	app.Response(ctx.Gin, e.Success)
 }
@@ -82,6 +104,17 @@ func detectBackgroundExtension(data []byte) (string, error) {
 	default:
 		return "", &unsupportedBackgroundError{}
 	}
+}
+
+func parseQueryInt(raw string, fallback int) int {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }
 
 type unsupportedBackgroundError struct{}

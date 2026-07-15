@@ -38,6 +38,40 @@ type CreateResult struct {
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
+// ShareListQuery 是创建者分享管理列表的查询参数。
+type ShareListQuery struct {
+	// 页码，从 1 开始。
+	Page int
+	// 每页数量，服务端限制最大值。
+	PageSize int
+	// 状态筛选，可为空；已删除记录不会返回。
+	Status string
+}
+
+// ShareListItem 是只返回给创建者的分享管理视图。
+type ShareListItem struct {
+	// 分享记录 ID，不是公开令牌。
+	Id string `json:"id"`
+	// 插件显示名称，取自创建时的加载描述。
+	PluginName string `json:"pluginName"`
+	// 分享状态，只返回有效或已过期。
+	Status string `json:"status"`
+	// 可恢复时返回分享地址；旧记录可能为空。
+	ShareUrl string `json:"shareUrl,omitempty"`
+	// 创建时间。
+	CreatedAt time.Time `json:"createdAt"`
+	// 失效时间。
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+}
+
+// ShareListResult 是创建者分享管理列表结果。
+type ShareListResult struct {
+	Total    int64           `json:"total"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"pageSize"`
+	Items    []ShareListItem `json:"items"`
+}
+
 // Permissions 只公开当前访问者经过服务端计算后的权限结果。
 type Permissions struct {
 	IsPlanetOwner     bool `json:"isPlanetOwner"`

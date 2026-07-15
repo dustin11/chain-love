@@ -173,8 +173,10 @@ func SetupApiV1Router(router *gin.Engine) {
 	}
 	pluginShareRouter := apiRouter.Group("/plugin-shares")
 	{
+		pluginShareRouter.GET("/my", context.WithAppContext(plugin_share_api.ListMyShares))
+		pluginShareRouter.DELETE("/my/:shareId", context.WithAppContext(plugin_share_api.DeleteManagedShare))
 		pluginShareRouter.POST("", context.WithAppContext(plugin_share_api.CreateShare))
-		pluginShareRouter.DELETE("/:shareToken", context.WithAppContext(plugin_share_api.RevokeShare))
+		pluginShareRouter.DELETE("/:shareToken", context.WithAppContext(plugin_share_api.DeleteShare))
 	}
 	//基础数据
 	basicRouter := apiRouter.Group("/basic")

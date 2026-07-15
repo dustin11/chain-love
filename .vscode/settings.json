@@ -14,6 +14,18 @@
             "gofumpt": true
         }
     },
+    // WSL 使用 Linux Go 工具链；不要让扩展误选 Windows 的 go.exe。
+    "go.goroot": "/tmp/go",
+    "go.useLanguageServer": true,
+    "go.toolsManagement.go": "/tmp/go/bin/go",
+    "go.toolsEnvVars": {
+        "PATH": "/tmp/go/bin:${env:PATH}"
+    },
+    "go.alternateTools": {
+        "go": "/tmp/go/bin/go",
+        "gopls": "/tmp/go/bin/gopls",
+        "goimports": "/tmp/go/bin/goimports"
+    },
     "chat.tools.terminal.autoApprove": {
         "go": true,
         "gofmt": true,

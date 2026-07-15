@@ -63,7 +63,11 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	if err != nil {
 		return nil, err
 	}
-	projectedPlugin, err := projectJSON(input.Plugin, input.SourceInstanceId, input.SourceSurfaceId)
+	projectedPlugin, err := projectPluginDescriptor(
+		input.Plugin,
+		input.SourceInstanceId,
+		input.SourceSurfaceId,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +92,10 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	if err != nil {
 		return nil, err
 	}
+	tokenCiphertext, err := encryptManagementToken(token)
+	if err != nil {
+		return nil, err
+	}
 	backgroundStem, err := generateOpaqueToken(18)
 	if err != nil {
 		return nil, err
@@ -106,6 +114,7 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	expiresAt := resolveExpiry(input.ExpiresInHours)
 	share := ds.PluginShare{
 		TokenHash:              hashToken(token),
+		TokenCiphertext:        tokenCiphertext,
 		CreatorUserId:          user.Id,
 		SourcePlanetId:         currentPlanetID,
 		SourcePluginInstanceId: input.SourceInstanceId,
@@ -138,6 +147,114 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	}, nil
 }
 
+// ListMyShares 查询当前登录用户创建的分享，不返回源星球、实例和资源作用域信息。
+func ListMyShares(user security.JwtUser, query ShareListQuery) (*ShareListResult, error) {
+	if domain.Db == nil {
+		return nil, errors.New("plugin share db not initialized")
+	}
+	if user.Id == 0 {
+		return nil, bizerr.Forbidden("当前用户没有可管理的分享")
+	}
+	page := query.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	status := strings.ToLower(strings.TrimSpace(query.Status))
+	if status != "" && status != "active" && status != "expired" {
+		return nil, bizerr.Parameter("分享状态无效")
+	}
+	if err := deleteLegacyRevokedShares(user.Id); err != nil {
+		return nil, err
+	}
+
+	dbq := domain.Db.Model(&ds.PluginShare{}).
+		Where("creator_user_id = ? AND status = ?", user.Id, ds.PluginShareStatusActive)
+	now := time.Now()
+	switch status {
+	case "active":
+		dbq = dbq.Where("expires_at IS NULL OR expires_at > ?", now)
+	case "expired":
+		dbq = dbq.Where("expires_at IS NOT NULL AND expires_at <= ?", now)
+	}
+	var total int64
+	if err := dbq.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	var shares []ds.PluginShare
+	if err := dbq.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&shares).Error; err != nil {
+		return nil, err
+	}
+	items := make([]ShareListItem, 0, len(shares))
+	for _, share := range shares {
+		item := toShareListItem(share, now)
+		items = append(items, item)
+	}
+	return &ShareListResult{Total: total, Page: page, PageSize: pageSize, Items: items}, nil
+}
+
+// DeleteShareByID 按创建者管理 ID 物理删除分享及其专属资源。
+func DeleteShareByID(idRaw string, user security.JwtUser) error {
+	id, err := strconv.ParseUint(strings.TrimSpace(idRaw), 10, 64)
+	if err != nil || id == 0 {
+		return bizerr.Parameter("分享 ID 无效")
+	}
+	if domain.Db == nil {
+		return errors.New("plugin share db not initialized")
+	}
+	var share ds.PluginShare
+	err = domain.Db.Where("id = ? AND creator_user_id = ?", id, user.Id).First(&share).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return bizerr.NotFound("分享不存在")
+	}
+	if err != nil {
+		return err
+	}
+	return deleteShareRecord(&share)
+}
+
+func toShareListItem(share ds.PluginShare, now time.Time) ShareListItem {
+	status := "active"
+	if share.ExpiresAt != nil && !share.ExpiresAt.After(now) {
+		status = "expired"
+	}
+	item := ShareListItem{
+		Id:         strconv.FormatUint(share.Id, 10),
+		PluginName: resolvePluginName(share.PluginDescriptorJson),
+		Status:     status,
+		CreatedAt:  share.CreatedAt,
+		ExpiresAt:  share.ExpiresAt,
+	}
+	if share.TokenCiphertext == "" {
+		return item
+	}
+	token, err := decryptManagementToken(share.TokenCiphertext)
+	if err != nil {
+		return item
+	}
+	item.ShareUrl = "/plugin-share/" + token
+	return item
+}
+
+func resolvePluginName(raw string) string {
+	var descriptor map[string]any
+	if err := json.Unmarshal([]byte(raw), &descriptor); err != nil {
+		return "插件分享"
+	}
+	for _, key := range []string{"name", "pluginName", "pluginId", "factoryId"} {
+		if value, ok := descriptor[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return "插件分享"
+}
+
 // GetBootstrap 返回最小公开投影，并按当前数据库所有权计算权限。
 func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	share, err := findActiveShare(token)
@@ -148,13 +265,23 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureBackgroundReadable(share.BackgroundKey); err != nil {
+		return nil, err
+	}
+	pluginDescriptor, err := restoreLegacyPluginDescriptor(
+		share.PluginDescriptorJson,
+		share.SourcePluginInstanceId,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return &Bootstrap{
 		Schema:           "senspace.plugin-share.v1",
 		PluginInstanceId: "shared-plugin-1",
 		SurfaceId:        "shared-surface-1",
 		PlayerId:         resolvePublicPlayerID(share.CarrierStateJson),
 		BackgroundUrl:    "/static/plugin-shared/" + share.BackgroundKey,
-		Plugin:           json.RawMessage(share.PluginDescriptorJson),
+		Plugin:           json.RawMessage(pluginDescriptor),
 		Carrier:          json.RawMessage(share.CarrierStateJson),
 		Camera:           json.RawMessage(share.CameraStateJson),
 		State:            json.RawMessage(share.StateJson),
@@ -164,8 +291,8 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	}, nil
 }
 
-// RevokeShare 撤销当前用户创建的分享并清理公开背景。
-func RevokeShare(token string, user security.JwtUser) error {
+// DeleteShare 按公开令牌物理删除当前用户创建的分享及其专属资源。
+func DeleteShare(token string, user security.JwtUser) error {
 	if domain.Db == nil {
 		return errors.New("plugin share db not initialized")
 	}
@@ -180,16 +307,48 @@ func RevokeShare(token string, user security.JwtUser) error {
 	if share.CreatorUserId != user.Id {
 		return bizerr.Forbidden("")
 	}
-	if share.Status == ds.PluginShareStatusRevoked {
-		return removeBackground(share.BackgroundKey)
+	return deleteShareRecord(&share)
+}
+
+// deleteShareRecord 统一处理分享记录和分享专属静态资源的物理删除。
+func deleteShareRecord(share *ds.PluginShare) error {
+	if share == nil {
+		return errors.New("分享记录不能为空")
 	}
-	if err := domain.Db.Model(&share).Updates(map[string]any{
-		"status":     ds.PluginShareStatusRevoked,
-		"updated_by": user.Id,
-	}).Error; err != nil {
+	if domain.Db == nil {
+		return errors.New("plugin share db not initialized")
+	}
+	result := domain.Db.Delete(share)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return bizerr.NotFound("分享不存在")
+	}
+	return removeShareResources(*share)
+}
+
+// removeShareResources 只删除分享创建的背景文件，不删除源插件引用的资源文件。
+func removeShareResources(share ds.PluginShare) error {
+	return removeBackground(share.BackgroundKey)
+}
+
+// deleteLegacyRevokedShares 清理旧版本留下的撤销记录，统一到物理删除语义。
+func deleteLegacyRevokedShares(userID uint64) error {
+	var shares []ds.PluginShare
+	if err := domain.Db.Where(
+		"creator_user_id = ? AND status = ?",
+		userID,
+		ds.PluginShareStatusRevoked,
+	).Find(&shares).Error; err != nil {
 		return err
 	}
-	return removeBackground(share.BackgroundKey)
+	for index := range shares {
+		if err := deleteShareRecord(&shares[index]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ResolveCommentInstance 把分享作用域实例映射回原评论实例。
@@ -441,11 +600,9 @@ func findActiveShare(token string) (*ds.PluginShare, error) {
 		return nil, err
 	}
 	if share.ExpiresAt != nil && !share.ExpiresAt.After(time.Now()) {
-		_ = domain.Db.Model(&share).Updates(map[string]any{
-			"status":     ds.PluginShareStatusRevoked,
-			"updated_by": share.CreatorUserId,
-		}).Error
-		_ = removeBackground(share.BackgroundKey)
+		if err := deleteShareRecord(&share); err != nil {
+			return nil, err
+		}
 		return nil, bizerr.NotFound("分享不存在或已失效")
 	}
 	return &share, nil
