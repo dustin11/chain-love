@@ -17,6 +17,14 @@ type SourceScopeInput struct {
 	DraftId     string                  `json:"draftId,omitempty"`
 }
 
+// PluginLoadDescriptor 描述分享页恢复源插件所需的最小加载信息。
+type PluginLoadDescriptor struct {
+	Kind      string `json:"kind"`
+	FactoryID string `json:"factoryId"`
+	PluginID  string `json:"pluginId"`
+	Version   string `json:"version"`
+}
+
 // CreateInput 是创建单插件分享所需的宿主快照。
 type CreateInput struct {
 	SourcePlanetId   int               `json:"sourcePlanetId"`

@@ -52,6 +52,12 @@ func SetupApiV1Router(router *gin.Engine) {
 	{
 		factoryPublicRouter.GET("/market", factory_api.GetPublicMarketList)
 	}
+	// 开发插件源码按当前约定公开可读，动态插件分享与开发工作台复用同一加载接口。
+	// 修改、删除等工作区操作仍保留在下方鉴权路由中。
+	pluginPublicRouter := router.Group("/api/v1/plugin")
+	{
+		pluginPublicRouter.GET("/tree/:pluginId", dev_api.GetPluginTree)
+	}
 	pluginCommentPublicRouter := router.Group(
 		"/api/v1/plugin-comments",
 		middleware.OptionalAuth(),
@@ -151,12 +157,11 @@ func SetupApiV1Router(router *gin.Engine) {
 		noteAuthRouter.POST("/save", context.WithAppContext(ds_api.NoteSave))
 		noteAuthRouter.POST("/del", context.WithAppContext(ds_api.NoteDel))
 	}
-	// 插件系统 (全都需要鉴权)
+	// 插件工作区写操作需要鉴权；源码树读取在公开路由中注册。
 	pluginRouter := apiRouter.Group("/plugin")
 	{
 		pluginRouter.GET("/list", dev_api.GetPluginList)
 		pluginRouter.GET("/versions/:pluginId", dev_api.GetPluginVersions)
-		pluginRouter.GET("/tree/:pluginId", dev_api.GetPluginTree)
 		pluginRouter.POST("/file/upload", dev_api.UploadFile)
 		pluginRouter.POST("/folder/add", dev_api.AddFolder)
 		pluginRouter.POST("/rename", dev_api.Rename)

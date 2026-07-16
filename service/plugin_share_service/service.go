@@ -59,6 +59,10 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	if err != nil {
 		return nil, err
 	}
+	if isDynamicPluginDescriptor(input.Plugin) &&
+		(scope == nil || scope.Kind != ds.PluginAssetScopeDev) {
+		return nil, bizerr.Parameter("动态分享必须来自开发工作区")
+	}
 	projectedState, err := projectJSON(json.RawMessage(stateJSON), input.SourceInstanceId, input.SourceSurfaceId)
 	if err != nil {
 		return nil, err
@@ -422,20 +426,29 @@ func validateCreateJSON(input CreateInput) error {
 	if len(input.Plugin) == 0 || len(input.Carrier) == 0 || len(input.Camera) == 0 {
 		return errors.New("插件、承载链和相机快照不能为空")
 	}
-	var descriptor struct {
-		Kind      string `json:"kind"`
-		FactoryId string `json:"factoryId"`
-	}
+	var descriptor PluginLoadDescriptor
 	if err := json.Unmarshal(input.Plugin, &descriptor); err != nil {
 		return err
 	}
-	if descriptor.Kind != "local" && descriptor.Kind != "factory" && descriptor.Kind != "static" {
+	if descriptor.Kind != "local" && descriptor.Kind != "factory" && descriptor.Kind != "static" && descriptor.Kind != "dynamic" {
 		return errors.New("插件加载类型无效")
 	}
-	if strings.TrimSpace(descriptor.FactoryId) == "" {
+	if descriptor.Kind != "dynamic" && strings.TrimSpace(descriptor.FactoryID) == "" {
 		return errors.New("插件工厂ID不能为空")
 	}
+	if descriptor.Kind == "dynamic" &&
+		(strings.TrimSpace(descriptor.PluginID) == "" ||
+			strings.TrimSpace(descriptor.Version) == "") {
+		return errors.New("动态插件标识或版本不能为空")
+	}
 	return nil
+}
+
+func isDynamicPluginDescriptor(raw json.RawMessage) bool {
+	var descriptor struct {
+		Kind string `json:"kind"`
+	}
+	return json.Unmarshal(raw, &descriptor) == nil && descriptor.Kind == "dynamic"
 }
 
 func resolveSnapshot(user security.JwtUser, input CreateInput) (*ds.PluginAssetScope, string, string, error) {
@@ -574,7 +587,19 @@ func replaceResourceAssetIDs(value any, assetIDMap map[uint64]string) any {
 		return result
 	case map[string]any:
 		result := make(map[string]any, len(typed))
+		mappedResource := false
+		if rawAssetID, ok := typed["assetId"].(string); ok {
+			if assetID, valid := parseAssetID(rawAssetID); valid {
+				_, mappedResource = assetIDMap[assetID]
+			}
+		}
 		for key, item := range typed {
+			// 分享页只能经 shareToken 对应的资源代理读取资源。源页面保存的
+			// runtimeUrl/url 可能是临时 blob、鉴权地址或原资源目录，保留它们会让
+			// 动态插件优先绕过共享资源地址，导致歌词与封面无法加载。
+			if mappedResource && (key == "runtimeUrl" || key == "url") {
+				continue
+			}
 			result[key] = replaceResourceAssetIDs(item, assetIDMap)
 		}
 		return result
