@@ -3,6 +3,7 @@ package auth_api
 import (
 	"net/http"
 	"senspace/pkg/app"
+	"senspace/pkg/bizerr"
 	"senspace/pkg/e"
 	"senspace/pkg/i18n"
 	"senspace/pkg/logging"
@@ -29,8 +30,11 @@ func GetNonce(c *gin.Context) {
 	app.Response(c, e.SuccessData(map[string]string{"nonce": nonce}))
 }
 
+// SIWE 登录请求。
 type LoginReq struct {
-	Message   string `json:"message" binding:"required"`
+	// Message 是待校验的 SIWE 标准消息。
+	Message string `json:"message" binding:"required"`
+	// Signature 是钱包对消息生成的签名。
 	Signature string `json:"signature" binding:"required"`
 }
 
@@ -72,12 +76,27 @@ func Verify(c *gin.Context) {
 // @Router /api/v1/auth/refresh [post]
 func Refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie(consts.REFRESH_TOKEN)
-	e.PanicIfParameterError(err != nil || refreshToken == "", "缺少刷新令牌")
+	if err != nil || refreshToken == "" {
+		// Cookie 缺失时同步清理残留 Access Token，避免前端继续误判登录态。
+		clearAuthCookies(c)
+		e.PanicIfUnauthorizedErr(true, "缺少刷新令牌")
+	}
 
 	lang := i18n.GetLang(c)
 
-	// auth_service 内部会在失败时 panic
-	newAccess, newRefresh := auth_service.RefreshToken(refreshToken, c.ClientIP(), lang)
+	newAccess, newRefresh, refreshErr := auth_service.RefreshToken(
+		refreshToken,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+		lang,
+	)
+	if refreshErr != nil {
+		if bizerr.IsKind(refreshErr, bizerr.KindUnauthorized) {
+			// 仅鉴权失败清理 Cookie；数据库等内部错误保留会话，允许稍后重试。
+			clearAuthCookies(c)
+		}
+		bizerr.PanicHTTP(refreshErr)
+	}
 
 	setAuthCookies(c, newAccess, newRefresh)
 	app.Response(c, e.Success)

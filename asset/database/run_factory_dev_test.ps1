@@ -11,7 +11,7 @@ $oldGoCache = $env:GOCACHE
 try {
     Set-Location $repoRoot
     $env:SENSPACE_ENV = "dev"
-    $env:GOCACHE = Join-Path $repoRoot ".gocache"
+    $env:GOCACHE = Join-Path $repoRoot ".ldev-gocache"
     go test ./test -run 'TestFactory' -count=1
 }
 finally {

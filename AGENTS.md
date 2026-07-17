@@ -1,4 +1,4 @@
-# Copilot 使用指南
+# 项目指南
 
 本仓库当前以后端 Go 代码为主，生成或修改代码时，必须优先遵守本文件中的 Go 代码规范与编码安全规范。
 
@@ -17,12 +17,13 @@
 
 本地执行环境规则：
 
-- 本地开发、测试、脚本探测使用的临时执行环境统一命名为 `ldev`，禁止新建或继续使用 `wdev` 前缀目录、缓存目录或脚本变量名。
-- 本地缓存目录命名统一使用 `ldev` 前缀，例如 `.ldev-go-cache`、`.ldev-gocache`；禁止新增 `.wdev-go-cache` 这类命名。
+- 本地开发、测试、脚本探测统一使用 `ldev` 环境。
+- 本地 Go 缓存统一使用 `.ldev-go-cache` 和 `.ldev-gocache`。
 - 一次性任务临时文件统一放在仓库内受控临时目录，例如 `.tmp/ldev/<task-id>/`，禁止散落到仓库根目录、测试目录或业务源码目录。
 - 禁止生成 `tmp_diff.txt`、`tmp_diff_code.txt`、`tmp_utf8_test.txt`、`*.go.<随机数字>` 这类散落型临时文件；如确需生成，必须放入 `.tmp/ldev/<task-id>/`。
 - 任务结束前必须主动删除本次生成的一次性临时文件和临时目录；仅允许保留可复用缓存目录。
 - 如需运行 Go 命令，优先把可复用缓存显式落到仓库内目录，例如 `GOCACHE=.ldev-gocache`、`GOMODCACHE=.ldev-go-cache`、`TMP=.tmp/ldev/system`、`TEMP=.tmp/ldev/system`。
+- 工作区内统一通过 `sh ../deploy/scripts/ldev-go.sh <go 子命令>` 运行 Go；格式化使用 `sh ../deploy/scripts/ldev-go.sh gofmt <文件>`，避免依赖会话临时 PATH。
 
 编码规则：
 

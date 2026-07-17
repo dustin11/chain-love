@@ -14,17 +14,20 @@
             "gofumpt": true
         }
     },
-    // WSL 使用 Linux Go 工具链；不要让扩展误选 Windows 的 go.exe。
-    "go.goroot": "/tmp/go",
+    // 使用工作区持久化的 WSL Go 工具链。
+    "go.goroot": "${workspaceFolder}/../.ldev-tools/go",
     "go.useLanguageServer": true,
-    "go.toolsManagement.go": "/tmp/go/bin/go",
+    "go.toolsManagement.go": "${workspaceFolder}/../.ldev-tools/go/bin/go",
     "go.toolsEnvVars": {
-        "PATH": "/tmp/go/bin:${env:PATH}"
+        "PATH": "${workspaceFolder}/../.ldev-tools/go/bin:${env:PATH}",
+        "GOCACHE": "${workspaceFolder}/.ldev-gocache",
+        "GOMODCACHE": "${workspaceFolder}/.ldev-go-cache",
+        "GOTMPDIR": "${workspaceFolder}/../.tmp/ldev/system"
     },
     "go.alternateTools": {
-        "go": "/tmp/go/bin/go",
-        "gopls": "/tmp/go/bin/gopls",
-        "goimports": "/tmp/go/bin/goimports"
+        "go": "${workspaceFolder}/../.ldev-tools/go/bin/go",
+        "gopls": "${workspaceFolder}/../.ldev-tools/go/bin/gopls",
+        "goimports": "${workspaceFolder}/../.ldev-tools/go/bin/goimports"
     },
     "chat.tools.terminal.autoApprove": {
         "go": true,
