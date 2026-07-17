@@ -93,7 +93,6 @@ type Bootstrap struct {
 	PluginInstanceId string          `json:"pluginInstanceId"`
 	SurfaceId        string          `json:"surfaceId"`
 	PlayerId         string          `json:"playerId,omitempty"`
-	BackgroundUrl    string          `json:"backgroundUrl"`
 	Plugin           json.RawMessage `json:"plugin"`
 	Carrier          json.RawMessage `json:"carrier"`
 	Camera           json.RawMessage `json:"camera"`

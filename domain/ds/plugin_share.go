@@ -39,7 +39,6 @@ type PluginShare struct {
 	PluginDescriptorJson   string               `json:"-" gorm:"type:json;not null;comment:插件加载描述"`
 	CarrierStateJson       string               `json:"-" gorm:"type:json;not null;comment:承载链快照"`
 	CameraStateJson        string               `json:"-" gorm:"type:json;not null;comment:相机快照"`
-	BackgroundKey          string               `json:"-" gorm:"type:varchar(128);not null;comment:模糊背景随机文件名"`
 	Status                 PluginShareStatus    `json:"-" gorm:"type:varchar(32);not null;index:idx_plugin_share_status;comment:分享状态"`
 	ExpiresAt              *time.Time           `json:"-" gorm:"index:idx_plugin_share_expires;comment:失效时间"`
 	domain.CreatInfo

@@ -55,6 +55,11 @@ func InitTable(db *gorm.DB) {
 				log.Printf("migrate plugin instance state columns failed: %v", err)
 			}
 		}
+		if _, ok := table.(*ds.PluginShare); ok {
+			if err := dropUnusedPluginShareColumns(db); err != nil {
+				log.Printf("drop unused plugin share columns failed: %v", err)
+			}
+		}
 		// auto‑migrate – 保证结构体中的新字段自动加入已有表
 		if err := db.AutoMigrate(table); err != nil {
 			log.Printf("automigrate %T failed: %v", table, err)
@@ -79,6 +84,15 @@ func InitTable(db *gorm.DB) {
 	}
 
 	factory.SeedBuiltinReleases(db)
+}
+
+// dropUnusedPluginShareColumns 删除不再参与分享运行时的旧字段。
+func dropUnusedPluginShareColumns(db *gorm.DB) error {
+	table := &ds.PluginShare{}
+	if db.Migrator().HasColumn(table, "background_key") {
+		return db.Migrator().DropColumn(table, "background_key")
+	}
+	return nil
 }
 
 // migratePluginInstanceStateColumns 将旧资源状态和位姿字段迁移到新的状态字段。

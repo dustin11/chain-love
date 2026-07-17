@@ -28,8 +28,8 @@ const (
 	maximumExpiryHours   = 24 * 365
 )
 
-// CreateShare 冻结单插件快照并写入随机背景资源。
-func CreateShare(user security.JwtUser, input CreateInput, background []byte, extension string) (*CreateResult, error) {
+// CreateShare 冻结单插件快照。
+func CreateShare(user security.JwtUser, input CreateInput) (*CreateResult, error) {
 	if domain.Db == nil {
 		return nil, errors.New("plugin share db not initialized")
 	}
@@ -47,9 +47,6 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	}
 	if currentPlanetID <= 0 {
 		return nil, bizerr.Forbidden("当前用户没有可分享的星球")
-	}
-	if len(background) == 0 {
-		return nil, bizerr.Parameter("分享背景不能为空")
 	}
 	if err := validateCreateJSON(input); err != nil {
 		return nil, bizerr.Parameter(err.Error())
@@ -100,11 +97,6 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 	if err != nil {
 		return nil, err
 	}
-	backgroundStem, err := generateOpaqueToken(18)
-	if err != nil {
-		return nil, err
-	}
-	backgroundKey := backgroundStem + extension
 	resourceManifest, resourceMap, projectedResourceState, err := buildResourceProjection(
 		scope,
 		projectedResourceStateInput,
@@ -130,18 +122,13 @@ func CreateShare(user security.JwtUser, input CreateInput, background []byte, ex
 		PluginDescriptorJson:   projectedPlugin,
 		CarrierStateJson:       projectedCarrier,
 		CameraStateJson:        projectedCamera,
-		BackgroundKey:          backgroundKey,
 		Status:                 ds.PluginShareStatusActive,
 		ExpiresAt:              &expiresAt,
 		CreatInfo:              domain.CreatInfo{CreatedBy: user.Id},
 		UpdateInfo:             domain.UpdateInfo{UpdatedBy: user.Id},
 	}
 	applyScopeToShare(&share, scope)
-	if err := writeBackgroundAtomic(backgroundKey, background); err != nil {
-		return nil, err
-	}
 	if err := domain.Db.Create(&share).Error; err != nil {
-		_ = removeBackground(backgroundKey)
 		return nil, err
 	}
 	return &CreateResult{
@@ -269,9 +256,6 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBackgroundReadable(share.BackgroundKey); err != nil {
-		return nil, err
-	}
 	pluginDescriptor, err := restoreLegacyPluginDescriptor(
 		share.PluginDescriptorJson,
 		share.SourcePluginInstanceId,
@@ -284,7 +268,6 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 		PluginInstanceId: "shared-plugin-1",
 		SurfaceId:        "shared-surface-1",
 		PlayerId:         resolvePublicPlayerID(share.CarrierStateJson),
-		BackgroundUrl:    "/static/plugin-shared/" + share.BackgroundKey,
 		Plugin:           json.RawMessage(pluginDescriptor),
 		Carrier:          json.RawMessage(share.CarrierStateJson),
 		Camera:           json.RawMessage(share.CameraStateJson),
@@ -295,7 +278,7 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	}, nil
 }
 
-// DeleteShare 按公开令牌物理删除当前用户创建的分享及其专属资源。
+// DeleteShare 按公开令牌物理删除当前用户创建的分享。
 func DeleteShare(token string, user security.JwtUser) error {
 	if domain.Db == nil {
 		return errors.New("plugin share db not initialized")
@@ -314,7 +297,7 @@ func DeleteShare(token string, user security.JwtUser) error {
 	return deleteShareRecord(&share)
 }
 
-// deleteShareRecord 统一处理分享记录和分享专属静态资源的物理删除。
+// deleteShareRecord 统一物理删除分享记录。
 func deleteShareRecord(share *ds.PluginShare) error {
 	if share == nil {
 		return errors.New("分享记录不能为空")
@@ -329,12 +312,7 @@ func deleteShareRecord(share *ds.PluginShare) error {
 	if result.RowsAffected == 0 {
 		return bizerr.NotFound("分享不存在")
 	}
-	return removeShareResources(*share)
-}
-
-// removeShareResources 只删除分享创建的背景文件，不删除源插件引用的资源文件。
-func removeShareResources(share ds.PluginShare) error {
-	return removeBackground(share.BackgroundKey)
+	return nil
 }
 
 // deleteLegacyRevokedShares 清理旧版本留下的撤销记录，统一到物理删除语义。

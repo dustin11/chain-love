@@ -11,7 +11,6 @@ import (
 	"senspace/pkg/e"
 	"senspace/pkg/setting"
 	"senspace/pkg/util"
-	"senspace/service/plugin_share_service"
 	"strings"
 	"time"
 
@@ -78,8 +77,6 @@ func SetupRouter() *gin.Engine {
 	router.StaticFS("/static/images", gin.Dir(setting.Config.App.FilePath.Image, false))
 	// 用户插件实例资源：上传文件、实例状态与运行快照。
 	router.StaticFS("/static/plugin-assets", gin.Dir(ds.PluginAssetsRoot(), false))
-	// 插件分享背景：只包含随机文件名的公开静态图片。
-	router.StaticFS("/static/plugin-shared", gin.Dir(plugin_share_service.SharedStaticRoot(), false))
 	// 数字工厂静态资产：发布模板、铸造 NFT 元数据、owner hash 索引。
 	router.StaticFS("/static/factory", gin.Dir(factory.FactoryStaticRoot(), false))
 	//swagger
