@@ -38,7 +38,7 @@ func TestProjectPluginDescriptorPreservesFactoryIdentityForDevShare(t *testing.T
 		"factoryId":"AudioCD-1",
 		"pluginId":"AudioCD-1",
 		"version":"dev",
-		"options":{"id":"AudioCD-1","surfaceId":"planet-surface","ownerKey":"secret"}
+		"options":{"id":"AudioCD-1","pluginId":"AudioCD-1","version":"dev","surfaceId":"planet-surface","ownerKey":"secret"}
 	}`)
 	projected, err := projectPluginDescriptor(raw, "AudioCD-1", "planet-surface")
 	if err != nil {
@@ -55,8 +55,46 @@ func TestProjectPluginDescriptorPreservesFactoryIdentityForDevShare(t *testing.T
 	if options["id"] != "shared-plugin-1" || options["surfaceId"] != "shared-surface-1" {
 		t.Fatalf("runtime aliases were not projected: %s", projected)
 	}
+	if options["pluginId"] != "AudioCD-1" || options["version"] != "dev" {
+		t.Fatalf("stable source identity was projected as a runtime alias: %s", projected)
+	}
 	if _, exists := options["ownerKey"]; exists {
 		t.Fatalf("private dev scope leaked: %s", projected)
+	}
+}
+
+func TestRemapMomentPluginDescriptorPreservesStableSourceIdentity(t *testing.T) {
+	raw := json.RawMessage(`{
+		"kind":"dynamic",
+		"factoryId":"",
+		"pluginId":"63287355849888",
+		"version":"1.0.0",
+		"options":{"id":"63287355849888","pluginId":"63287355849888","version":"1.0.0"}
+	}`)
+	remapped := remapMomentPluginDescriptor(raw, map[string]string{
+		"63287355849888": "moment-plugin-2",
+	})
+	var descriptor map[string]any
+	if err := json.Unmarshal(remapped, &descriptor); err != nil {
+		t.Fatal(err)
+	}
+	options, _ := descriptor["options"].(map[string]any)
+	if descriptor["pluginId"] != "63287355849888" || options["pluginId"] != "63287355849888" {
+		t.Fatalf("stable dynamic identity changed: %s", remapped)
+	}
+	if options["id"] != "moment-plugin-2" {
+		t.Fatalf("runtime instance id was not remapped: %s", remapped)
+	}
+}
+
+func TestRestoreLegacyMomentDynamicIdentity(t *testing.T) {
+	restored := restoreLegacyMomentDynamicIdentity(
+		json.RawMessage(`{"kind":"dynamic","factoryId":"","pluginId":"moment-plugin-19","version":"1.0.0","options":{"pluginId":"moment-plugin-19"}}`),
+		"moment-plugin-19",
+		"63287355849888",
+	)
+	if !strings.Contains(string(restored), `"pluginId":"63287355849888"`) {
+		t.Fatalf("legacy dynamic identity was not restored: %s", restored)
 	}
 }
 

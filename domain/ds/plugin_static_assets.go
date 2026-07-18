@@ -21,6 +21,14 @@ func PluginAssetsRoot() string {
 	return filepath.Join("runtime", "plugin-assets")
 }
 
+// PlanetMomentsRoot 返回不可公开枚举的瞬间压缩状态包目录。
+func PlanetMomentsRoot() string {
+	if base := strings.TrimSpace(setting.Config.App.RuntimeRootPath); base != "" {
+		return filepath.Join(base, "planet-moments")
+	}
+	return filepath.Join("runtime", "planet-moments")
+}
+
 // 插件实例资源目录。
 func PluginAssetInstanceDir(scope PluginAssetScope) string {
 	return filepath.Join(append([]string{PluginAssetsRoot()}, scope.StaticPathParts()...)...)

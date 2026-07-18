@@ -69,7 +69,7 @@ func SetupApiV1Router(router *gin.Engine) {
 		)
 	}
 	pluginSharePublicRouter := router.Group(
-		"/api/v1/plugin-shares",
+		"/api/v1/planet-moments",
 		middleware.OptionalAuth(),
 	)
 	{
@@ -77,13 +77,15 @@ func SetupApiV1Router(router *gin.Engine) {
 			"/:shareToken/bootstrap",
 			context.WithAppContext(plugin_share_api.GetBootstrap),
 		)
+		pluginSharePublicRouter.GET(
+			"/:shareToken/snapshot",
+			context.WithAppContext(plugin_share_api.GetBootstrap),
+		)
+		pluginSharePublicRouter.GET(
+			"/:shareToken/resources/:resourceAlias",
+			context.WithAppContext(plugin_share_api.GetResource),
+		)
 	}
-	// 资源路径与公开分享地址同域，但只由服务端解析随机别名。
-	router.GET(
-		"/plugin-share/:shareToken/resources/:resourceAlias",
-		middleware.OptionalAuth(),
-		context.WithAppContext(plugin_share_api.GetResource),
-	)
 
 	// 需要认证的 API 路由
 	apiRouter := router.Group("/api/v1", middleware.Auth())
@@ -176,9 +178,10 @@ func SetupApiV1Router(router *gin.Engine) {
 		pluginCommentRouter.POST("/like", context.WithAppContext(plugin_comment_api.LikeComment))
 		pluginCommentRouter.POST("/cleanup", context.WithAppContext(plugin_comment_api.CleanupComments))
 	}
-	pluginShareRouter := apiRouter.Group("/plugin-shares")
+	pluginShareRouter := apiRouter.Group("/planet-moments")
 	{
 		pluginShareRouter.GET("/my", context.WithAppContext(plugin_share_api.ListMyShares))
+		pluginShareRouter.GET("/my/:momentId/bootstrap", context.WithAppContext(plugin_share_api.GetOwnedBootstrap))
 		pluginShareRouter.DELETE("/my/:shareId", context.WithAppContext(plugin_share_api.DeleteManagedShare))
 		pluginShareRouter.POST("", context.WithAppContext(plugin_share_api.CreateShare))
 		pluginShareRouter.DELETE("/:shareToken", context.WithAppContext(plugin_share_api.DeleteShare))

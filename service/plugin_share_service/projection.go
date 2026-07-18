@@ -40,13 +40,70 @@ func projectPluginDescriptor(raw json.RawMessage, sourceInstanceID string, sourc
 	if err := json.Unmarshal([]byte(projectedJSON), &projected); err != nil {
 		return "", err
 	}
-	for _, key := range []string{"kind", "factoryId", "pluginId", "version", "releaseId"} {
-		if value, exists := source[key]; exists {
-			projected[key] = value
-		}
-	}
+	preservePluginDescriptorIdentity(source, projected)
 	data, err := json.Marshal(projected)
 	return string(data), err
+}
+
+// preservePluginDescriptorIdentity 保留加载源码所需的稳定身份，同时允许 id、instanceId 等运行别名继续投影。
+func preservePluginDescriptorIdentity(source map[string]any, target map[string]any) {
+	for _, key := range []string{"kind", "factoryId", "pluginId", "version", "releaseId"} {
+		if value, exists := source[key]; exists {
+			target[key] = value
+		}
+	}
+	sourceOptions, sourceOK := source["options"].(map[string]any)
+	targetOptions, targetOK := target["options"].(map[string]any)
+	if !sourceOK || !targetOK {
+		return
+	}
+	for _, key := range []string{"factoryId", "pluginId", "version", "releaseId"} {
+		if value, exists := sourceOptions[key]; exists {
+			targetOptions[key] = value
+		}
+	}
+}
+
+// remapMomentPluginDescriptor 只替换运行实例/表面引用，不破坏稳定的工厂和源码身份。
+func remapMomentPluginDescriptor(raw json.RawMessage, aliases map[string]string) json.RawMessage {
+	var source map[string]any
+	if json.Unmarshal(raw, &source) != nil {
+		return raw
+	}
+	remapped := remapMomentJSON(raw, aliases)
+	var target map[string]any
+	if json.Unmarshal(remapped, &target) != nil {
+		return raw
+	}
+	preservePluginDescriptorIdentity(source, target)
+	data, err := json.Marshal(target)
+	if err != nil {
+		return raw
+	}
+	return data
+}
+
+// restoreLegacyMomentDynamicIdentity 修复旧瞬间中被全量别名替换的开发源码标识。
+func restoreLegacyMomentDynamicIdentity(
+	raw json.RawMessage,
+	publicInstanceID string,
+	sourceInstanceID string,
+) json.RawMessage {
+	var descriptor map[string]any
+	if json.Unmarshal(raw, &descriptor) != nil || descriptor["kind"] != "dynamic" {
+		return raw
+	}
+	if descriptor["pluginId"] == publicInstanceID {
+		descriptor["pluginId"] = sourceInstanceID
+	}
+	if options, ok := descriptor["options"].(map[string]any); ok && options["pluginId"] == publicInstanceID {
+		options["pluginId"] = sourceInstanceID
+	}
+	data, err := json.Marshal(descriptor)
+	if err != nil {
+		return raw
+	}
+	return data
 }
 
 // restoreLegacyPluginDescriptor 修复旧分享中被实例别名误替换的工厂身份。
@@ -87,11 +144,19 @@ func projectValue(value any, sourceInstanceID string, sourceSurfaceID string) an
 				continue
 			}
 			if normalizedKey == "instanceid" || normalizedKey == "plugininstanceid" {
-				result[key] = "shared-plugin-1"
+				if text, ok := item.(string); ok && text == sourceInstanceID {
+					result[key] = "shared-plugin-1"
+				} else {
+					result[key] = projectValue(item, sourceInstanceID, sourceSurfaceID)
+				}
 				continue
 			}
 			if normalizedKey == "surfaceid" {
-				result[key] = "shared-surface-1"
+				if text, ok := item.(string); ok && text == sourceSurfaceID {
+					result[key] = "shared-surface-1"
+				} else {
+					result[key] = projectValue(item, sourceInstanceID, sourceSurfaceID)
+				}
 				continue
 			}
 			result[key] = projectValue(item, sourceInstanceID, sourceSurfaceID)

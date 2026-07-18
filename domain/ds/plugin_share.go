@@ -39,6 +39,14 @@ type PluginShare struct {
 	PluginDescriptorJson   string               `json:"-" gorm:"type:json;not null;comment:插件加载描述"`
 	CarrierStateJson       string               `json:"-" gorm:"type:json;not null;comment:承载链快照"`
 	CameraStateJson        string               `json:"-" gorm:"type:json;not null;comment:相机快照"`
+	MomentScope            string               `json:"-" gorm:"type:varchar(16);not null;default:plugin;index:idx_planet_moment_scope;comment:瞬间范围"`
+	MomentText             string               `json:"-" gorm:"type:varchar(200);not null;default:'';comment:瞬间主题"`
+	IsShared               bool                 `json:"-" gorm:"not null;index:idx_planet_moment_shared;comment:是否公开分享"`
+	SnapshotJson           string               `json:"-" gorm:"type:longtext;comment:完整瞬间快照包"`
+	SnapshotKey            string               `json:"-" gorm:"type:varchar(128);comment:压缩快照文件键"`
+	SnapshotHash           string               `json:"-" gorm:"type:char(64);comment:快照内容哈希"`
+	QuotedMomentId         *uint64              `json:"-" gorm:"index:idx_planet_moment_quote;comment:引用瞬间ID"`
+	QuotedMomentText       string               `json:"-" gorm:"type:varchar(200);comment:引用主题摘要"`
 	Status                 PluginShareStatus    `json:"-" gorm:"type:varchar(32);not null;index:idx_plugin_share_status;comment:分享状态"`
 	ExpiresAt              *time.Time           `json:"-" gorm:"index:idx_plugin_share_expires;comment:失效时间"`
 	domain.CreatInfo

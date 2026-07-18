@@ -30,6 +30,14 @@ func GetBootstrap(ctx *contextx.AppContext) {
 	app.Response(ctx.Gin, e.SuccessData(result))
 }
 
+// GetOwnedBootstrap 加载创建者自己的私人瞬间。
+func GetOwnedBootstrap(ctx *contextx.AppContext) {
+	e.PanicIfParameterError(ctx.User == nil, "请先登录")
+	result, err := plugin_share_service.GetOwnedBootstrap(ctx.Gin.Param("momentId"), *ctx.User)
+	bizerr.PanicHTTP(err)
+	app.Response(ctx.Gin, e.SuccessData(result))
+}
+
 // DeleteShare 物理删除当前用户创建的分享。
 func DeleteShare(ctx *contextx.AppContext) {
 	e.PanicIfParameterError(ctx.User == nil, "请先登录")
