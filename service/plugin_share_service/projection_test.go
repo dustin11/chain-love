@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
-
-	"senspace/domain/ds"
 )
 
 func TestProjectJSONRemovesPrivateScopeAndRewritesRuntimeIDs(t *testing.T) {
@@ -87,31 +84,6 @@ func TestRemapMomentPluginDescriptorPreservesStableSourceIdentity(t *testing.T) 
 	}
 }
 
-func TestRestoreLegacyMomentDynamicIdentity(t *testing.T) {
-	restored := restoreLegacyMomentDynamicIdentity(
-		json.RawMessage(`{"kind":"dynamic","factoryId":"","pluginId":"moment-plugin-19","version":"1.0.0","options":{"pluginId":"moment-plugin-19"}}`),
-		"moment-plugin-19",
-		"63287355849888",
-	)
-	if !strings.Contains(string(restored), `"pluginId":"63287355849888"`) {
-		t.Fatalf("legacy dynamic identity was not restored: %s", restored)
-	}
-}
-
-func TestRestoreLegacyPluginDescriptorRepairsSharedFactoryAlias(t *testing.T) {
-	restored, err := restoreLegacyPluginDescriptor(
-		`{"kind":"local","factoryId":"shared-plugin-1","pluginId":"shared-plugin-1"}`,
-		"AudioCD",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(restored, `"factoryId":"AudioCD"`) ||
-		!strings.Contains(restored, `"pluginId":"AudioCD"`) {
-		t.Fatalf("legacy descriptor was not repaired: %s", restored)
-	}
-}
-
 func TestOpaqueTokensAreRandomAndOnlyHashesAreStable(t *testing.T) {
 	first, err := generateOpaqueToken(32)
 	if err != nil {
@@ -126,20 +98,5 @@ func TestOpaqueTokensAreRandomAndOnlyHashesAreStable(t *testing.T) {
 	}
 	if hashToken(first) == first || len(hashToken(first)) != 64 {
 		t.Fatalf("unexpected token hash: %q", hashToken(first))
-	}
-}
-
-func TestLegacyShareListItemDoesNotInventShareURL(t *testing.T) {
-	item := toShareListItem(ds.PluginShare{
-		Id:                   7,
-		Status:               ds.PluginShareStatusActive,
-		PluginDescriptorJson: `{"pluginId":"AudioCD"}`,
-	}, time.Now())
-
-	if item.ShareUrl != "" {
-		t.Fatalf("legacy share URL = %q, want empty", item.ShareUrl)
-	}
-	if item.PluginName != "AudioCD" {
-		t.Fatalf("plugin name = %q, want AudioCD", item.PluginName)
 	}
 }

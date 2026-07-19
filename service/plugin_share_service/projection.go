@@ -83,51 +83,6 @@ func remapMomentPluginDescriptor(raw json.RawMessage, aliases map[string]string)
 	return data
 }
 
-// restoreLegacyMomentDynamicIdentity 修复旧瞬间中被全量别名替换的开发源码标识。
-func restoreLegacyMomentDynamicIdentity(
-	raw json.RawMessage,
-	publicInstanceID string,
-	sourceInstanceID string,
-) json.RawMessage {
-	var descriptor map[string]any
-	if json.Unmarshal(raw, &descriptor) != nil || descriptor["kind"] != "dynamic" {
-		return raw
-	}
-	if descriptor["pluginId"] == publicInstanceID {
-		descriptor["pluginId"] = sourceInstanceID
-	}
-	if options, ok := descriptor["options"].(map[string]any); ok && options["pluginId"] == publicInstanceID {
-		options["pluginId"] = sourceInstanceID
-	}
-	data, err := json.Marshal(descriptor)
-	if err != nil {
-		return raw
-	}
-	return data
-}
-
-// restoreLegacyPluginDescriptor 修复旧分享中被实例别名误替换的工厂身份。
-// 只有工厂字段已明确变成公开实例别名时才使用服务端保存的源实例标识。
-func restoreLegacyPluginDescriptor(raw string, sourceInstanceID string) (string, error) {
-	var descriptor map[string]any
-	if err := json.Unmarshal([]byte(raw), &descriptor); err != nil {
-		return "", err
-	}
-	if descriptor["factoryId"] != "shared-plugin-1" {
-		return raw, nil
-	}
-	sourceInstanceID = strings.TrimSpace(sourceInstanceID)
-	if sourceInstanceID == "" {
-		return raw, nil
-	}
-	descriptor["factoryId"] = sourceInstanceID
-	if descriptor["pluginId"] == "shared-plugin-1" {
-		descriptor["pluginId"] = sourceInstanceID
-	}
-	data, err := json.Marshal(descriptor)
-	return string(data), err
-}
-
 func projectValue(value any, sourceInstanceID string, sourceSurfaceID string) any {
 	switch typed := value.(type) {
 	case []any:

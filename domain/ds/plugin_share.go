@@ -42,7 +42,6 @@ type PluginShare struct {
 	MomentScope            string               `json:"-" gorm:"type:varchar(16);not null;default:plugin;index:idx_planet_moment_scope;comment:瞬间范围"`
 	MomentText             string               `json:"-" gorm:"type:varchar(200);not null;default:'';comment:瞬间主题"`
 	IsShared               bool                 `json:"-" gorm:"not null;index:idx_planet_moment_shared;comment:是否公开分享"`
-	SnapshotJson           string               `json:"-" gorm:"type:longtext;comment:完整瞬间快照包"`
 	SnapshotKey            string               `json:"-" gorm:"type:varchar(128);comment:压缩快照文件键"`
 	SnapshotHash           string               `json:"-" gorm:"type:char(64);comment:快照内容哈希"`
 	QuotedMomentId         *uint64              `json:"-" gorm:"index:idx_planet_moment_quote;comment:引用瞬间ID"`

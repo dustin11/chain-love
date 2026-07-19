@@ -372,10 +372,6 @@ func ListMyShares(user security.JwtUser, query ShareListQuery) (*ShareListResult
 	if status != "" && status != "active" && status != "expired" {
 		return nil, bizerr.Parameter("分享状态无效")
 	}
-	if err := deleteLegacyRevokedShares(user.Id); err != nil {
-		return nil, err
-	}
-
 	dbq := domain.Db.Model(&ds.PluginShare{}).
 		Where("creator_user_id = ? AND status = ?", user.Id, ds.PluginShareStatusActive)
 	now := time.Now()
@@ -534,52 +530,26 @@ func GetBootstrap(token string, user *security.JwtUser) (*Bootstrap, error) {
 	if !share.IsShared && (user == nil || user.Id != share.CreatorUserId) {
 		return nil, bizerr.NotFound("瞬间不存在或已失效")
 	}
-	var snapshot storedMomentSnapshot
-	if strings.TrimSpace(share.SnapshotKey) != "" {
-		data, err := readMomentSnapshot(share.SnapshotKey)
-		if err != nil {
-			return nil, err
-		}
-		if fmt.Sprintf("%x", sha256.Sum256(data)) != share.SnapshotHash {
-			return nil, errors.New("瞬间快照校验失败")
-		}
-		if err := json.Unmarshal(data, &snapshot); err != nil {
-			return nil, err
-		}
-	} else if strings.TrimSpace(share.SnapshotJson) != "" {
-		if err := json.Unmarshal([]byte(share.SnapshotJson), &snapshot); err != nil {
-			return nil, err
-		}
+	if strings.TrimSpace(share.SnapshotKey) == "" {
+		return nil, errors.New("瞬间快照不存在")
 	}
-	pluginDescriptor, err := restoreLegacyPluginDescriptor(
-		share.PluginDescriptorJson,
-		share.SourcePluginInstanceId,
-	)
+	data, err := readMomentSnapshot(share.SnapshotKey)
 	if err != nil {
 		return nil, err
 	}
-	legacyPlugin := PluginBootstrap{
-		PluginInstanceId: "shared-plugin-1",
-		SurfaceId:        "shared-surface-1",
-		PlayerId:         resolvePublicPlayerID(share.CarrierStateJson),
-		Plugin:           json.RawMessage(pluginDescriptor),
-		Carrier:          json.RawMessage(share.CarrierStateJson),
-		State:            json.RawMessage(share.StateJson),
-		ResourceState:    json.RawMessage(share.ResourceStateJson),
-		ResourceManifest: json.RawMessage(share.ResourceManifestJson),
+	if fmt.Sprintf("%x", sha256.Sum256(data)) != share.SnapshotHash {
+		return nil, errors.New("瞬间快照校验失败")
+	}
+	var snapshot storedMomentSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return nil, err
 	}
 	plugins := make([]PluginBootstrap, 0, len(snapshot.Plugins))
 	for _, stored := range snapshot.Plugins {
-		plugin := stored.Bootstrap
-		plugin.Plugin = restoreLegacyMomentDynamicIdentity(
-			plugin.Plugin,
-			plugin.PluginInstanceId,
-			stored.SourceInstanceID,
-		)
-		plugins = append(plugins, plugin)
+		plugins = append(plugins, stored.Bootstrap)
 	}
 	if len(plugins) == 0 {
-		plugins = append(plugins, legacyPlugin)
+		return nil, errors.New("瞬间快照没有插件")
 	}
 	primary := plugins[0]
 	var quoted *QuotedMomentSummary
@@ -712,24 +682,6 @@ func readMomentSnapshot(key string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(reader, 16*1024*1024))
 }
 
-// deleteLegacyRevokedShares 清理旧版本留下的撤销记录，统一到物理删除语义。
-func deleteLegacyRevokedShares(userID uint64) error {
-	var shares []ds.PluginShare
-	if err := domain.Db.Where(
-		"creator_user_id = ? AND status = ?",
-		userID,
-		ds.PluginShareStatusRevoked,
-	).Find(&shares).Error; err != nil {
-		return err
-	}
-	for index := range shares {
-		if err := deleteShareRecord(&shares[index]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // ResolveCommentInstance 把分享作用域实例映射回原评论实例。
 func ResolveCommentInstance(token string, publicInstanceID string, user *security.JwtUser) (string, Permissions, error) {
 	share, err := findActiveShare(token)
@@ -755,10 +707,7 @@ func ResolveCommentInstance(token string, publicInstanceID string, user *securit
 			}
 		}
 	}
-	if publicInstanceID != "shared-plugin-1" {
-		return "", Permissions{}, bizerr.NotFound("瞬间内容不存在")
-	}
-	return share.SourcePluginInstanceId, permissions, nil
+	return "", Permissions{}, bizerr.NotFound("瞬间内容不存在")
 }
 
 // ProjectCommentAnchor 将评论锚点中的真实实例 ID 重写为分享别名。
