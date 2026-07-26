@@ -6,6 +6,7 @@ import (
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
+	terrain_api "senspace/api/api_v1/planet/terrain"
 	"senspace/api/api_v1/plugin_comment_api"
 	"senspace/api/api_v1/plugin_share_api"
 	"senspace/api/api_v1/sys_api"
@@ -85,6 +86,10 @@ func SetupApiV1Router(router *gin.Engine) {
 			"/:shareToken/resources/:resourceAlias",
 			context.WithAppContext(plugin_share_api.GetResource),
 		)
+	}
+	planetTerrainPublicRouter := router.Group("/api/v1/planet")
+	{
+		planetTerrainPublicRouter.GET("/:planetId/terrain", terrain_api.GetPublished)
 	}
 
 	// 需要认证的 API 路由
@@ -215,6 +220,10 @@ func SetupApiV1Router(router *gin.Engine) {
 		taskRouter.POST("/purge-all", context.WithAppContext(task_api.PurgeAllTasks))
 		taskRouter.POST("/:id/retry", context.WithAppContext(task_api.RetryTask))
 		taskRouter.DELETE("/:id", context.WithAppContext(task_api.DeleteTask))
+	}
+	planetTerrainRouter := apiRouter.Group("/planet")
+	{
+		planetTerrainRouter.PUT("/:planetId/terrain", context.WithAppContext(terrain_api.SavePublished))
 	}
 
 }
