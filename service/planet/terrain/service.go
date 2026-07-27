@@ -23,21 +23,31 @@ import (
 )
 
 const (
+	// 当前支持的地形状态结构版本。
 	currentSchemaVersion = 1
+	// 单个地形状态允许的最大字节数。
 	maxStateBytes        = 2 * 1024 * 1024
+	// 单个星球允许的平台记录上限。
 	maxPlatforms         = 128
+	// 单个星球允许的物件记录上限。
 	maxObjects           = 5000
 )
 
+// 空地形状态的规范 JSON 表示。
 var emptyState = json.RawMessage(`{"platforms":[],"objects":[]}`)
 
 const (
+	// 地形记录 ID 的最大长度。
 	maxRecordIdLength     = 128
+	// 位置和旋转分量的绝对值上限。
 	maxTransformComponent = 1_000_000
+	// 缩放分量的最大值。
 	maxScaleComponent     = 1_000
+	// 物件变体种子的最大值。
 	maxTerrainVariantSeed = 2_147_483_647
 )
 
+// 允许发布的地表材质。
 var terrainSurfaceMaterialIds = map[string]struct{}{
 	"grass":   {},
 	"pebble":  {},
@@ -45,10 +55,14 @@ var terrainSurfaceMaterialIds = map[string]struct{}{
 	"asphalt": {},
 }
 
+// 允许发布的地形物件预设。
 var terrainObjectPresetIds = map[string]struct{}{
 	"cypress":     {},
 	"shrub":       {},
 	"grass-clump": {},
+	"daisy-patch": {},
+	"tulip-patch": {},
+	"fern":        {},
 	"rock":        {},
 	"pebble-rock": {},
 	"box":         {},
@@ -57,14 +71,22 @@ var terrainObjectPresetIds = map[string]struct{}{
 	"cone":        {},
 }
 
-// terrainTransform 是服务端校验后的独立位置、旋转与缩放。
+// 支持单独设置纹理的基础形状预设。
+var terrainTextureableObjectPresetIds = map[string]struct{}{
+	"box":      {},
+	"sphere":   {},
+	"cylinder": {},
+	"cone":     {},
+}
+
+// 服务端校验后的独立位置、旋转与缩放。
 type terrainTransform struct {
 	Position []float64 `json:"position"`
 	Rotation []float64 `json:"rotation"`
 	Scale    []float64 `json:"scale"`
 }
 
-// terrainPlatform 是允许发布的平台记录。
+// 允许发布的平台记录。
 type terrainPlatform struct {
 	Id         string           `json:"id"`
 	Kind       string           `json:"kind"`
@@ -72,22 +94,23 @@ type terrainPlatform struct {
 	Transform  terrainTransform `json:"transform"`
 }
 
-// terrainObject 是允许发布的实例物件记录。
+// 允许发布的实例物件记录。
 type terrainObject struct {
 	Id          string           `json:"id"`
 	Kind        string           `json:"kind"`
 	PresetId    string           `json:"presetId"`
+	MaterialId  string           `json:"materialId,omitempty"`
 	Transform   terrainTransform `json:"transform"`
 	VariantSeed int64            `json:"variantSeed"`
 }
 
-// terrainState 是 schemaVersion=1 的完整发布载荷。
+// schemaVersion=1 的完整发布载荷。
 type terrainState struct {
 	Platforms []terrainPlatform `json:"platforms"`
 	Objects   []terrainObject   `json:"objects"`
 }
 
-// GetPublished 公开读取一个星球当前发布的地形。
+// 公开读取一个星球当前发布的地形。
 func GetPublished(planetId int) (*DocumentResponse, error) {
 	if planetId <= 0 {
 		return nil, bizerr.Parameter("planetId无效")
@@ -113,7 +136,7 @@ func GetPublished(planetId int) (*DocumentResponse, error) {
 	return mapDocument(document), nil
 }
 
-// SavePublished 校验星球真实归属并以乐观锁保存地形。
+// 校验星球真实归属并以乐观锁保存地形。
 func SavePublished(
 	planetId int,
 	request SaveRequest,
@@ -205,7 +228,7 @@ func SavePublished(
 	return mapDocument(saved), nil
 }
 
-// validateState 校验第一版完整结构、有限姿态、预设白名单与记录上限。
+// 校验完整结构、有限姿态、预设白名单与记录上限。
 func validateState(state json.RawMessage) (json.RawMessage, error) {
 	if len(state) == 0 || len(state) > maxStateBytes || !json.Valid(state) {
 		return nil, bizerr.Parameter("地形状态无效或过大")
@@ -251,6 +274,14 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if _, exists := terrainObjectPresetIds[object.PresetId]; !exists {
 			return nil, bizerr.Parameter("地形物件预设无效")
 		}
+		if object.MaterialId != "" {
+			if _, exists := terrainTextureableObjectPresetIds[object.PresetId]; !exists {
+				return nil, bizerr.Parameter("只有基本形状可以设置纹理")
+			}
+			if _, exists := terrainSurfaceMaterialIds[object.MaterialId]; !exists {
+				return nil, bizerr.Parameter("地形物件纹理无效")
+			}
+		}
 		if object.VariantSeed < 0 || object.VariantSeed > maxTerrainVariantSeed {
 			return nil, bizerr.Parameter("地形物件variantSeed无效")
 		}
@@ -269,7 +300,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 	return normalized, nil
 }
 
-// ensureJsonEnd 确认根对象后不存在第二段 JSON。
+// 确认根对象后不存在第二段 JSON。
 func ensureJsonEnd(decoder *json.Decoder) error {
 	var extra interface{}
 	err := decoder.Decode(&extra)
@@ -282,7 +313,7 @@ func ensureJsonEnd(decoder *json.Decoder) error {
 	return err
 }
 
-// validateTerrainRecordId 校验跨平台和物件唯一的稳定记录 id。
+// 校验跨平台和物件唯一的稳定记录 ID。
 func validateTerrainRecordId(id string, usedIds map[string]struct{}) error {
 	if id == "" || strings.TrimSpace(id) != id || len(id) > maxRecordIdLength {
 		return bizerr.Parameter("地形记录id无效")
@@ -294,7 +325,7 @@ func validateTerrainRecordId(id string, usedIds map[string]struct{}) error {
 	return nil
 }
 
-// validTerrainTransform 校验 frame 数值有限，且缩放独立为正数。
+// 校验位姿数值有限，且缩放分量均为正数。
 func validTerrainTransform(transform terrainTransform) bool {
 	if !validTerrainVector(transform.Position, false, maxTransformComponent) ||
 		!validTerrainVector(transform.Rotation, false, maxTransformComponent) ||
@@ -304,7 +335,7 @@ func validTerrainTransform(transform terrainTransform) bool {
 	return true
 }
 
-// validTerrainVector 校验精确三分量向量。
+// 校验精确三分量向量。
 func validTerrainVector(values []float64, positive bool, maximum float64) bool {
 	if len(values) != 3 {
 		return false
@@ -320,7 +351,7 @@ func validTerrainVector(values []float64, positive bool, maximum float64) bool {
 	return true
 }
 
-// mapDocument 把领域模型映射为稳定 API 信封。
+// 把领域模型映射为稳定 API 信封。
 func mapDocument(document terrain_domain.Document) *DocumentResponse {
 	updatedAt := document.UpdatedAt.UTC()
 	if updatedAt.IsZero() {
