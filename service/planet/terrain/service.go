@@ -3,6 +3,7 @@ package terrain
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,13 +25,13 @@ import (
 
 const (
 	// 当前支持的地形状态结构版本。
-	currentSchemaVersion = 1
+	currentSchemaVersion = 3
 	// 单个地形状态允许的最大字节数。
-	maxStateBytes        = 2 * 1024 * 1024
+	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的平台记录上限。
-	maxPlatforms         = 128
+	maxPlatforms = 128
 	// 单个星球允许的物件记录上限。
-	maxObjects           = 5000
+	maxObjects = 5000
 )
 
 // 空地形状态的规范 JSON 表示。
@@ -38,21 +39,24 @@ var emptyState = json.RawMessage(`{"platforms":[],"objects":[]}`)
 
 const (
 	// 地形记录 ID 的最大长度。
-	maxRecordIdLength     = 128
+	maxRecordIdLength = 128
 	// 位置和旋转分量的绝对值上限。
 	maxTransformComponent = 1_000_000
 	// 缩放分量的最大值。
-	maxScaleComponent     = 1_000
+	maxScaleComponent = 1_000
 	// 物件变体种子的最大值。
 	maxTerrainVariantSeed = 2_147_483_647
 )
 
 // 允许发布的地表材质。
 var terrainSurfaceMaterialIds = map[string]struct{}{
-	"grass":   {},
-	"pebble":  {},
-	"marble":  {},
-	"asphalt": {},
+	"grass":         {},
+	"pebble":        {},
+	"yellow-pebble": {},
+	"jade":          {},
+	"rockscape":     {},
+	"marble":        {},
+	"asphalt":       {},
 }
 
 // 允许发布的地形物件预设。
@@ -64,6 +68,9 @@ var terrainObjectPresetIds = map[string]struct{}{
 	"tulip-patch": {},
 	"fern":        {},
 	"rock":        {},
+	"rock-pillar": {},
+	"rock-slab":   {},
+	"rock-ridge":  {},
 	"pebble-rock": {},
 	"box":         {},
 	"sphere":      {},
@@ -73,10 +80,15 @@ var terrainObjectPresetIds = map[string]struct{}{
 
 // 支持单独设置纹理的基础形状预设。
 var terrainTextureableObjectPresetIds = map[string]struct{}{
-	"box":      {},
-	"sphere":   {},
-	"cylinder": {},
-	"cone":     {},
+	"box":         {},
+	"sphere":      {},
+	"cylinder":    {},
+	"cone":        {},
+	"rock":        {},
+	"rock-pillar": {},
+	"rock-slab":   {},
+	"rock-ridge":  {},
+	"pebble-rock": {},
 }
 
 // 服务端校验后的独立位置、旋转与缩放。
@@ -88,10 +100,11 @@ type terrainTransform struct {
 
 // 允许发布的平台记录。
 type terrainPlatform struct {
-	Id         string           `json:"id"`
-	Kind       string           `json:"kind"`
-	MaterialId string           `json:"materialId"`
-	Transform  terrainTransform `json:"transform"`
+	Id          string             `json:"id"`
+	Kind        string             `json:"kind"`
+	MaterialId  string             `json:"materialId"`
+	Transform   terrainTransform   `json:"transform"`
+	HeightField terrainHeightField `json:"heightField"`
 }
 
 // 允许发布的实例物件记录。
@@ -104,7 +117,28 @@ type terrainObject struct {
 	VariantSeed int64            `json:"variantSeed"`
 }
 
-// schemaVersion=1 的完整发布载荷。
+// 高度场中的稀疏压缩块。
+type terrainHeightChunk struct {
+	X        int    `json:"x"`
+	Z        int    `json:"z"`
+	Encoding string `json:"encoding"`
+	Code     *int   `json:"code,omitempty"`
+	Data     string `json:"data,omitempty"`
+}
+
+// 第一版固定参数的高度场。
+type terrainHeightField struct {
+	Version         int                  `json:"version"`
+	Enabled         bool                 `json:"enabled"`
+	BaseHeight      float64              `json:"baseHeight"`
+	CellSize        float64              `json:"cellSize"`
+	SamplesPerChunk int                  `json:"samplesPerChunk"`
+	HeightUnit      float64              `json:"heightUnit"`
+	ZeroCode        int                  `json:"zeroCode"`
+	Chunks          []terrainHeightChunk `json:"chunks"`
+}
+
+// schemaVersion=2 的完整发布载荷。
 type terrainState struct {
 	Platforms []terrainPlatform `json:"platforms"`
 	Objects   []terrainObject   `json:"objects"`
@@ -133,7 +167,20 @@ func GetPublished(planetId int) (*DocumentResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mapDocument(document), nil
+	response := mapDocument(document)
+	if response.SchemaVersion != document.SchemaVersion ||
+		string(response.State) != document.StateJson {
+		if err := domain.Db.Model(&terrain_domain.Document{}).
+			Where("planet_id = ?", planetId).
+			UpdateColumns(map[string]interface{}{
+				"schema_version": response.SchemaVersion,
+				"state_json":     string(response.State),
+				"content_hash":   response.ContentHash,
+			}).Error; err != nil {
+			return nil, fmt.Errorf("clean automatic terrain data: %w", err)
+		}
+	}
+	return response, nil
 }
 
 // 校验星球真实归属并以乐观锁保存地形。
@@ -266,6 +313,9 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if !validTerrainTransform(platform.Transform) {
 			return nil, bizerr.Parameter("地形平台变换无效")
 		}
+		if err := validateTerrainHeightField(platform.HeightField); err != nil {
+			return nil, err
+		}
 	}
 	for _, object := range envelope.Objects {
 		if object.Kind != "object" {
@@ -292,12 +342,127 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 			return nil, bizerr.Parameter("地形物件变换无效")
 		}
 	}
-
 	normalized, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("marshal terrain state: %w", err)
 	}
 	return normalized, nil
+}
+
+// 校验固定高度场参数、块唯一性与压缩流完整性。
+func validateTerrainHeightField(field terrainHeightField) error {
+	if field.Version != 2 ||
+		field.CellSize != 0.5 ||
+		field.SamplesPerChunk != 64 ||
+		field.HeightUnit != 0.005 ||
+		field.ZeroCode != 32768 ||
+		math.IsNaN(field.BaseHeight) ||
+		math.IsInf(field.BaseHeight, 0) ||
+		math.Abs(field.BaseHeight) > maxTransformComponent ||
+		len(field.Chunks) > 4096 {
+		return bizerr.Parameter("地形高度场参数无效")
+	}
+	if field.Enabled != (len(field.Chunks) > 0) {
+		return bizerr.Parameter("地形高度场启用状态无效")
+	}
+	usedKeys := make(map[string]struct{}, len(field.Chunks))
+	for _, chunk := range field.Chunks {
+		if chunk.X < -32768 || chunk.X > 32768 ||
+			chunk.Z < -32768 || chunk.Z > 32768 {
+			return bizerr.Parameter("地形高度块坐标无效")
+		}
+		key := fmt.Sprintf("%d:%d", chunk.X, chunk.Z)
+		if _, exists := usedKeys[key]; exists {
+			return bizerr.Parameter("地形高度块坐标重复")
+		}
+		usedKeys[key] = struct{}{}
+		switch chunk.Encoding {
+		case "constant":
+			if chunk.Code == nil || *chunk.Code < 0 || *chunk.Code > 65535 || chunk.Data != "" {
+				return bizerr.Parameter("地形常量高度块无效")
+			}
+			if *chunk.Code == field.ZeroCode {
+				return bizerr.Parameter("地形高度块不能是空白基准块")
+			}
+		case "delta-rle-v1":
+			if chunk.Code != nil || len(chunk.Data) == 0 || len(chunk.Data) > 65536 {
+				return bizerr.Parameter("地形压缩高度块无效")
+			}
+			hasHeightChange, err := validateTerrainHeightChunkData(
+				chunk.Data,
+				field.SamplesPerChunk*field.SamplesPerChunk,
+				field.ZeroCode,
+			)
+			if err != nil {
+				return err
+			}
+			if !hasHeightChange {
+				return bizerr.Parameter("地形高度块不能是空白基准块")
+			}
+		default:
+			return bizerr.Parameter("地形高度块编码无效")
+		}
+	}
+	return nil
+}
+
+// 解码差分游程并确认高度、样本数和尾部字节均有效。
+func validateTerrainHeightChunkData(
+	data string,
+	expectedSamples int,
+	zeroCode int,
+) (bool, error) {
+	bytes, err := base64.StdEncoding.Strict().DecodeString(data)
+	if err != nil {
+		return false, bizerr.Parameter("地形高度块Base64无效")
+	}
+	cursor := 0
+	samples := 0
+	previous := 32768
+	hasHeightChange := false
+	for cursor < len(bytes) && samples < expectedSamples {
+		runLength, nextCursor, ok := readTerrainVarUint(bytes, cursor)
+		if !ok || runLength == 0 || runLength > uint64(expectedSamples-samples) {
+			return false, bizerr.Parameter("地形高度块游程无效")
+		}
+		cursor = nextCursor
+		encodedDelta, nextCursor, ok := readTerrainVarUint(bytes, cursor)
+		if !ok {
+			return false, bizerr.Parameter("地形高度块残差无效")
+		}
+		cursor = nextCursor
+		delta := int64(encodedDelta >> 1)
+		if encodedDelta&1 == 1 {
+			delta = -delta - 1
+		}
+		for index := uint64(0); index < runLength; index++ {
+			height := int64(previous) + delta
+			if height < 0 || height > 65535 {
+				return false, bizerr.Parameter("地形高度块采样越界")
+			}
+			previous = int(height)
+			hasHeightChange = hasHeightChange || previous != zeroCode
+			samples++
+		}
+	}
+	if samples != expectedSamples || cursor != len(bytes) {
+		return false, bizerr.Parameter("地形高度块采样数量无效")
+	}
+	return hasHeightChange, nil
+}
+
+// 从受限字节流读取一个最多五字节的无符号变长整数。
+func readTerrainVarUint(data []byte, cursor int) (uint64, int, bool) {
+	var result uint64
+	for shift := 0; shift <= 28 && cursor < len(data); shift += 7 {
+		value := data[cursor]
+		cursor++
+		result |= uint64(value&0x7f) << shift
+		if value&0x80 == 0 {
+			return result, cursor, true
+		}
+	}
+	return 0, cursor, false
 }
 
 // 确认根对象后不存在第二段 JSON。
@@ -357,11 +522,47 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 	if updatedAt.IsZero() {
 		updatedAt = document.CreatedAt.UTC()
 	}
+	state := json.RawMessage(document.StateJson)
+	schemaVersion := document.SchemaVersion
+	if schemaVersion < currentSchemaVersion {
+		var legacy struct {
+			Platforms json.RawMessage `json:"platforms"`
+			Objects   json.RawMessage `json:"objects"`
+		}
+		if json.Unmarshal(state, &legacy) == nil {
+			var platforms []map[string]interface{}
+			if json.Unmarshal(legacy.Platforms, &platforms) == nil {
+				for _, platform := range platforms {
+					platform["heightField"] = map[string]interface{}{
+						"version":         2,
+						"enabled":         false,
+						"baseHeight":      0.006,
+						"cellSize":        0.5,
+						"samplesPerChunk": 64,
+						"heightUnit":      0.005,
+						"zeroCode":        32768,
+						"chunks":          []interface{}{},
+					}
+				}
+				legacy.Platforms, _ = json.Marshal(platforms)
+			}
+			migrated, err := json.Marshal(map[string]json.RawMessage{
+				"platforms": legacy.Platforms,
+				"objects":   legacy.Objects,
+			})
+			if err == nil {
+				state = migrated
+				schemaVersion = currentSchemaVersion
+				hash := sha256.Sum256(state)
+				document.ContentHash = hex.EncodeToString(hash[:])
+			}
+		}
+	}
 	return &DocumentResponse{
-		SchemaVersion: document.SchemaVersion,
+		SchemaVersion: schemaVersion,
 		Revision:      document.Revision,
 		UpdatedAt:     updatedAt.Format(time.RFC3339Nano),
 		ContentHash:   document.ContentHash,
-		State:         json.RawMessage(document.StateJson),
+		State:         state,
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	terrain_domain "senspace/domain/planet/terrain"
 	"senspace/pkg/bizerr"
 )
 
@@ -20,6 +21,16 @@ func TestValidateState(t *testing.T) {
 					"position":[0,6,0],
 					"rotation":[0,0,0],
 					"scale":[5,1,5]
+				},
+				"heightField": {
+					"version":2,
+					"enabled":true,
+					"baseHeight":0.006,
+					"cellSize":0.5,
+					"samplesPerChunk":64,
+					"heightUnit":0.005,
+					"zeroCode":32768,
+					"chunks":[{"x":0,"z":0,"encoding":"constant","code":32868}]
 				}
 			}],
 			"objects": [{
@@ -43,6 +54,71 @@ func TestValidateState(t *testing.T) {
 		}
 		if !strings.Contains(string(state), `"materialId":"marble"`) {
 			t.Fatalf("expected shape material, got %q", string(state))
+		}
+	})
+
+	t.Run("rejects malformed height chunks", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[]
+			"heightField":{
+				"version":2,
+				"enabled":true,
+				"baseHeight":4.7,
+				"cellSize":0.5,
+				"samplesPerChunk":64,
+				"heightUnit":0.005,
+				"zeroCode":32768,
+				"chunks":[{"x":0,"z":0,"encoding":"delta-rle-v1","data":"AQ=="}]
+			}
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
+		}
+	})
+
+	t.Run("accepts a complete compressed height chunk", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[{
+				"id":"p1",
+				"kind":"platform",
+				"materialId":"grass",
+				"transform":{"position":[0,6,0],"rotation":[0,0,0],"scale":[5,1,5]},
+				"heightField":{
+					"version":2,
+					"enabled":true,
+					"baseHeight":0.006,
+					"cellSize":0.5,
+					"samplesPerChunk":64,
+					"heightUnit":0.005,
+					"zeroCode":32768,
+					"chunks":[{"x":0,"z":0,"encoding":"delta-rle-v1","data":"AcgB/x8A"}]
+				}
+				}],
+				"objects":[]
+			}`))
+		if err != nil {
+			t.Fatalf("validate compressed chunk: %v", err)
+		}
+	})
+
+	t.Run("rejects legacy automatic flat height chunks", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[],
+			"heightField":{
+				"version":2,
+				"enabled":true,
+				"baseHeight":4.7,
+				"cellSize":0.5,
+				"samplesPerChunk":64,
+				"heightUnit":0.005,
+				"zeroCode":32768,
+				"chunks":[{"x":0,"z":0,"encoding":"constant","code":32768}]
+			}
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
 		}
 	})
 
@@ -160,4 +236,52 @@ func TestValidateState(t *testing.T) {
 			t.Fatalf("expected parameter error, got %v", err)
 		}
 	})
+}
+
+// 确保历史文档公开读取时升级为平台自带高度场的结构。
+func TestMapLegacyDocument(t *testing.T) {
+	response := mapDocument(terrain_domain.Document{
+		SchemaVersion: 1,
+		Revision:      7,
+		StateJson:     `{"platforms":[],"objects":[]}`,
+		ContentHash:   strings.Repeat("0", 64),
+	})
+	if response.SchemaVersion != currentSchemaVersion {
+		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
+	}
+	if string(response.State) != `{"objects":[],"platforms":[]}` {
+		t.Fatalf("expected clean migrated state, got %s", response.State)
+	}
+	if response.ContentHash == strings.Repeat("0", 64) {
+		t.Fatal("expected migrated state hash")
+	}
+}
+
+// 确保阶段三初版自动高度场读取时被整体清理。
+func TestMapAutomaticHeightFieldDocument(t *testing.T) {
+	response := mapDocument(terrain_domain.Document{
+		SchemaVersion: 2,
+		Revision:      8,
+		StateJson: `{
+			"platforms":[],
+			"objects":[],
+			"heightField":{
+				"version":1,
+				"enabled":true,
+				"baseHeight":4.7,
+				"cellSize":0.5,
+				"samplesPerChunk":64,
+				"heightUnit":0.005,
+				"zeroCode":32768,
+				"chunks":[{"x":0,"z":0,"encoding":"constant","code":32868}]
+			}
+		}`,
+		ContentHash: strings.Repeat("0", 64),
+	})
+	if string(response.State) != `{"objects":[],"platforms":[]}` {
+		t.Fatalf("expected removed unowned height field, got %s", response.State)
+	}
+	if response.ContentHash == strings.Repeat("0", 64) {
+		t.Fatal("expected cleaned state hash")
+	}
 }
