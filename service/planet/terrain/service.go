@@ -111,6 +111,7 @@ type terrainPlatform struct {
 type terrainObject struct {
 	Id          string           `json:"id"`
 	Kind        string           `json:"kind"`
+	PlatformId  string           `json:"platformId,omitempty"`
 	PresetId    string           `json:"presetId"`
 	MaterialId  string           `json:"materialId,omitempty"`
 	Transform   terrainTransform `json:"transform"`
@@ -300,6 +301,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 	}
 
 	usedIds := make(map[string]struct{}, len(envelope.Platforms)+len(envelope.Objects))
+	platformIds := make(map[string]struct{}, len(envelope.Platforms))
 	for _, platform := range envelope.Platforms {
 		if platform.Kind != "platform" {
 			return nil, bizerr.Parameter("地形平台kind无效")
@@ -316,6 +318,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if err := validateTerrainHeightField(platform.HeightField); err != nil {
 			return nil, err
 		}
+		platformIds[platform.Id] = struct{}{}
 	}
 	for _, object := range envelope.Objects {
 		if object.Kind != "object" {
@@ -334,6 +337,11 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		}
 		if object.VariantSeed < 0 || object.VariantSeed > maxTerrainVariantSeed {
 			return nil, bizerr.Parameter("地形物件variantSeed无效")
+		}
+		if object.PlatformId != "" {
+			if _, exists := platformIds[object.PlatformId]; !exists {
+				return nil, bizerr.Parameter("地形物件所属平台无效")
+			}
 		}
 		if err := validateTerrainRecordId(object.Id, usedIds); err != nil {
 			return nil, err

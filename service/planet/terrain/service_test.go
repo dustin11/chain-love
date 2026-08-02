@@ -36,6 +36,7 @@ func TestValidateState(t *testing.T) {
 			"objects": [{
 				"id":"o1",
 				"kind":"object",
+				"platformId":"p1",
 				"presetId":"box",
 				"materialId":"marble",
 				"variantSeed":42,
@@ -54,6 +55,30 @@ func TestValidateState(t *testing.T) {
 		}
 		if !strings.Contains(string(state), `"materialId":"marble"`) {
 			t.Fatalf("expected shape material, got %q", string(state))
+		}
+		if !strings.Contains(string(state), `"platformId":"p1"`) {
+			t.Fatalf("expected platform attachment, got %q", string(state))
+		}
+	})
+
+	t.Run("rejects an unknown platform attachment", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[{
+				"id":"o1",
+				"kind":"object",
+				"platformId":"missing-platform",
+				"presetId":"rock",
+				"variantSeed":1,
+				"transform":{
+					"position":[0,0,0],
+					"rotation":[0,0,0],
+					"scale":[1,1,1]
+				}
+			}]
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
 		}
 	})
 
