@@ -30,6 +30,7 @@ func TestValidateState(t *testing.T) {
 
 	tests := map[string]string{
 		"unknown field":  `{"nodes":[],"edges":[],"mesh":[]}`,
+		"removed style":  strings.Replace(string(valid), `"styleId":"asphalt"`, `"styleId":"stone"`, 1),
 		"missing node":   `{"nodes":[],"edges":[{"id":"e","fromNodeId":"a","toNodeId":"b","styleId":"asphalt","surfaceMode":"auto","shoulderWidth":0,"maxGrade":0.1,"direction":"both","speedLimit":1,"routeModes":["ground"]}]}`,
 		"self loop":      `{"nodes":[{"id":"a","anchor":{"kind":"frame","frameId":"planet","localPoint":[0,0,0]},"tangentMode":"auto","width":1}],"edges":[{"id":"e","fromNodeId":"a","toNodeId":"a","styleId":"asphalt","surfaceMode":"auto","shoulderWidth":0,"maxGrade":0.1,"direction":"both","speedLimit":1,"routeModes":["ground"]}]}`,
 		"invalid anchor": `{"nodes":[{"id":"a","anchor":{"kind":"surface","surfaceId":"desk","surfacePoint":[0,0]},"tangentMode":"auto","width":1}],"edges":[]}`,

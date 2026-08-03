@@ -14,6 +14,7 @@ import (
 
 	"senspace/domain"
 	road_domain "senspace/domain/planet/road"
+	planet_surface "senspace/domain/planet/surface"
 	"senspace/domain/sys"
 	"senspace/pkg/app/security"
 	"senspace/pkg/bizerr"
@@ -38,14 +39,6 @@ const (
 )
 
 var emptyState = json.RawMessage(`{"nodes":[],"edges":[]}`)
-
-var roadStyleIds = map[string]struct{}{
-	"asphalt": {},
-	"stone":   {},
-	"dirt":    {},
-	"marking": {},
-	"route":   {},
-}
 
 // roadAnchor 保存节点相对活动面、连接口或稳定标架的位置。
 type roadAnchor struct {
@@ -329,7 +322,7 @@ func validateRoadState(state *roadState) error {
 			return bizerr.Parameter("存在重复道路段")
 		}
 		edgePairs[pair] = struct{}{}
-		if _, ok := roadStyleIds[edge.StyleId]; !ok {
+		if !planet_surface.IsMaterialID(edge.StyleId) {
 			return bizerr.Parameter("道路样式无效")
 		}
 		if edge.SurfaceMode != "auto" && edge.SurfaceMode != "conform" &&

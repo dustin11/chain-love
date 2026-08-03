@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"senspace/domain"
+	planet_surface "senspace/domain/planet/surface"
 	terrain_domain "senspace/domain/planet/terrain"
 	"senspace/domain/sys"
 	"senspace/pkg/app/security"
@@ -48,17 +49,6 @@ const (
 	// 物件变体种子的最大值。
 	maxTerrainVariantSeed = 2_147_483_647
 )
-
-// 允许发布的地表材质。
-var terrainSurfaceMaterialIds = map[string]struct{}{
-	"grass":         {},
-	"pebble":        {},
-	"yellow-pebble": {},
-	"jade":          {},
-	"rockscape":     {},
-	"marble":        {},
-	"asphalt":       {},
-}
 
 // 允许发布的地形物件预设。
 var terrainObjectPresetIds = map[string]struct{}{
@@ -348,7 +338,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if platform.Kind != "platform" {
 			return nil, bizerr.Parameter("地形平台kind无效")
 		}
-		if _, exists := terrainSurfaceMaterialIds[platform.MaterialId]; !exists {
+		if !planet_surface.IsMaterialID(platform.MaterialId) {
 			return nil, bizerr.Parameter("地形平台材质无效")
 		}
 		if err := validateTerrainRecordId(platform.Id, usedIds); err != nil {
@@ -373,7 +363,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 			if _, exists := terrainTextureableObjectPresetIds[object.PresetId]; !exists {
 				return nil, bizerr.Parameter("只有基本形状可以设置纹理")
 			}
-			if _, exists := terrainSurfaceMaterialIds[object.MaterialId]; !exists {
+			if !planet_surface.IsMaterialID(object.MaterialId) {
 				return nil, bizerr.Parameter("地形物件纹理无效")
 			}
 		}
