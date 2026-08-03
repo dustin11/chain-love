@@ -9,6 +9,7 @@ import (
 	"senspace/domain/dev"
 	"senspace/domain/ds"
 	"senspace/domain/factory"
+	"senspace/domain/planet/road"
 	"senspace/domain/planet/terrain"
 	"senspace/domain/sys"
 	"senspace/domain/task"
@@ -41,6 +42,7 @@ var tables = []interface{}{
 func InitTable(db *gorm.DB) {
 	allTables := append([]interface{}{}, tables...)
 	allTables = append(allTables, factory.Tables()...)
+	allTables = append(allTables, road.Tables()...)
 	allTables = append(allTables, terrain.Tables()...)
 	allTables = append(allTables, task.Tables()...)
 	for _, table := range allTables {

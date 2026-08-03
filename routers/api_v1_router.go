@@ -6,6 +6,7 @@ import (
 	"senspace/api/api_v1/dev_api"
 	"senspace/api/api_v1/ds_api"
 	"senspace/api/api_v1/factory_api"
+	road_api "senspace/api/api_v1/planet/road"
 	terrain_api "senspace/api/api_v1/planet/terrain"
 	"senspace/api/api_v1/plugin_comment_api"
 	"senspace/api/api_v1/plugin_share_api"
@@ -90,6 +91,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	planetTerrainPublicRouter := router.Group("/api/v1/planet")
 	{
 		planetTerrainPublicRouter.GET("/:planetId/terrain", terrain_api.GetPublished)
+		planetTerrainPublicRouter.GET("/:planetId/roads", road_api.GetPublished)
 	}
 
 	// 需要认证的 API 路由
@@ -224,6 +226,7 @@ func SetupApiV1Router(router *gin.Engine) {
 	planetTerrainRouter := apiRouter.Group("/planet")
 	{
 		planetTerrainRouter.PUT("/:planetId/terrain", context.WithAppContext(terrain_api.SavePublished))
+		planetTerrainRouter.PUT("/:planetId/roads", context.WithAppContext(road_api.SavePublished))
 	}
 
 }

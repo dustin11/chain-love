@@ -310,3 +310,20 @@ func TestMapAutomaticHeightFieldDocument(t *testing.T) {
 		t.Fatal("expected cleaned state hash")
 	}
 }
+
+// 确保地形发布只级联本次删除的平台，不影响仍存在的平台。
+func TestFindRemovedPlatformIds(t *testing.T) {
+	removed, err := findRemovedPlatformIds(
+		json.RawMessage(`{"platforms":[{"id":"p1"},{"id":"p2"}],"objects":[]}`),
+		json.RawMessage(`{"platforms":[{"id":"p2"},{"id":"p3"}],"objects":[]}`),
+	)
+	if err != nil {
+		t.Fatalf("find removed platforms: %v", err)
+	}
+	if len(removed) != 1 {
+		t.Fatalf("expected one removed platform, got %v", removed)
+	}
+	if _, exists := removed["p1"]; !exists {
+		t.Fatalf("expected p1 to be removed, got %v", removed)
+	}
+}

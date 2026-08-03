@@ -18,6 +18,7 @@ import (
 	"senspace/domain/sys"
 	"senspace/pkg/app/security"
 	"senspace/pkg/bizerr"
+	road_service "senspace/service/planet/road"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -256,6 +257,13 @@ func SavePublished(
 		if current.Revision != request.ExpectedRevision {
 			return bizerr.Conflict("地形版本已更新，请重新加载")
 		}
+		removedPlatformIds, err := findRemovedPlatformIds(
+			json.RawMessage(current.StateJson),
+			normalizedState,
+		)
+		if err != nil {
+			return fmt.Errorf("resolve removed terrain platforms: %w", err)
+		}
 
 		hash := sha256.Sum256(normalizedState)
 		current.SchemaVersion = request.SchemaVersion
@@ -267,6 +275,14 @@ func SavePublished(
 		if err := tx.Save(&current).Error; err != nil {
 			return err
 		}
+		if err := road_service.RemovePlatformAnchorsTx(
+			tx,
+			planetId,
+			removedPlatformIds,
+			user.Id,
+		); err != nil {
+			return err
+		}
 		saved = current
 		return nil
 	})
@@ -274,6 +290,32 @@ func SavePublished(
 		return nil, err
 	}
 	return mapDocument(saved), nil
+}
+
+// findRemovedPlatformIds 比较前后状态，只返回本次真正删除的平台。
+func findRemovedPlatformIds(
+	currentState json.RawMessage,
+	nextState json.RawMessage,
+) (map[string]struct{}, error) {
+	var current terrainState
+	if err := json.Unmarshal(currentState, &current); err != nil {
+		return nil, err
+	}
+	var next terrainState
+	if err := json.Unmarshal(nextState, &next); err != nil {
+		return nil, err
+	}
+	nextIds := make(map[string]struct{}, len(next.Platforms))
+	for _, platform := range next.Platforms {
+		nextIds[platform.Id] = struct{}{}
+	}
+	removedIds := make(map[string]struct{})
+	for _, platform := range current.Platforms {
+		if _, exists := nextIds[platform.Id]; !exists {
+			removedIds[platform.Id] = struct{}{}
+		}
+	}
+	return removedIds, nil
 }
 
 // 校验完整结构、有限姿态、预设白名单与记录上限。
