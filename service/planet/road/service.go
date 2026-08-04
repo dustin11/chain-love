@@ -65,16 +65,17 @@ type roadNode struct {
 
 // roadEdge 保存两个节点之间的道路与通行参数。
 type roadEdge struct {
-	Id            string   `json:"id"`
-	FromNodeId    string   `json:"fromNodeId"`
-	ToNodeId      string   `json:"toNodeId"`
-	StyleId       string   `json:"styleId"`
-	SurfaceMode   string   `json:"surfaceMode"`
-	ShoulderWidth float64  `json:"shoulderWidth"`
-	MaxGrade      float64  `json:"maxGrade"`
-	Direction     string   `json:"direction"`
-	SpeedLimit    float64  `json:"speedLimit"`
-	RouteModes    []string `json:"routeModes"`
+	Id              string   `json:"id"`
+	FromNodeId      string   `json:"fromNodeId"`
+	ToNodeId        string   `json:"toNodeId"`
+	StyleId         string   `json:"styleId"`
+	SurfaceMode     string   `json:"surfaceMode"`
+	ShoulderWidth   float64  `json:"shoulderWidth"`
+	MaxGrade        float64  `json:"maxGrade"`
+	ElevationOffset float64  `json:"elevationOffset"`
+	Direction       string   `json:"direction"`
+	SpeedLimit      float64  `json:"speedLimit"`
+	RouteModes      []string `json:"routeModes"`
 }
 
 // roadState 是道路文档的完整业务状态。
@@ -331,6 +332,9 @@ func validateRoadState(state *roadState) error {
 		}
 		if !finiteInRange(edge.ShoulderWidth, 0, 100) || !finiteInRange(edge.MaxGrade, 0, 10) {
 			return bizerr.Parameter("道路坡度或路肩无效")
+		}
+		if !finiteInRange(edge.ElevationOffset, -1000, 1000) {
+			return bizerr.Parameter("道路起伏偏移无效")
 		}
 		if edge.Direction != "both" && edge.Direction != "forward" && edge.Direction != "reverse" {
 			return bizerr.Parameter("道路方向无效")
