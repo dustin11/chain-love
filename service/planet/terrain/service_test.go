@@ -263,6 +263,23 @@ func TestValidateState(t *testing.T) {
 	})
 }
 
+// 围栏配置必须同时命中模型和纹理白名单。
+func TestValidateFence(t *testing.T) {
+	if err := validateFence(&terrainFence{ModelId: "brick-wall", MaterialId: "brick"}); err != nil {
+		t.Fatalf("validate fence: %v", err)
+	}
+	for name, fence := range map[string]*terrainFence{
+		"model":    {ModelId: "scripted", MaterialId: "brick"},
+		"material": {ModelId: "brick-wall", MaterialId: "plastic"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := validateFence(fence); !bizerr.IsKind(err, bizerr.KindParameter) {
+				t.Fatalf("expected parameter error, got %v", err)
+			}
+		})
+	}
+}
+
 // 确保历史文档公开读取时升级为平台自带高度场的结构。
 func TestMapLegacyDocument(t *testing.T) {
 	response := mapDocument(terrain_domain.Document{
@@ -308,6 +325,25 @@ func TestMapAutomaticHeightFieldDocument(t *testing.T) {
 	}
 	if response.ContentHash == strings.Repeat("0", 64) {
 		t.Fatal("expected cleaned state hash")
+	}
+}
+
+// schema 3 已经属于平台的高度场在增加围栏字段时必须完整保留。
+func TestMapHeightFieldDocumentToFenceSchema(t *testing.T) {
+	response := mapDocument(terrain_domain.Document{
+		SchemaVersion: 3,
+		Revision:      9,
+		StateJson:     `{"platforms":[{"id":"p1","kind":"platform","materialId":"grass","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"heightField":{"version":2,"enabled":true,"baseHeight":0.006,"cellSize":0.5,"samplesPerChunk":64,"heightUnit":0.005,"zeroCode":32768,"chunks":[{"x":0,"z":0,"encoding":"constant","code":32868}]}}],"objects":[]}`,
+		ContentHash:   strings.Repeat("0", 64),
+	})
+	if response.SchemaVersion != currentSchemaVersion {
+		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
+	}
+	if !strings.Contains(string(response.State), `"code":32868`) {
+		t.Fatalf("expected preserved height field, got %s", response.State)
+	}
+	if response.ContentHash == strings.Repeat("0", 64) {
+		t.Fatal("expected migrated state hash")
 	}
 }
 

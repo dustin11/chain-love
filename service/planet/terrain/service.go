@@ -27,7 +27,7 @@ import (
 
 const (
 	// 当前支持的地形状态结构版本。
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 	// 单个地形状态允许的最大字节数。
 	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的平台记录上限。
@@ -82,11 +82,33 @@ var terrainTextureableObjectPresetIds = map[string]struct{}{
 	"pebble-rock": {},
 }
 
+// 允许发布的围栏模型。
+var fenceModelIds = map[string]struct{}{
+	"road-curb":         {},
+	"highway-guardrail": {},
+	"arrow-barrier":     {},
+	"park-railing":      {},
+	"brick-wall":        {},
+}
+
+// 允许发布的围栏纹理。
+var fenceMaterialIds = map[string]struct{}{
+	"brick": {},
+	"wood":  {},
+	"steel": {},
+}
+
 // 服务端校验后的独立位置、旋转与缩放。
 type terrainTransform struct {
 	Position []float64 `json:"position"`
 	Rotation []float64 `json:"rotation"`
 	Scale    []float64 `json:"scale"`
+}
+
+// terrainFence 保存平台外边界围栏样式。
+type terrainFence struct {
+	ModelId    string `json:"modelId"`
+	MaterialId string `json:"materialId"`
 }
 
 // 允许发布的平台记录。
@@ -96,6 +118,7 @@ type terrainPlatform struct {
 	MaterialId  string             `json:"materialId"`
 	Transform   terrainTransform   `json:"transform"`
 	HeightField terrainHeightField `json:"heightField"`
+	Fence       *terrainFence      `json:"fence,omitempty"`
 }
 
 // 允许发布的实例物件记录。
@@ -350,6 +373,9 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if err := validateTerrainHeightField(platform.HeightField); err != nil {
 			return nil, err
 		}
+		if err := validateFence(platform.Fence); err != nil {
+			return nil, err
+		}
 		platformIds[platform.Id] = struct{}{}
 	}
 	for _, object := range envelope.Objects {
@@ -387,6 +413,20 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("marshal terrain state: %w", err)
 	}
 	return normalized, nil
+}
+
+// validateFence 校验可选围栏模型和纹理白名单。
+func validateFence(fence *terrainFence) error {
+	if fence == nil {
+		return nil
+	}
+	if _, exists := fenceModelIds[fence.ModelId]; !exists {
+		return bizerr.Parameter("地形围栏模型无效")
+	}
+	if _, exists := fenceMaterialIds[fence.MaterialId]; !exists {
+		return bizerr.Parameter("地形围栏纹理无效")
+	}
+	return nil
 }
 
 // 校验固定高度场参数、块唯一性与压缩流完整性。
@@ -571,7 +611,7 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 		}
 		if json.Unmarshal(state, &legacy) == nil {
 			var platforms []map[string]interface{}
-			if json.Unmarshal(legacy.Platforms, &platforms) == nil {
+			if schemaVersion < 3 && json.Unmarshal(legacy.Platforms, &platforms) == nil {
 				for _, platform := range platforms {
 					platform["heightField"] = map[string]interface{}{
 						"version":         2,

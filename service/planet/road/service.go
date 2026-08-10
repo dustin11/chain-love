@@ -25,7 +25,7 @@ import (
 
 const (
 	// 当前支持的道路状态结构版本。
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 	// 单个道路状态允许的最大字节数。
 	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的道路节点上限。
@@ -39,6 +39,22 @@ const (
 )
 
 var emptyState = json.RawMessage(`{"nodes":[],"edges":[]}`)
+
+// 允许发布的围栏模型。
+var fenceModelIds = map[string]struct{}{
+	"road-curb":         {},
+	"highway-guardrail": {},
+	"arrow-barrier":     {},
+	"park-railing":      {},
+	"brick-wall":        {},
+}
+
+// 允许发布的围栏纹理。
+var fenceMaterialIds = map[string]struct{}{
+	"brick": {},
+	"wood":  {},
+	"steel": {},
+}
 
 // roadAnchor 保存节点相对活动面、连接口或稳定标架的位置。
 type roadAnchor struct {
@@ -63,19 +79,26 @@ type roadNode struct {
 	Width       float64    `json:"width"`
 }
 
+// roadFence 保存道路两侧共用的围栏样式。
+type roadFence struct {
+	ModelId    string `json:"modelId"`
+	MaterialId string `json:"materialId"`
+}
+
 // roadEdge 保存两个节点之间的道路与通行参数。
 type roadEdge struct {
-	Id              string   `json:"id"`
-	FromNodeId      string   `json:"fromNodeId"`
-	ToNodeId        string   `json:"toNodeId"`
-	StyleId         string   `json:"styleId"`
-	SurfaceMode     string   `json:"surfaceMode"`
-	ShoulderWidth   float64  `json:"shoulderWidth"`
-	MaxGrade        float64  `json:"maxGrade"`
-	ElevationOffset float64  `json:"elevationOffset"`
-	Direction       string   `json:"direction"`
-	SpeedLimit      float64  `json:"speedLimit"`
-	RouteModes      []string `json:"routeModes"`
+	Id              string     `json:"id"`
+	FromNodeId      string     `json:"fromNodeId"`
+	ToNodeId        string     `json:"toNodeId"`
+	StyleId         string     `json:"styleId"`
+	SurfaceMode     string     `json:"surfaceMode"`
+	ShoulderWidth   float64    `json:"shoulderWidth"`
+	MaxGrade        float64    `json:"maxGrade"`
+	ElevationOffset float64    `json:"elevationOffset"`
+	Direction       string     `json:"direction"`
+	SpeedLimit      float64    `json:"speedLimit"`
+	RouteModes      []string   `json:"routeModes"`
+	Fence           *roadFence `json:"fence,omitempty"`
 }
 
 // roadState 是道路文档的完整业务状态。
@@ -345,6 +368,23 @@ func validateRoadState(state *roadState) error {
 		if err := validateRouteModes(edge.RouteModes); err != nil {
 			return err
 		}
+		if err := validateFence(edge.Fence); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateFence 校验可选围栏模型和纹理白名单。
+func validateFence(fence *roadFence) error {
+	if fence == nil {
+		return nil
+	}
+	if _, exists := fenceModelIds[fence.ModelId]; !exists {
+		return bizerr.Parameter("道路围栏模型无效")
+	}
+	if _, exists := fenceMaterialIds[fence.MaterialId]; !exists {
+		return bizerr.Parameter("道路围栏纹理无效")
 	}
 	return nil
 }
@@ -493,11 +533,25 @@ func emptyDocumentResponse() *DocumentResponse {
 
 // mapDocument 把数据库记录映射为公开响应。
 func mapDocument(document road_domain.Document) *DocumentResponse {
+	state := json.RawMessage(document.StateJson)
+	schemaVersion := document.SchemaVersion
+	contentHash := document.ContentHash
+	if schemaVersion < currentSchemaVersion {
+		var legacy roadState
+		if json.Unmarshal(state, &legacy) == nil {
+			if migrated, err := json.Marshal(legacy); err == nil {
+				state = migrated
+				schemaVersion = currentSchemaVersion
+				hash := sha256.Sum256(state)
+				contentHash = hex.EncodeToString(hash[:])
+			}
+		}
+	}
 	return &DocumentResponse{
-		SchemaVersion: document.SchemaVersion,
+		SchemaVersion: schemaVersion,
 		Revision:      document.Revision,
 		UpdatedAt:     document.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		ContentHash:   document.ContentHash,
-		State:         json.RawMessage(document.StateJson),
+		ContentHash:   contentHash,
+		State:         state,
 	}
 }

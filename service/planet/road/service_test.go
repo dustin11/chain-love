@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	road_domain "senspace/domain/planet/road"
 	"senspace/pkg/bizerr"
 )
 
@@ -15,7 +16,7 @@ func TestValidateState(t *testing.T) {
 			{"id":"n1","anchor":{"kind":"surface","surfaceId":"desktop","surfacePoint":[0,0,0]},"tangentMode":"auto","width":1.2},
 			{"id":"n2","anchor":{"kind":"connector","connectorId":"door:outside","side":"outside"},"tangentMode":"manual","tangentIn":[-1,0,0],"width":1.5}
 		],
-		"edges":[{"id":"e1","fromNodeId":"n1","toNodeId":"n2","styleId":"asphalt","surfaceMode":"bridge","shoulderWidth":0.4,"maxGrade":0.12,"elevationOffset":0.75,"direction":"both","speedLimit":12,"routeModes":["ground","air"]}]
+		"edges":[{"id":"e1","fromNodeId":"n1","toNodeId":"n2","styleId":"asphalt","surfaceMode":"bridge","shoulderWidth":0.4,"maxGrade":0.12,"elevationOffset":0.75,"direction":"both","speedLimit":12,"routeModes":["ground","air"],"fence":{"modelId":"highway-guardrail","materialId":"steel"}}]
 	}`)
 
 	t.Run("compacts a valid graph", func(t *testing.T) {
@@ -46,5 +47,41 @@ func TestValidateState(t *testing.T) {
 				t.Fatalf("expected parameter error, got %v", err)
 			}
 		})
+	}
+}
+
+// 围栏配置必须同时命中模型和纹理白名单。
+func TestValidateFence(t *testing.T) {
+	if err := validateFence(&roadFence{ModelId: "park-railing", MaterialId: "wood"}); err != nil {
+		t.Fatalf("validate fence: %v", err)
+	}
+	for name, fence := range map[string]*roadFence{
+		"model":    {ModelId: "scripted", MaterialId: "wood"},
+		"material": {ModelId: "park-railing", MaterialId: "plastic"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := validateFence(fence); !bizerr.IsKind(err, bizerr.KindParameter) {
+				t.Fatalf("expected parameter error, got %v", err)
+			}
+		})
+	}
+}
+
+// 历史道路文档读取时只升级信封，原有拓扑保持不变。
+func TestMapLegacyDocument(t *testing.T) {
+	response := mapDocument(road_domain.Document{
+		SchemaVersion: 1,
+		Revision:      3,
+		StateJson:     `{"nodes":[],"edges":[]}`,
+		ContentHash:   strings.Repeat("0", 64),
+	})
+	if response.SchemaVersion != currentSchemaVersion {
+		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
+	}
+	if string(response.State) != `{"nodes":[],"edges":[]}` {
+		t.Fatalf("expected unchanged topology, got %s", response.State)
+	}
+	if response.ContentHash == strings.Repeat("0", 64) {
+		t.Fatal("expected migrated state hash")
 	}
 }
