@@ -42,6 +42,7 @@ var emptyState = json.RawMessage(`{"nodes":[],"edges":[]}`)
 
 // 允许发布的围栏模型。
 var fenceModelIds = map[string]struct{}{
+	"brick-curb":        {},
 	"road-curb":         {},
 	"highway-guardrail": {},
 	"arrow-barrier":     {},
