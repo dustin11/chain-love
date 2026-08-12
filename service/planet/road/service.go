@@ -72,12 +72,21 @@ type roadAnchor struct {
 
 // roadNode 保存道路拓扑节点和曲线切线。
 type roadNode struct {
-	Id          string     `json:"id"`
-	Anchor      roadAnchor `json:"anchor"`
-	TangentMode string     `json:"tangentMode"`
-	TangentIn   []float64  `json:"tangentIn,omitempty"`
-	TangentOut  []float64  `json:"tangentOut,omitempty"`
-	Width       float64    `json:"width"`
+	Id          string        `json:"id"`
+	Anchor      roadAnchor    `json:"anchor"`
+	TangentMode string        `json:"tangentMode"`
+	TangentIn   []float64     `json:"tangentIn,omitempty"`
+	TangentOut  []float64     `json:"tangentOut,omitempty"`
+	Width       float64       `json:"width"`
+	Junction    *roadJunction `json:"junction,omitempty"`
+}
+
+// roadJunction 保存分叉节点的主路关系。
+type roadJunction struct {
+	Type           string   `json:"type"`
+	PrimaryEdgeIds []string `json:"primaryEdgeIds"`
+	CornerRadius   float64  `json:"cornerRadius"`
+	BranchSide     string   `json:"branchSide,omitempty"`
 }
 
 // roadFence 保存道路两侧共用的围栏样式。
@@ -91,6 +100,9 @@ type roadEdge struct {
 	Id              string     `json:"id"`
 	FromNodeId      string     `json:"fromNodeId"`
 	ToNodeId        string     `json:"toNodeId"`
+	CorridorId      string     `json:"corridorId,omitempty"`
+	TangentFrom     []float64  `json:"tangentFrom,omitempty"`
+	TangentTo       []float64  `json:"tangentTo,omitempty"`
 	StyleId         string     `json:"styleId"`
 	SurfaceMode     string     `json:"surfaceMode"`
 	ShoulderWidth   float64    `json:"shoulderWidth"`
@@ -329,6 +341,15 @@ func validateRoadState(state *roadState) error {
 		if err := validateUniqueId(edge.Id, edgeIds, "道路段"); err != nil {
 			return err
 		}
+		if edge.CorridorId == "" {
+			edge.CorridorId = edge.Id
+		}
+		if !validReference(edge.CorridorId) {
+			return bizerr.Parameter("道路走廊标识无效")
+		}
+		if !validOptionalVector(edge.TangentFrom) || !validOptionalVector(edge.TangentTo) {
+			return bizerr.Parameter("道路段局部切线无效")
+		}
 		if edge.FromNodeId == edge.ToNodeId {
 			return bizerr.Parameter("道路段不能连接同一节点")
 		}
@@ -371,6 +392,39 @@ func validateRoadState(state *roadState) error {
 		}
 		if err := validateFence(edge.Fence); err != nil {
 			return err
+		}
+	}
+	for index := range state.Nodes {
+		node := &state.Nodes[index]
+		if node.Junction == nil {
+			continue
+		}
+		junction := node.Junction
+		if junction.Type != "t-junction" && junction.Type != "crossing" && junction.Type != "roundabout" {
+			return bizerr.Parameter("道路路口类型无效")
+		}
+		if junction.BranchSide != "" && junction.BranchSide != "left" && junction.BranchSide != "right" {
+			return bizerr.Parameter("道路支路方向无效")
+		}
+		if len(junction.PrimaryEdgeIds) != 2 || junction.PrimaryEdgeIds[0] == junction.PrimaryEdgeIds[1] ||
+			!finiteInRange(junction.CornerRadius, 0.1, 50) {
+			return bizerr.Parameter("道路路口主路关系无效")
+		}
+		for _, edgeId := range junction.PrimaryEdgeIds {
+			if _, exists := edgeIds[edgeId]; !exists {
+				return bizerr.Parameter("道路路口引用不存在")
+			}
+			connected := false
+			for edgeIndex := range state.Edges {
+				edge := &state.Edges[edgeIndex]
+				if edge.Id == edgeId && (edge.FromNodeId == node.Id || edge.ToNodeId == node.Id) {
+					connected = true
+					break
+				}
+			}
+			if !connected {
+				return bizerr.Parameter("道路路口引用未连接当前节点")
+			}
 		}
 	}
 	return nil

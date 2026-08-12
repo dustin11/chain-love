@@ -29,6 +29,32 @@ func TestValidateState(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps corridor and junction relations", func(t *testing.T) {
+		raw := json.RawMessage(`{
+			"nodes":[
+				{"id":"a","anchor":{"kind":"frame","frameId":"planet","localPoint":[-1,0,0]},"tangentMode":"auto","width":1},
+				{"id":"b","anchor":{"kind":"frame","frameId":"planet","localPoint":[0,0,0]},"tangentMode":"auto","width":1,"junction":{"type":"t-junction","primaryEdgeIds":["ab","bc"],"cornerRadius":0.75,"branchSide":"right"}},
+				{"id":"c","anchor":{"kind":"frame","frameId":"planet","localPoint":[1,0,0]},"tangentMode":"auto","width":1},
+				{"id":"d","anchor":{"kind":"frame","frameId":"planet","localPoint":[0,0,1]},"tangentMode":"auto","width":1}
+			],
+			"edges":[
+				{"id":"ab","fromNodeId":"a","toNodeId":"b","corridorId":"main","tangentTo":[1,0,0],"styleId":"asphalt","surfaceMode":"auto","shoulderWidth":0.3,"maxGrade":0.1,"elevationOffset":0,"direction":"both","speedLimit":8,"routeModes":["ground"]},
+				{"id":"bc","fromNodeId":"b","toNodeId":"c","corridorId":"main","styleId":"asphalt","surfaceMode":"auto","shoulderWidth":0.3,"maxGrade":0.1,"elevationOffset":0,"direction":"both","speedLimit":8,"routeModes":["ground"]},
+				{"id":"bd","fromNodeId":"b","toNodeId":"d","corridorId":"branch","styleId":"asphalt","surfaceMode":"auto","shoulderWidth":0.3,"maxGrade":0.1,"elevationOffset":0,"direction":"both","speedLimit":8,"routeModes":["ground"]}
+			]
+		}`)
+		state, err := validateState(raw)
+		if err != nil {
+			t.Fatalf("validate junction state: %v", err)
+		}
+		if !strings.Contains(string(state), `"corridorId":"main"`) ||
+			!strings.Contains(string(state), `"primaryEdgeIds":["ab","bc"]`) ||
+			!strings.Contains(string(state), `"branchSide":"right"`) ||
+			!strings.Contains(string(state), `"tangentTo":[1,0,0]`) {
+			t.Fatalf("expected persisted junction relation, got %s", state)
+		}
+	})
+
 	tests := map[string]string{
 		"unknown field":     `{"nodes":[],"edges":[],"mesh":[]}`,
 		"removed style":     strings.Replace(string(valid), `"styleId":"asphalt"`, `"styleId":"stone"`, 1),
