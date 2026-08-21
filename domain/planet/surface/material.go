@@ -9,6 +9,9 @@ var materialIDs = map[string]struct{}{
 	"rockscape":     {},
 	"marble":        {},
 	"asphalt":       {},
+	"brick":         {},
+	"wood":          {},
+	"steel":         {},
 }
 
 // IsMaterialID 判断纹理是否为地形和道路都允许持久化的表面纹理。

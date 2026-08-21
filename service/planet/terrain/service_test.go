@@ -61,6 +61,22 @@ func TestValidateState(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts every existing flower preset", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[{
+				"id":"flower-1",
+				"kind":"object",
+				"presetId":"trumpet-flower",
+				"variantSeed":1,
+				"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}
+			}]
+		}`))
+		if err != nil {
+			t.Fatalf("validate trumpet flower: %v", err)
+		}
+	})
+
 	t.Run("rejects an unknown platform attachment", func(t *testing.T) {
 		_, err := validateState(json.RawMessage(`{
 			"platforms":[],
@@ -168,6 +184,27 @@ func TestValidateState(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts detailed presets and materials only on basic shapes", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[
+				{"id":"shape","kind":"object","presetId":"frustum","materialId":"wood","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
+				{"id":"detail","kind":"object","presetId":"pavilion-railing","variantSeed":2,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
+			]
+		}`))
+		if err != nil {
+			t.Fatalf("validate detailed presets: %v", err)
+		}
+
+		_, err = validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[{"id":"detail","kind":"object","presetId":"pavilion-railing","materialId":"steel","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected fixed preset material rejection, got %v", err)
+		}
+	})
+
 	t.Run("rejects unknown presets", func(t *testing.T) {
 		_, err := validateState(json.RawMessage(`{
 			"platforms":[],
@@ -261,6 +298,43 @@ func TestValidateState(t *testing.T) {
 			t.Fatalf("expected parameter error, got %v", err)
 		}
 	})
+
+	t.Run("accepts assemblies and prefabs", func(t *testing.T) {
+		state, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[
+				{"id":"a","kind":"object","presetId":"box","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
+				{"id":"b","kind":"object","presetId":"cylinder","variantSeed":2,"transform":{"position":[1,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
+			],
+			"assemblies":[{"id":"assembly-1","kind":"assembly","name":"凉亭","transform":{"position":[0.5,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"memberIds":["a","b"]}],
+			"prefabs":[{"id":"prefab-1","kind":"prefab","name":"凉亭","parts":[{"presetId":"box","materialId":"marble","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]}]
+		}`))
+		if err != nil {
+			t.Fatalf("validate assembly state: %v", err)
+		}
+		if !strings.Contains(string(state), `"assemblies":[`) || !strings.Contains(string(state), `"prefabs":[`) {
+			t.Fatalf("expected v5 collections, got %s", state)
+		}
+	})
+
+	t.Run("rejects an object in multiple assemblies", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[
+				{"id":"a","kind":"object","presetId":"box","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
+				{"id":"b","kind":"object","presetId":"box","variantSeed":2,"transform":{"position":[1,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
+				{"id":"c","kind":"object","presetId":"box","variantSeed":3,"transform":{"position":[2,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
+			],
+			"assemblies":[
+				{"id":"assembly-1","kind":"assembly","name":"一","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"memberIds":["a","b"]},
+				{"id":"assembly-2","kind":"assembly","name":"二","transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"memberIds":["b","c"]}
+			],
+			"prefabs":[]
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
+		}
+	})
 }
 
 // 围栏配置必须同时命中模型和纹理白名单。
@@ -291,7 +365,7 @@ func TestMapLegacyDocument(t *testing.T) {
 	if response.SchemaVersion != currentSchemaVersion {
 		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
 	}
-	if string(response.State) != `{"objects":[],"platforms":[]}` {
+	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[]}` {
 		t.Fatalf("expected clean migrated state, got %s", response.State)
 	}
 	if response.ContentHash == strings.Repeat("0", 64) {
@@ -320,7 +394,7 @@ func TestMapAutomaticHeightFieldDocument(t *testing.T) {
 		}`,
 		ContentHash: strings.Repeat("0", 64),
 	})
-	if string(response.State) != `{"objects":[],"platforms":[]}` {
+	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[]}` {
 		t.Fatalf("expected removed unowned height field, got %s", response.State)
 	}
 	if response.ContentHash == strings.Repeat("0", 64) {

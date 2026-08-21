@@ -12,6 +12,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"senspace/domain"
 	planet_surface "senspace/domain/planet/surface"
@@ -27,17 +28,25 @@ import (
 
 const (
 	// 当前支持的地形状态结构版本。
-	currentSchemaVersion = 4
+	currentSchemaVersion = 5
 	// 单个地形状态允许的最大字节数。
 	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的平台记录上限。
 	maxPlatforms = 128
 	// 单个星球允许的物件记录上限。
 	maxObjects = 5000
+	// 单个星球允许的组合体记录上限。
+	maxAssemblies = 512
+	// 单个星球允许的预制体记录上限。
+	maxPrefabs = 256
+	// 单个组合体允许引用的物件上限。
+	maxAssemblyMembers = 512
+	// 单个预制体允许保存的部件上限。
+	maxPrefabParts = 512
 )
 
 // 空地形状态的规范 JSON 表示。
-var emptyState = json.RawMessage(`{"platforms":[],"objects":[]}`)
+var emptyState = json.RawMessage(`{"platforms":[],"objects":[],"assemblies":[],"prefabs":[]}`)
 
 const (
 	// 地形记录 ID 的最大长度。
@@ -52,34 +61,48 @@ const (
 
 // 允许发布的地形物件预设。
 var terrainObjectPresetIds = map[string]struct{}{
-	"cypress":     {},
-	"shrub":       {},
-	"grass-clump": {},
-	"daisy-patch": {},
-	"tulip-patch": {},
-	"fern":        {},
-	"rock":        {},
-	"rock-pillar": {},
-	"rock-slab":   {},
-	"rock-ridge":  {},
-	"pebble-rock": {},
-	"box":         {},
-	"sphere":      {},
-	"cylinder":    {},
-	"cone":        {},
+	"cypress":          {},
+	"shrub":            {},
+	"grass-clump":      {},
+	"daisy-patch":      {},
+	"tulip-patch":      {},
+	"trumpet-flower":   {},
+	"fern":             {},
+	"rock":             {},
+	"rock-pillar":      {},
+	"rock-slab":        {},
+	"rock-ridge":       {},
+	"pebble-rock":      {},
+	"box":              {},
+	"sphere":           {},
+	"cylinder":         {},
+	"cone":             {},
+	"wedge":            {},
+	"frustum":          {},
+	"octagonal-prism":  {},
+	"torus":            {},
+	"pyramid":          {},
+	"arch":             {},
+	"wall-door":        {},
+	"wall-window":      {},
+	"pavilion-roof":    {},
+	"pavilion-column":  {},
+	"pavilion-railing": {},
+	"stone-table":      {},
+	"stone-stool":      {},
 }
 
 // 支持单独设置纹理的基础形状预设。
 var terrainTextureableObjectPresetIds = map[string]struct{}{
-	"box":         {},
-	"sphere":      {},
-	"cylinder":    {},
-	"cone":        {},
-	"rock":        {},
-	"rock-pillar": {},
-	"rock-slab":   {},
-	"rock-ridge":  {},
-	"pebble-rock": {},
+	"box":             {},
+	"sphere":          {},
+	"cylinder":        {},
+	"cone":            {},
+	"wedge":           {},
+	"frustum":         {},
+	"octagonal-prism": {},
+	"torus":           {},
+	"pyramid":         {},
 }
 
 // 允许发布的围栏模型。
@@ -133,6 +156,31 @@ type terrainObject struct {
 	VariantSeed int64            `json:"variantSeed"`
 }
 
+// terrainAssembly 保存一组物件的稳定编辑关系。
+type terrainAssembly struct {
+	Id        string           `json:"id"`
+	Kind      string           `json:"kind"`
+	Name      string           `json:"name"`
+	Transform terrainTransform `json:"transform"`
+	MemberIds []string         `json:"memberIds"`
+}
+
+// terrainPrefabPart 保存相对预制体枢轴的一个部件。
+type terrainPrefabPart struct {
+	PresetId    string           `json:"presetId"`
+	MaterialId  string           `json:"materialId,omitempty"`
+	Transform   terrainTransform `json:"transform"`
+	VariantSeed int64            `json:"variantSeed"`
+}
+
+// terrainPrefab 保存当前星球内可重复放置的用户预制体。
+type terrainPrefab struct {
+	Id    string              `json:"id"`
+	Kind  string              `json:"kind"`
+	Name  string              `json:"name"`
+	Parts []terrainPrefabPart `json:"parts"`
+}
+
 // 高度场中的稀疏压缩块。
 type terrainHeightChunk struct {
 	X        int    `json:"x"`
@@ -154,10 +202,12 @@ type terrainHeightField struct {
 	Chunks          []terrainHeightChunk `json:"chunks"`
 }
 
-// schemaVersion=2 的完整发布载荷。
+// 当前地形完整发布载荷。
 type terrainState struct {
-	Platforms []terrainPlatform `json:"platforms"`
-	Objects   []terrainObject   `json:"objects"`
+	Platforms  []terrainPlatform `json:"platforms"`
+	Objects    []terrainObject   `json:"objects"`
+	Assemblies []terrainAssembly `json:"assemblies"`
+	Prefabs    []terrainPrefab   `json:"prefabs"`
 }
 
 // 公开读取一个星球当前发布的地形。
@@ -349,15 +399,29 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 	if envelope.Platforms == nil || envelope.Objects == nil {
 		return nil, bizerr.Parameter("地形状态必须包含platforms和objects")
 	}
+	// v5 新集合在首个兼容发布中允许缺省，并规范化为空数组。
+	if envelope.Assemblies == nil {
+		envelope.Assemblies = []terrainAssembly{}
+	}
+	if envelope.Prefabs == nil {
+		envelope.Prefabs = []terrainPrefab{}
+	}
 	if len(envelope.Platforms) > maxPlatforms {
 		return nil, bizerr.Parameter("地形平面数量超过上限")
 	}
 	if len(envelope.Objects) > maxObjects {
 		return nil, bizerr.Parameter("地形物件数量超过上限")
 	}
+	if len(envelope.Assemblies) > maxAssemblies {
+		return nil, bizerr.Parameter("地形组合体数量超过上限")
+	}
+	if len(envelope.Prefabs) > maxPrefabs {
+		return nil, bizerr.Parameter("地形预制体数量超过上限")
+	}
 
-	usedIds := make(map[string]struct{}, len(envelope.Platforms)+len(envelope.Objects))
+	usedIds := make(map[string]struct{}, len(envelope.Platforms)+len(envelope.Objects)+len(envelope.Assemblies)+len(envelope.Prefabs))
 	platformIds := make(map[string]struct{}, len(envelope.Platforms))
+	objectIds := make(map[string]struct{}, len(envelope.Objects))
 	for _, platform := range envelope.Platforms {
 		if platform.Kind != "platform" {
 			return nil, bizerr.Parameter("地形平台kind无效")
@@ -408,12 +472,86 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if !validTerrainTransform(object.Transform) {
 			return nil, bizerr.Parameter("地形物件变换无效")
 		}
+		objectIds[object.Id] = struct{}{}
+	}
+	groupedObjectIds := make(map[string]struct{})
+	for _, assembly := range envelope.Assemblies {
+		if assembly.Kind != "assembly" {
+			return nil, bizerr.Parameter("地形组合体kind无效")
+		}
+		if err := validateTerrainRecordId(assembly.Id, usedIds); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(assembly.Name) == "" || utf8.RuneCountInString(assembly.Name) > 80 {
+			return nil, bizerr.Parameter("地形组合体名称无效")
+		}
+		if !validTerrainTransform(assembly.Transform) {
+			return nil, bizerr.Parameter("地形组合体变换无效")
+		}
+		if len(assembly.MemberIds) < 2 || len(assembly.MemberIds) > maxAssemblyMembers {
+			return nil, bizerr.Parameter("地形组合体成员数量无效")
+		}
+		assemblyMemberIds := make(map[string]struct{}, len(assembly.MemberIds))
+		for _, memberId := range assembly.MemberIds {
+			if _, exists := objectIds[memberId]; !exists {
+				return nil, bizerr.Parameter("地形组合体成员不存在")
+			}
+			if _, exists := assemblyMemberIds[memberId]; exists {
+				return nil, bizerr.Parameter("地形组合体成员重复")
+			}
+			if _, exists := groupedObjectIds[memberId]; exists {
+				return nil, bizerr.Parameter("地形物件不能属于多个组合体")
+			}
+			assemblyMemberIds[memberId] = struct{}{}
+			groupedObjectIds[memberId] = struct{}{}
+		}
+	}
+	for _, prefab := range envelope.Prefabs {
+		if prefab.Kind != "prefab" {
+			return nil, bizerr.Parameter("地形预制体kind无效")
+		}
+		if err := validateTerrainRecordId(prefab.Id, usedIds); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(prefab.Name) == "" || utf8.RuneCountInString(prefab.Name) > 80 {
+			return nil, bizerr.Parameter("地形预制体名称无效")
+		}
+		if len(prefab.Parts) == 0 || len(prefab.Parts) > maxPrefabParts {
+			return nil, bizerr.Parameter("地形预制体部件数量无效")
+		}
+		for _, part := range prefab.Parts {
+			if err := validateTerrainPrefabPart(part); err != nil {
+				return nil, err
+			}
+		}
 	}
 	normalized, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("marshal terrain state: %w", err)
 	}
 	return normalized, nil
+}
+
+// validateTerrainPrefabPart 校验预制体内部的可实例化部件。
+func validateTerrainPrefabPart(part terrainPrefabPart) error {
+	if _, exists := terrainObjectPresetIds[part.PresetId]; !exists {
+		return bizerr.Parameter("地形预制体部件预设无效")
+	}
+	if part.MaterialId != "" {
+		if _, exists := terrainTextureableObjectPresetIds[part.PresetId]; !exists {
+			return bizerr.Parameter("地形预制体部件不能设置纹理")
+		}
+		if !planet_surface.IsMaterialID(part.MaterialId) {
+			return bizerr.Parameter("地形预制体部件纹理无效")
+		}
+	}
+	if part.VariantSeed < 0 || part.VariantSeed > maxTerrainVariantSeed {
+		return bizerr.Parameter("地形预制体部件variantSeed无效")
+	}
+	if !validTerrainTransform(part.Transform) {
+		return bizerr.Parameter("地形预制体部件变换无效")
+	}
+	return nil
 }
 
 // validateFence 校验可选围栏模型和纹理白名单。
@@ -607,8 +745,10 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 	schemaVersion := document.SchemaVersion
 	if schemaVersion < currentSchemaVersion {
 		var legacy struct {
-			Platforms json.RawMessage `json:"platforms"`
-			Objects   json.RawMessage `json:"objects"`
+			Platforms  json.RawMessage `json:"platforms"`
+			Objects    json.RawMessage `json:"objects"`
+			Assemblies json.RawMessage `json:"assemblies"`
+			Prefabs    json.RawMessage `json:"prefabs"`
 		}
 		if json.Unmarshal(state, &legacy) == nil {
 			var platforms []map[string]interface{}
@@ -627,9 +767,17 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 				}
 				legacy.Platforms, _ = json.Marshal(platforms)
 			}
+			if len(legacy.Assemblies) == 0 {
+				legacy.Assemblies = json.RawMessage(`[]`)
+			}
+			if len(legacy.Prefabs) == 0 {
+				legacy.Prefabs = json.RawMessage(`[]`)
+			}
 			migrated, err := json.Marshal(map[string]json.RawMessage{
-				"platforms": legacy.Platforms,
-				"objects":   legacy.Objects,
+				"platforms":  legacy.Platforms,
+				"objects":    legacy.Objects,
+				"assemblies": legacy.Assemblies,
+				"prefabs":    legacy.Prefabs,
 			})
 			if err == nil {
 				state = migrated

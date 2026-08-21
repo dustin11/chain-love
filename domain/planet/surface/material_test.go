@@ -12,6 +12,9 @@ func TestIsMaterialID(t *testing.T) {
 		"rockscape",
 		"marble",
 		"asphalt",
+		"brick",
+		"wood",
+		"steel",
 	} {
 		if !IsMaterialID(id) {
 			t.Fatalf("expected %q to be a material id", id)
