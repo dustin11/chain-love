@@ -354,6 +354,53 @@ func TestValidateFence(t *testing.T) {
 	}
 }
 
+// 植被发布必须同时校验宿主、分类归属、精确锚点和固定容量遮罩。
+func TestValidateVegetationState(t *testing.T) {
+	valid := json.RawMessage(`{
+		"platforms":[],
+		"objects":[{
+			"id":"host-1","kind":"object","presetId":"box","variantSeed":1,
+			"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}
+		}],
+		"assemblies":[],"prefabs":[],
+		"vegetationPatches":[{
+			"id":"patch-1","kind":"vegetation-patch","presetId":"moss-patch",
+			"categoryId":"moss-accent","seed":7,
+			"surface":{"kind":"object","hostObjectId":"host-1"},
+			"instances":[{
+				"kind":"mesh","triangleIndex":0,"barycentric":[0.2,0.3,0.5],
+				"fallbackLocalPoint":[0.5,0,0],"tangentRotation":0.4,
+				"normalOffset":0.01,"scale":[0.8,0.8,0.8],"variantSeed":9
+			}]
+		}],
+		"vegetationCoverageLayers":[{
+			"id":"coverage-1","kind":"vegetation-coverage","categoryId":"moss-coverage",
+			"surface":{"kind":"object","hostObjectId":"host-1"},"seed":11,
+			"projection":"local-triplanar","tiles":[{
+				"projectionAxis":"xz","tileX":0,"tileY":0,"resolution":128,
+				"encoding":"predict-rle-base64","data":"gIAE/w=="
+			}]
+		}]
+	}`)
+	if _, err := validateState(valid); err != nil {
+		t.Fatalf("validate vegetation state: %v", err)
+	}
+
+	t.Run("rejects category preset mismatch", func(t *testing.T) {
+		invalid := strings.Replace(string(valid), `"categoryId":"moss-accent"`, `"categoryId":"flowers"`, 1)
+		if _, err := validateState(json.RawMessage(invalid)); !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
+		}
+	})
+
+	t.Run("rejects coverage decode length mismatch", func(t *testing.T) {
+		invalid := strings.Replace(string(valid), `"data":"gIAE/w=="`, `"data":"Af8="`, 1)
+		if _, err := validateState(json.RawMessage(invalid)); !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected parameter error, got %v", err)
+		}
+	})
+}
+
 // 确保历史文档公开读取时升级为平台自带高度场的结构。
 func TestMapLegacyDocument(t *testing.T) {
 	response := mapDocument(terrain_domain.Document{
@@ -365,7 +412,7 @@ func TestMapLegacyDocument(t *testing.T) {
 	if response.SchemaVersion != currentSchemaVersion {
 		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
 	}
-	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[]}` {
+	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[],"vegetationCoverageLayers":[],"vegetationPatches":[]}` {
 		t.Fatalf("expected clean migrated state, got %s", response.State)
 	}
 	if response.ContentHash == strings.Repeat("0", 64) {
@@ -394,7 +441,7 @@ func TestMapAutomaticHeightFieldDocument(t *testing.T) {
 		}`,
 		ContentHash: strings.Repeat("0", 64),
 	})
-	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[]}` {
+	if string(response.State) != `{"assemblies":[],"objects":[],"platforms":[],"prefabs":[],"vegetationCoverageLayers":[],"vegetationPatches":[]}` {
 		t.Fatalf("expected removed unowned height field, got %s", response.State)
 	}
 	if response.ContentHash == strings.Repeat("0", 64) {

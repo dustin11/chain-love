@@ -28,7 +28,7 @@ import (
 
 const (
 	// 当前支持的地形状态结构版本。
-	currentSchemaVersion = 5
+	currentSchemaVersion = 7
 	// 单个地形状态允许的最大字节数。
 	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的平台记录上限。
@@ -43,10 +43,17 @@ const (
 	maxAssemblyMembers = 512
 	// 单个预制体允许保存的部件上限。
 	maxPrefabParts = 512
+	// 单星球紧凑植被批次和实例预算。
+	maxVegetationPatches           = 2048
+	maxVegetationInstancesPerPatch = 4096
+	maxVegetationInstances         = 50000
+	// 稀疏覆盖层和有效遮罩块预算。
+	maxVegetationCoverageLayers = 512
+	maxVegetationCoverageTiles  = 384
 )
 
 // 空地形状态的规范 JSON 表示。
-var emptyState = json.RawMessage(`{"platforms":[],"objects":[],"assemblies":[],"prefabs":[]}`)
+var emptyState = json.RawMessage(`{"platforms":[],"objects":[],"assemblies":[],"prefabs":[],"vegetationPatches":[],"vegetationCoverageLayers":[]}`)
 
 const (
 	// 地形记录 ID 的最大长度。
@@ -61,35 +68,64 @@ const (
 
 // 允许发布的地形物件预设。
 var terrainObjectPresetIds = map[string]struct{}{
-	"cypress":          {},
-	"shrub":            {},
-	"grass-clump":      {},
-	"daisy-patch":      {},
-	"tulip-patch":      {},
-	"trumpet-flower":   {},
-	"fern":             {},
-	"rock":             {},
-	"rock-pillar":      {},
-	"rock-slab":        {},
-	"rock-ridge":       {},
-	"pebble-rock":      {},
-	"box":              {},
-	"sphere":           {},
-	"cylinder":         {},
-	"cone":             {},
-	"wedge":            {},
-	"frustum":          {},
-	"octagonal-prism":  {},
-	"torus":            {},
-	"pyramid":          {},
-	"arch":             {},
-	"wall-door":        {},
-	"wall-window":      {},
-	"pavilion-roof":    {},
-	"pavilion-column":  {},
-	"pavilion-railing": {},
-	"stone-table":      {},
-	"stone-stool":      {},
+	"cypress":           {},
+	"shrub":             {},
+	"grass-clump":       {},
+	"daisy-patch":       {},
+	"tulip-patch":       {},
+	"trumpet-flower":    {},
+	"fern":              {},
+	"moss-patch":        {},
+	"lichen-patch":      {},
+	"fallen-leaf-clump": {},
+	"twig-clump":        {},
+	"lotus-cluster":     {},
+	"rock":              {},
+	"rock-pillar":       {},
+	"rock-slab":         {},
+	"rock-ridge":        {},
+	"pebble-rock":       {},
+	"box":               {},
+	"sphere":            {},
+	"cylinder":          {},
+	"cone":              {},
+	"wedge":             {},
+	"frustum":           {},
+	"octagonal-prism":   {},
+	"torus":             {},
+	"pyramid":           {},
+	"arch":              {},
+	"wall-door":         {},
+	"wall-window":       {},
+	"house-door":        {},
+	"house-window":      {},
+	"house-gable":       {},
+	"house-roof":        {},
+	"house-lamp":        {},
+	"pavilion-roof":     {},
+	"pavilion-column":   {},
+	"pavilion-railing":  {},
+	"stone-table":       {},
+	"stone-stool":       {},
+}
+
+// 植物不能成为精确贴附宿主。
+var terrainPlantPresetIds = map[string]struct{}{
+	"cypress": {}, "shrub": {}, "grass-clump": {}, "daisy-patch": {},
+	"tulip-patch": {}, "trumpet-flower": {}, "fern": {}, "moss-patch": {},
+	"lichen-patch": {}, "fallen-leaf-clump": {}, "twig-clump": {}, "lotus-cluster": {},
+}
+
+// 分类到几何资源的唯一归属；覆盖分类不包含模型。
+var terrainVegetationCategoryPresetIds = map[string]map[string]struct{}{
+	"moss-coverage": {}, "lichen-coverage": {}, "fallen-leaves-coverage": {},
+	"grass":                {"grass-clump": {}},
+	"fern":                 {"fern": {}},
+	"flowers":              {"daisy-patch": {}, "tulip-patch": {}, "trumpet-flower": {}},
+	"moss-accent":          {"moss-patch": {}},
+	"lichen-accent":        {"lichen-patch": {}},
+	"fallen-leaves-accent": {"fallen-leaf-clump": {}},
+	"twigs":                {"twig-clump": {}},
 }
 
 // 支持单独设置纹理的基础形状预设。
@@ -145,15 +181,34 @@ type terrainPlatform struct {
 	Fence       *terrainFence      `json:"fence,omitempty"`
 }
 
+// terrainObjectInteraction 保存静态构件的有限动态自由度。
+type terrainObjectInteraction struct {
+	HingeAngle *float64 `json:"hingeAngle,omitempty"`
+}
+
+// terrainSurfaceAnchor 表示简单局部挂点或稳定 LOD0 三角形锚点。
+type terrainSurfaceAnchor struct {
+	Kind               string            `json:"kind"`
+	HostObjectId       string            `json:"hostObjectId"`
+	LocalTransform     *terrainTransform `json:"localTransform,omitempty"`
+	TriangleIndex      *int              `json:"triangleIndex,omitempty"`
+	Barycentric        []float64         `json:"barycentric,omitempty"`
+	FallbackLocalPoint []float64         `json:"fallbackLocalPoint,omitempty"`
+	TangentRotation    *float64          `json:"tangentRotation,omitempty"`
+	NormalOffset       *float64          `json:"normalOffset,omitempty"`
+}
+
 // 允许发布的实例物件记录。
 type terrainObject struct {
-	Id          string           `json:"id"`
-	Kind        string           `json:"kind"`
-	PlatformId  string           `json:"platformId,omitempty"`
-	PresetId    string           `json:"presetId"`
-	MaterialId  string           `json:"materialId,omitempty"`
-	Transform   terrainTransform `json:"transform"`
-	VariantSeed int64            `json:"variantSeed"`
+	Id                string                    `json:"id"`
+	Kind              string                    `json:"kind"`
+	PlatformId        string                    `json:"platformId,omitempty"`
+	PresetId          string                    `json:"presetId"`
+	MaterialId        string                    `json:"materialId,omitempty"`
+	Transform         terrainTransform          `json:"transform"`
+	VariantSeed       int64                     `json:"variantSeed"`
+	Interaction       *terrainObjectInteraction `json:"interaction,omitempty"`
+	SurfaceAttachment *terrainSurfaceAnchor     `json:"surfaceAttachment,omitempty"`
 }
 
 // terrainAssembly 保存一组物件的稳定编辑关系。
@@ -167,18 +222,40 @@ type terrainAssembly struct {
 
 // terrainPrefabPart 保存相对预制体枢轴的一个部件。
 type terrainPrefabPart struct {
-	PresetId    string           `json:"presetId"`
-	MaterialId  string           `json:"materialId,omitempty"`
-	Transform   terrainTransform `json:"transform"`
-	VariantSeed int64            `json:"variantSeed"`
+	PresetId              string                    `json:"presetId"`
+	MaterialId            string                    `json:"materialId,omitempty"`
+	Transform             terrainTransform          `json:"transform"`
+	VariantSeed           int64                     `json:"variantSeed"`
+	Interaction           *terrainObjectInteraction `json:"interaction,omitempty"`
+	SurfaceHostPartIndex  *int                      `json:"surfaceHostPartIndex,omitempty"`
+	SurfaceLocalTransform *terrainTransform         `json:"surfaceLocalTransform,omitempty"`
+}
+
+// terrainPrefabVegetationPatch 保存相对具体预制体宿主部件的网格锚点。
+type terrainPrefabVegetationPatch struct {
+	SurfaceHostPartIndex int                              `json:"surfaceHostPartIndex"`
+	CategoryId           string                           `json:"categoryId"`
+	PresetId             string                           `json:"presetId"`
+	Seed                 int64                            `json:"seed"`
+	Instances            []terrainVegetationPatchInstance `json:"instances"`
+}
+
+// terrainPrefabVegetationCoverage 保存预制体宿主上的三平面稀疏遮罩。
+type terrainPrefabVegetationCoverage struct {
+	SurfaceHostPartIndex int                             `json:"surfaceHostPartIndex"`
+	CategoryId           string                          `json:"categoryId"`
+	Seed                 int64                           `json:"seed"`
+	Tiles                []terrainVegetationCoverageTile `json:"tiles"`
 }
 
 // terrainPrefab 保存当前星球内可重复放置的用户预制体。
 type terrainPrefab struct {
-	Id    string              `json:"id"`
-	Kind  string              `json:"kind"`
-	Name  string              `json:"name"`
-	Parts []terrainPrefabPart `json:"parts"`
+	Id                       string                            `json:"id"`
+	Kind                     string                            `json:"kind"`
+	Name                     string                            `json:"name"`
+	Parts                    []terrainPrefabPart               `json:"parts"`
+	VegetationPatches        []terrainPrefabVegetationPatch    `json:"vegetationPatches"`
+	VegetationCoverageLayers []terrainPrefabVegetationCoverage `json:"vegetationCoverageLayers"`
 }
 
 // 高度场中的稀疏压缩块。
@@ -202,12 +279,66 @@ type terrainHeightField struct {
 	Chunks          []terrainHeightChunk `json:"chunks"`
 }
 
+// terrainVegetationPatchSurface 绑定具体平台或实际命中的组合成员。
+type terrainVegetationPatchSurface struct {
+	Kind         string `json:"kind"`
+	PlatformId   string `json:"platformId,omitempty"`
+	HostObjectId string `json:"hostObjectId,omitempty"`
+}
+
+// terrainVegetationPatchInstance 是无需独立物件记录的紧凑实例。
+type terrainVegetationPatchInstance struct {
+	Kind               string    `json:"kind"`
+	LocalXZ            []float64 `json:"localXZ,omitempty"`
+	TriangleIndex      *int      `json:"triangleIndex,omitempty"`
+	Barycentric        []float64 `json:"barycentric,omitempty"`
+	FallbackLocalPoint []float64 `json:"fallbackLocalPoint,omitempty"`
+	TangentRotation    float64   `json:"tangentRotation"`
+	NormalOffset       float64   `json:"normalOffset"`
+	Scale              []float64 `json:"scale"`
+	VariantSeed        int64     `json:"variantSeed"`
+}
+
+// terrainVegetationPatch 按宿主、分类和品种保存紧凑实例。
+type terrainVegetationPatch struct {
+	Id         string                           `json:"id"`
+	Kind       string                           `json:"kind"`
+	PresetId   string                           `json:"presetId"`
+	CategoryId string                           `json:"categoryId"`
+	Seed       int64                            `json:"seed"`
+	Surface    terrainVegetationPatchSurface    `json:"surface"`
+	Instances  []terrainVegetationPatchInstance `json:"instances"`
+}
+
+// terrainVegetationCoverageTile 是固定容量 RGBA8 稀疏遮罩块。
+type terrainVegetationCoverageTile struct {
+	ProjectionAxis string `json:"projectionAxis"`
+	TileX          int    `json:"tileX"`
+	TileY          int    `json:"tileY"`
+	Resolution     int    `json:"resolution"`
+	Encoding       string `json:"encoding"`
+	Data           string `json:"data"`
+}
+
+// terrainVegetationCoverageLayer 保存一个宿主上的一种覆盖材质。
+type terrainVegetationCoverageLayer struct {
+	Id         string                          `json:"id"`
+	Kind       string                          `json:"kind"`
+	CategoryId string                          `json:"categoryId"`
+	Surface    terrainVegetationPatchSurface   `json:"surface"`
+	Seed       int64                           `json:"seed"`
+	Projection string                          `json:"projection"`
+	Tiles      []terrainVegetationCoverageTile `json:"tiles"`
+}
+
 // 当前地形完整发布载荷。
 type terrainState struct {
-	Platforms  []terrainPlatform `json:"platforms"`
-	Objects    []terrainObject   `json:"objects"`
-	Assemblies []terrainAssembly `json:"assemblies"`
-	Prefabs    []terrainPrefab   `json:"prefabs"`
+	Platforms                []terrainPlatform                `json:"platforms"`
+	Objects                  []terrainObject                  `json:"objects"`
+	Assemblies               []terrainAssembly                `json:"assemblies"`
+	Prefabs                  []terrainPrefab                  `json:"prefabs"`
+	VegetationPatches        []terrainVegetationPatch         `json:"vegetationPatches"`
+	VegetationCoverageLayers []terrainVegetationCoverageLayer `json:"vegetationCoverageLayers"`
 }
 
 // 公开读取一个星球当前发布的地形。
@@ -406,6 +537,12 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 	if envelope.Prefabs == nil {
 		envelope.Prefabs = []terrainPrefab{}
 	}
+	if envelope.VegetationPatches == nil {
+		envelope.VegetationPatches = []terrainVegetationPatch{}
+	}
+	if envelope.VegetationCoverageLayers == nil {
+		envelope.VegetationCoverageLayers = []terrainVegetationCoverageLayer{}
+	}
 	if len(envelope.Platforms) > maxPlatforms {
 		return nil, bizerr.Parameter("地形平面数量超过上限")
 	}
@@ -418,8 +555,14 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 	if len(envelope.Prefabs) > maxPrefabs {
 		return nil, bizerr.Parameter("地形预制体数量超过上限")
 	}
+	if len(envelope.VegetationPatches) > maxVegetationPatches {
+		return nil, bizerr.Parameter("植被批次数量超过上限")
+	}
+	if len(envelope.VegetationCoverageLayers) > maxVegetationCoverageLayers {
+		return nil, bizerr.Parameter("植被覆盖层数量超过上限")
+	}
 
-	usedIds := make(map[string]struct{}, len(envelope.Platforms)+len(envelope.Objects)+len(envelope.Assemblies)+len(envelope.Prefabs))
+	usedIds := make(map[string]struct{}, len(envelope.Platforms)+len(envelope.Objects)+len(envelope.Assemblies)+len(envelope.Prefabs)+len(envelope.VegetationPatches)+len(envelope.VegetationCoverageLayers))
 	platformIds := make(map[string]struct{}, len(envelope.Platforms))
 	objectIds := make(map[string]struct{}, len(envelope.Objects))
 	for _, platform := range envelope.Platforms {
@@ -472,7 +615,22 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 		if !validTerrainTransform(object.Transform) {
 			return nil, bizerr.Parameter("地形物件变换无效")
 		}
+		if err := validateTerrainObjectInteraction(object.PresetId, object.Interaction); err != nil {
+			return nil, err
+		}
 		objectIds[object.Id] = struct{}{}
+	}
+	objectPresetById := make(map[string]string, len(envelope.Objects))
+	for _, object := range envelope.Objects {
+		objectPresetById[object.Id] = object.PresetId
+	}
+	for _, object := range envelope.Objects {
+		if err := validateTerrainSurfaceAnchor(object.Id, object.SurfaceAttachment, objectIds, objectPresetById); err != nil {
+			return nil, err
+		}
+	}
+	if err := validateTerrainSurfaceAttachmentCycles(envelope.Objects); err != nil {
+		return nil, err
 	}
 	groupedObjectIds := make(map[string]struct{})
 	for _, assembly := range envelope.Assemblies {
@@ -506,7 +664,8 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 			groupedObjectIds[memberId] = struct{}{}
 		}
 	}
-	for _, prefab := range envelope.Prefabs {
+	for prefabIndex := range envelope.Prefabs {
+		prefab := &envelope.Prefabs[prefabIndex]
 		if prefab.Kind != "prefab" {
 			return nil, bizerr.Parameter("地形预制体kind无效")
 		}
@@ -520,9 +679,59 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 			return nil, bizerr.Parameter("地形预制体部件数量无效")
 		}
 		for _, part := range prefab.Parts {
-			if err := validateTerrainPrefabPart(part); err != nil {
+			if err := validateTerrainPrefabPart(part, len(prefab.Parts), prefab.Parts); err != nil {
 				return nil, err
 			}
+		}
+		if prefab.VegetationPatches == nil {
+			prefab.VegetationPatches = []terrainPrefabVegetationPatch{}
+		}
+		if prefab.VegetationCoverageLayers == nil {
+			prefab.VegetationCoverageLayers = []terrainPrefabVegetationCoverage{}
+		}
+		if len(prefab.VegetationPatches) > maxVegetationPatches ||
+			len(prefab.VegetationCoverageLayers) > maxVegetationCoverageLayers {
+			return nil, bizerr.Parameter("地形预制体植被记录超过上限")
+		}
+		prefabInstanceCount := 0
+		for _, patch := range prefab.VegetationPatches {
+			if err := validateTerrainPrefabVegetationPatch(patch, prefab.Parts); err != nil {
+				return nil, err
+			}
+			prefabInstanceCount += len(patch.Instances)
+			if prefabInstanceCount > maxVegetationInstances {
+				return nil, bizerr.Parameter("地形预制体植被实例超过上限")
+			}
+		}
+		prefabTileCount := 0
+		for _, layer := range prefab.VegetationCoverageLayers {
+			if err := validateTerrainPrefabVegetationCoverage(layer, prefab.Parts); err != nil {
+				return nil, err
+			}
+			prefabTileCount += len(layer.Tiles)
+			if prefabTileCount > maxVegetationCoverageTiles {
+				return nil, bizerr.Parameter("地形预制体覆盖块超过上限")
+			}
+		}
+	}
+	vegetationInstances := 0
+	for _, patch := range envelope.VegetationPatches {
+		if err := validateTerrainVegetationPatch(patch, usedIds, platformIds, objectIds, objectPresetById); err != nil {
+			return nil, err
+		}
+		vegetationInstances += len(patch.Instances)
+		if vegetationInstances > maxVegetationInstances {
+			return nil, bizerr.Parameter("植被实例总数超过上限")
+		}
+	}
+	coverageTiles := 0
+	for _, layer := range envelope.VegetationCoverageLayers {
+		if err := validateTerrainVegetationCoverageLayer(layer, usedIds, platformIds, objectIds, objectPresetById); err != nil {
+			return nil, err
+		}
+		coverageTiles += len(layer.Tiles)
+		if coverageTiles > maxVegetationCoverageTiles {
+			return nil, bizerr.Parameter("植被覆盖块总数超过上限")
 		}
 	}
 	normalized, err := json.Marshal(envelope)
@@ -533,7 +742,7 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 }
 
 // validateTerrainPrefabPart 校验预制体内部的可实例化部件。
-func validateTerrainPrefabPart(part terrainPrefabPart) error {
+func validateTerrainPrefabPart(part terrainPrefabPart, partCount int, parts []terrainPrefabPart) error {
 	if _, exists := terrainObjectPresetIds[part.PresetId]; !exists {
 		return bizerr.Parameter("地形预制体部件预设无效")
 	}
@@ -551,7 +760,377 @@ func validateTerrainPrefabPart(part terrainPrefabPart) error {
 	if !validTerrainTransform(part.Transform) {
 		return bizerr.Parameter("地形预制体部件变换无效")
 	}
+	if err := validateTerrainObjectInteraction(part.PresetId, part.Interaction); err != nil {
+		return err
+	}
+	if (part.SurfaceHostPartIndex == nil) != (part.SurfaceLocalTransform == nil) {
+		return bizerr.Parameter("地形预制体贴附字段不完整")
+	}
+	if part.SurfaceHostPartIndex != nil {
+		if *part.SurfaceHostPartIndex < 0 || *part.SurfaceHostPartIndex >= partCount ||
+			*part.SurfaceHostPartIndex >= len(parts) {
+			return bizerr.Parameter("地形预制体贴附宿主无效")
+		}
+		if _, isPlant := terrainPlantPresetIds[parts[*part.SurfaceHostPartIndex].PresetId]; isPlant {
+			return bizerr.Parameter("植物不能承载预制体贴附")
+		}
+		if !validTerrainTransform(*part.SurfaceLocalTransform) {
+			return bizerr.Parameter("地形预制体局部贴附变换无效")
+		}
+	}
 	return nil
+}
+
+// validateTerrainPrefabVegetationPatch 校验预制体内部的精确网格锚点。
+func validateTerrainPrefabVegetationPatch(
+	patch terrainPrefabVegetationPatch,
+	parts []terrainPrefabPart,
+) error {
+	if patch.SurfaceHostPartIndex < 0 || patch.SurfaceHostPartIndex >= len(parts) {
+		return bizerr.Parameter("地形预制体植被宿主无效")
+	}
+	if _, isPlant := terrainPlantPresetIds[parts[patch.SurfaceHostPartIndex].PresetId]; isPlant {
+		return bizerr.Parameter("植物不能承载预制体笔刷植被")
+	}
+	presets, exists := terrainVegetationCategoryPresetIds[patch.CategoryId]
+	if !exists {
+		return bizerr.Parameter("地形预制体植被分类无效")
+	}
+	if _, exists := presets[patch.PresetId]; !exists {
+		return bizerr.Parameter("地形预制体植被品种不属于分类")
+	}
+	if patch.Seed < 0 || patch.Seed > maxTerrainVariantSeed ||
+		len(patch.Instances) == 0 || len(patch.Instances) > maxVegetationInstancesPerPatch {
+		return bizerr.Parameter("地形预制体植被种子或数量无效")
+	}
+	for _, instance := range patch.Instances {
+		if instance.Kind != "mesh" || len(instance.LocalXZ) != 0 ||
+			instance.TriangleIndex == nil || *instance.TriangleIndex < 0 ||
+			*instance.TriangleIndex > 100_000_000 ||
+			!validTerrainBarycentric(instance.Barycentric) ||
+			!validTerrainVector(instance.FallbackLocalPoint, false, maxTransformComponent) ||
+			!validFinite(instance.TangentRotation, maxTransformComponent) ||
+			!validFinite(instance.NormalOffset, 1) ||
+			!validTerrainVector(instance.Scale, true, maxScaleComponent) ||
+			instance.VariantSeed < 0 || instance.VariantSeed > maxTerrainVariantSeed {
+			return bizerr.Parameter("地形预制体网格植被实例无效")
+		}
+	}
+	return nil
+}
+
+// validateTerrainPrefabVegetationCoverage 校验预制体内部三平面遮罩。
+func validateTerrainPrefabVegetationCoverage(
+	layer terrainPrefabVegetationCoverage,
+	parts []terrainPrefabPart,
+) error {
+	if layer.SurfaceHostPartIndex < 0 || layer.SurfaceHostPartIndex >= len(parts) {
+		return bizerr.Parameter("地形预制体覆盖宿主无效")
+	}
+	if _, isPlant := terrainPlantPresetIds[parts[layer.SurfaceHostPartIndex].PresetId]; isPlant {
+		return bizerr.Parameter("植物不能承载预制体覆盖")
+	}
+	if layer.CategoryId != "moss-coverage" && layer.CategoryId != "lichen-coverage" &&
+		layer.CategoryId != "fallen-leaves-coverage" {
+		return bizerr.Parameter("地形预制体覆盖分类无效")
+	}
+	if layer.Seed < 0 || layer.Seed > maxTerrainVariantSeed || len(layer.Tiles) == 0 {
+		return bizerr.Parameter("地形预制体覆盖种子或块无效")
+	}
+	usedTiles := make(map[string]struct{}, len(layer.Tiles))
+	for _, tile := range layer.Tiles {
+		if tile.Encoding != "predict-rle-base64" ||
+			(tile.Resolution != 128 && tile.Resolution != 256) ||
+			tile.TileX < -32768 || tile.TileX > 32768 || tile.TileY < -32768 || tile.TileY > 32768 ||
+			(tile.ProjectionAxis != "xz" && tile.ProjectionAxis != "xy" && tile.ProjectionAxis != "yz") {
+			return bizerr.Parameter("地形预制体覆盖块参数无效")
+		}
+		key := fmt.Sprintf("%s:%d:%d", tile.ProjectionAxis, tile.TileX, tile.TileY)
+		if _, exists := usedTiles[key]; exists {
+			return bizerr.Parameter("地形预制体覆盖块重复")
+		}
+		usedTiles[key] = struct{}{}
+		hasCoverage, err := validateTerrainVegetationCoverageData(
+			tile.Data,
+			tile.Resolution*tile.Resolution*4,
+		)
+		if err != nil {
+			return err
+		}
+		if !hasCoverage {
+			return bizerr.Parameter("地形预制体覆盖块不能空白")
+		}
+	}
+	return nil
+}
+
+// validateTerrainObjectInteraction 限制通用状态只能用于声明过的静态门。
+func validateTerrainObjectInteraction(presetId string, interaction *terrainObjectInteraction) error {
+	if interaction == nil {
+		return nil
+	}
+	if presetId != "house-door" || interaction.HingeAngle == nil ||
+		!validFinite(*interaction.HingeAngle, math.Pi*2) ||
+		*interaction.HingeAngle < 0 || *interaction.HingeAngle > 1.78 {
+		return bizerr.Parameter("地形物件交互状态无效")
+	}
+	return nil
+}
+
+// validateTerrainSurfaceAnchor 校验简单挂点或稳定三角形锚点。
+func validateTerrainSurfaceAnchor(
+	ownerId string,
+	anchor *terrainSurfaceAnchor,
+	objectIds map[string]struct{},
+	objectPresetById map[string]string,
+) error {
+	if anchor == nil {
+		return nil
+	}
+	if anchor.HostObjectId == ownerId {
+		return bizerr.Parameter("地形贴附不能引用自身")
+	}
+	if _, exists := objectIds[anchor.HostObjectId]; !exists {
+		return bizerr.Parameter("地形贴附宿主不存在")
+	}
+	if _, isPlant := terrainPlantPresetIds[objectPresetById[anchor.HostObjectId]]; isPlant {
+		return bizerr.Parameter("植物不能承载植被")
+	}
+	switch anchor.Kind {
+	case "simple":
+		if anchor.LocalTransform == nil || !validTerrainTransform(*anchor.LocalTransform) ||
+			anchor.TriangleIndex != nil || len(anchor.Barycentric) != 0 ||
+			len(anchor.FallbackLocalPoint) != 0 || anchor.TangentRotation != nil ||
+			anchor.NormalOffset != nil {
+			return bizerr.Parameter("简单地形贴附无效")
+		}
+	case "mesh":
+		if anchor.LocalTransform != nil || anchor.TriangleIndex == nil ||
+			*anchor.TriangleIndex < 0 || *anchor.TriangleIndex > 100_000_000 ||
+			!validTerrainBarycentric(anchor.Barycentric) ||
+			!validTerrainVector(anchor.FallbackLocalPoint, false, maxTransformComponent) ||
+			anchor.TangentRotation == nil || !validFinite(*anchor.TangentRotation, maxTransformComponent) ||
+			anchor.NormalOffset == nil || !validFinite(*anchor.NormalOffset, 1) {
+			return bizerr.Parameter("精确地形贴附无效")
+		}
+	default:
+		return bizerr.Parameter("地形贴附类型无效")
+	}
+	return nil
+}
+
+// validateTerrainSurfaceAttachmentCycles 防止简单贴附和精确贴附形成环。
+func validateTerrainSurfaceAttachmentCycles(objects []terrainObject) error {
+	hostByChild := make(map[string]string)
+	for _, object := range objects {
+		if object.SurfaceAttachment != nil {
+			hostByChild[object.Id] = object.SurfaceAttachment.HostObjectId
+		}
+	}
+	for childId := range hostByChild {
+		visited := map[string]struct{}{childId: {}}
+		for hostId := hostByChild[childId]; hostId != ""; hostId = hostByChild[hostId] {
+			if _, exists := visited[hostId]; exists {
+				return bizerr.Parameter("地形贴附不能形成循环")
+			}
+			visited[hostId] = struct{}{}
+		}
+	}
+	return nil
+}
+
+// validateTerrainVegetationSurface 校验 patch/coverage 的稳定宿主引用。
+func validateTerrainVegetationSurface(
+	surface terrainVegetationPatchSurface,
+	platformIds map[string]struct{},
+	objectIds map[string]struct{},
+	objectPresetById map[string]string,
+) error {
+	switch surface.Kind {
+	case "terrain":
+		if surface.HostObjectId != "" {
+			return bizerr.Parameter("植被地形宿主字段无效")
+		}
+		if _, exists := platformIds[surface.PlatformId]; !exists {
+			return bizerr.Parameter("植被地形宿主不存在")
+		}
+	case "object":
+		if surface.PlatformId != "" {
+			return bizerr.Parameter("植被物件宿主字段无效")
+		}
+		if _, exists := objectIds[surface.HostObjectId]; !exists {
+			return bizerr.Parameter("植被物件宿主不存在")
+		}
+		if _, isPlant := terrainPlantPresetIds[objectPresetById[surface.HostObjectId]]; isPlant {
+			return bizerr.Parameter("植物不能承载笔刷植被")
+		}
+	default:
+		return bizerr.Parameter("植被宿主类型无效")
+	}
+	return nil
+}
+
+// validateTerrainVegetationPatch 校验分类归属、实例类型和容量。
+func validateTerrainVegetationPatch(
+	patch terrainVegetationPatch,
+	usedIds map[string]struct{},
+	platformIds map[string]struct{},
+	objectIds map[string]struct{},
+	objectPresetById map[string]string,
+) error {
+	if patch.Kind != "vegetation-patch" {
+		return bizerr.Parameter("植被批次kind无效")
+	}
+	if err := validateTerrainRecordId(patch.Id, usedIds); err != nil {
+		return err
+	}
+	presets, categoryExists := terrainVegetationCategoryPresetIds[patch.CategoryId]
+	if !categoryExists {
+		return bizerr.Parameter("植被批次分类无效")
+	}
+	if _, exists := presets[patch.PresetId]; !exists {
+		return bizerr.Parameter("植被批次品种不属于分类")
+	}
+	if patch.Seed < 0 || patch.Seed > maxTerrainVariantSeed ||
+		len(patch.Instances) == 0 || len(patch.Instances) > maxVegetationInstancesPerPatch {
+		return bizerr.Parameter("植被批次种子或数量无效")
+	}
+	if err := validateTerrainVegetationSurface(patch.Surface, platformIds, objectIds, objectPresetById); err != nil {
+		return err
+	}
+	expectedKind := "mesh"
+	if patch.Surface.Kind == "terrain" {
+		expectedKind = "terrain"
+	}
+	for _, instance := range patch.Instances {
+		if instance.Kind != expectedKind ||
+			!validFinite(instance.TangentRotation, maxTransformComponent) ||
+			!validFinite(instance.NormalOffset, 1) ||
+			!validTerrainVector(instance.Scale, true, maxScaleComponent) ||
+			instance.VariantSeed < 0 || instance.VariantSeed > maxTerrainVariantSeed {
+			return bizerr.Parameter("植被实例公共字段无效")
+		}
+		if expectedKind == "terrain" {
+			if len(instance.LocalXZ) != 2 || !validFinite(instance.LocalXZ[0], maxTransformComponent) ||
+				!validFinite(instance.LocalXZ[1], maxTransformComponent) || instance.TriangleIndex != nil ||
+				len(instance.Barycentric) != 0 || len(instance.FallbackLocalPoint) != 0 {
+				return bizerr.Parameter("地形植被实例无效")
+			}
+		} else if len(instance.LocalXZ) != 0 || instance.TriangleIndex == nil ||
+			*instance.TriangleIndex < 0 || *instance.TriangleIndex > 100_000_000 ||
+			!validTerrainBarycentric(instance.Barycentric) ||
+			!validTerrainVector(instance.FallbackLocalPoint, false, maxTransformComponent) {
+			return bizerr.Parameter("网格植被实例无效")
+		}
+	}
+	return nil
+}
+
+// validateTerrainVegetationCoverageLayer 校验稀疏遮罩块和投影语义。
+func validateTerrainVegetationCoverageLayer(
+	layer terrainVegetationCoverageLayer,
+	usedIds map[string]struct{},
+	platformIds map[string]struct{},
+	objectIds map[string]struct{},
+	objectPresetById map[string]string,
+) error {
+	if layer.Kind != "vegetation-coverage" {
+		return bizerr.Parameter("植被覆盖层kind无效")
+	}
+	if err := validateTerrainRecordId(layer.Id, usedIds); err != nil {
+		return err
+	}
+	if layer.CategoryId != "moss-coverage" && layer.CategoryId != "lichen-coverage" &&
+		layer.CategoryId != "fallen-leaves-coverage" {
+		return bizerr.Parameter("植被覆盖分类无效")
+	}
+	if layer.Seed < 0 || layer.Seed > maxTerrainVariantSeed || len(layer.Tiles) == 0 {
+		return bizerr.Parameter("植被覆盖层种子或块数量无效")
+	}
+	if err := validateTerrainVegetationSurface(layer.Surface, platformIds, objectIds, objectPresetById); err != nil {
+		return err
+	}
+	expectedProjection := "local-triplanar"
+	if layer.Surface.Kind == "terrain" {
+		expectedProjection = "terrain-xz"
+	}
+	if layer.Projection != expectedProjection {
+		return bizerr.Parameter("植被覆盖投影无效")
+	}
+	usedTiles := make(map[string]struct{}, len(layer.Tiles))
+	for _, tile := range layer.Tiles {
+		if tile.Encoding != "predict-rle-base64" ||
+			(tile.Resolution != 128 && tile.Resolution != 256) ||
+			tile.TileX < -32768 || tile.TileX > 32768 || tile.TileY < -32768 || tile.TileY > 32768 ||
+			(tile.ProjectionAxis != "xz" && tile.ProjectionAxis != "xy" && tile.ProjectionAxis != "yz") ||
+			(layer.Surface.Kind == "terrain" && tile.ProjectionAxis != "xz") {
+			return bizerr.Parameter("植被覆盖块参数无效")
+		}
+		key := fmt.Sprintf("%s:%d:%d", tile.ProjectionAxis, tile.TileX, tile.TileY)
+		if _, exists := usedTiles[key]; exists {
+			return bizerr.Parameter("植被覆盖块坐标重复")
+		}
+		usedTiles[key] = struct{}{}
+		hasCoverage, err := validateTerrainVegetationCoverageData(tile.Data, tile.Resolution*tile.Resolution*4)
+		if err != nil {
+			return err
+		}
+		if !hasCoverage {
+			return bizerr.Parameter("植被覆盖块不能是空白块")
+		}
+	}
+	return nil
+}
+
+// validateTerrainVegetationCoverageData 严格解码固定长度字节 RLE，防止解码炸弹。
+func validateTerrainVegetationCoverageData(data string, expectedBytes int) (bool, error) {
+	if expectedBytes <= 0 || expectedBytes > 256*256*4 || len(data) == 0 {
+		return false, bizerr.Parameter("植被覆盖遮罩大小无效")
+	}
+	encoded, err := base64.StdEncoding.Strict().DecodeString(data)
+	if err != nil {
+		return false, bizerr.Parameter("植被覆盖遮罩Base64无效")
+	}
+	cursor := 0
+	decoded := 0
+	hasCoverage := false
+	for cursor < len(encoded) && decoded < expectedBytes {
+		run, nextCursor, ok := readTerrainVarUint(encoded, cursor)
+		if !ok || run == 0 || run > uint64(expectedBytes-decoded) {
+			return false, bizerr.Parameter("植被覆盖遮罩游程无效")
+		}
+		cursor = nextCursor
+		if cursor >= len(encoded) {
+			return false, bizerr.Parameter("植被覆盖遮罩像素缺失")
+		}
+		hasCoverage = hasCoverage || encoded[cursor] != 0
+		cursor++
+		decoded += int(run)
+	}
+	if cursor != len(encoded) || decoded != expectedBytes {
+		return false, bizerr.Parameter("植被覆盖遮罩采样数量无效")
+	}
+	return hasCoverage, nil
+}
+
+// validTerrainBarycentric 校验三个有限重心权重且和接近一。
+func validTerrainBarycentric(values []float64) bool {
+	if len(values) != 3 {
+		return false
+	}
+	sum := 0.0
+	for _, value := range values {
+		if !validFinite(value, 1.0001) || value < -0.0001 {
+			return false
+		}
+		sum += value
+	}
+	return math.Abs(sum-1) <= 0.001
+}
+
+// validFinite 校验一个受限有限数。
+func validFinite(value float64, maximum float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && math.Abs(value) <= maximum
 }
 
 // validateFence 校验可选围栏模型和纹理白名单。
@@ -745,10 +1324,12 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 	schemaVersion := document.SchemaVersion
 	if schemaVersion < currentSchemaVersion {
 		var legacy struct {
-			Platforms  json.RawMessage `json:"platforms"`
-			Objects    json.RawMessage `json:"objects"`
-			Assemblies json.RawMessage `json:"assemblies"`
-			Prefabs    json.RawMessage `json:"prefabs"`
+			Platforms                json.RawMessage `json:"platforms"`
+			Objects                  json.RawMessage `json:"objects"`
+			Assemblies               json.RawMessage `json:"assemblies"`
+			Prefabs                  json.RawMessage `json:"prefabs"`
+			VegetationPatches        json.RawMessage `json:"vegetationPatches"`
+			VegetationCoverageLayers json.RawMessage `json:"vegetationCoverageLayers"`
 		}
 		if json.Unmarshal(state, &legacy) == nil {
 			var platforms []map[string]interface{}
@@ -773,11 +1354,33 @@ func mapDocument(document terrain_domain.Document) *DocumentResponse {
 			if len(legacy.Prefabs) == 0 {
 				legacy.Prefabs = json.RawMessage(`[]`)
 			}
+			if schemaVersion < 7 {
+				var objects []map[string]interface{}
+				if json.Unmarshal(legacy.Objects, &objects) == nil {
+					for _, object := range objects {
+						attachment, ok := object["surfaceAttachment"].(map[string]interface{})
+						if ok {
+							if _, hasKind := attachment["kind"]; !hasKind {
+								attachment["kind"] = "simple"
+							}
+						}
+					}
+					legacy.Objects, _ = json.Marshal(objects)
+				}
+			}
+			if len(legacy.VegetationPatches) == 0 {
+				legacy.VegetationPatches = json.RawMessage(`[]`)
+			}
+			if len(legacy.VegetationCoverageLayers) == 0 {
+				legacy.VegetationCoverageLayers = json.RawMessage(`[]`)
+			}
 			migrated, err := json.Marshal(map[string]json.RawMessage{
-				"platforms":  legacy.Platforms,
-				"objects":    legacy.Objects,
-				"assemblies": legacy.Assemblies,
-				"prefabs":    legacy.Prefabs,
+				"platforms":                legacy.Platforms,
+				"objects":                  legacy.Objects,
+				"assemblies":               legacy.Assemblies,
+				"prefabs":                  legacy.Prefabs,
+				"vegetationPatches":        legacy.VegetationPatches,
+				"vegetationCoverageLayers": legacy.VegetationCoverageLayers,
 			})
 			if err == nil {
 				state = migrated
