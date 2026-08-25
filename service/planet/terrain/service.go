@@ -28,7 +28,7 @@ import (
 
 const (
 	// 当前支持的地形状态结构版本。
-	currentSchemaVersion = 7
+	currentSchemaVersion = 8
 	// 单个地形状态允许的最大字节数。
 	maxStateBytes = 2 * 1024 * 1024
 	// 单个星球允许的平台记录上限。
@@ -417,7 +417,7 @@ func SavePublished(
 		}
 		// 权限以数据库中的 sys_user.planet_id 为准，不能只信任 JWT 快照。
 		if databaseUser.PlanetId != planetId {
-			return bizerr.Forbidden("只有星球主人可以发布地形")
+			return bizerr.Forbidden("只有星球主人可以保存地形")
 		}
 
 		var current terrain_domain.Document

@@ -29,6 +29,13 @@ func TestValidateState(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts relaxed maximum grade", func(t *testing.T) {
+		steep := strings.Replace(string(valid), `"maxGrade":0.12`, `"maxGrade":100`, 1)
+		if _, err := validateState(json.RawMessage(steep)); err != nil {
+			t.Fatalf("validate relaxed maximum grade: %v", err)
+		}
+	})
+
 	t.Run("keeps corridor and junction relations", func(t *testing.T) {
 		raw := json.RawMessage(`{
 			"nodes":[

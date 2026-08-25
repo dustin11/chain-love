@@ -36,6 +36,8 @@ const (
 	maxRoadIdLength = 128
 	// 坐标和切线分量的绝对值上限。
 	maxRoadComponent = 1_000_000
+	// 与前端编辑器一致的道路最大纵向坡度比例。
+	maxRoadGrade = 100
 )
 
 var emptyState = json.RawMessage(`{"nodes":[],"edges":[]}`)
@@ -263,7 +265,7 @@ func validateOwner(tx *gorm.DB, planetId int, userId uint64) error {
 		return err
 	}
 	if databaseUser.PlanetId != planetId {
-		return bizerr.Forbidden("只有星球主人可以发布道路")
+		return bizerr.Forbidden("只有星球主人可以保存道路")
 	}
 	return nil
 }
@@ -375,7 +377,7 @@ func validateRoadState(state *roadState) error {
 			edge.SurfaceMode != "terrain-blend" && edge.SurfaceMode != "bridge" {
 			return bizerr.Parameter("道路贴合方式无效")
 		}
-		if !finiteInRange(edge.ShoulderWidth, 0, 100) || !finiteInRange(edge.MaxGrade, 0, 10) {
+		if !finiteInRange(edge.ShoulderWidth, 0, 100) || !finiteInRange(edge.MaxGrade, 0, maxRoadGrade) {
 			return bizerr.Parameter("道路坡度或路肩无效")
 		}
 		if !finiteInRange(edge.ElevationOffset, -1000, 1000) {

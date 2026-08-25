@@ -420,6 +420,22 @@ func TestMapLegacyDocument(t *testing.T) {
 	}
 }
 
+// schema 7 的落叶数据在服务端无需改写字段，只升级信封版本供客户端执行语义迁移。
+func TestMapLeafDistributionDocument(t *testing.T) {
+	response := mapDocument(terrain_domain.Document{
+		SchemaVersion: 7,
+		Revision:      10,
+		StateJson:     `{"platforms":[],"objects":[],"assemblies":[],"prefabs":[],"vegetationPatches":[],"vegetationCoverageLayers":[]}`,
+		ContentHash:   strings.Repeat("0", 64),
+	})
+	if response.SchemaVersion != currentSchemaVersion {
+		t.Fatalf("expected schema %d, got %d", currentSchemaVersion, response.SchemaVersion)
+	}
+	if response.ContentHash == strings.Repeat("0", 64) {
+		t.Fatal("expected upgraded state hash")
+	}
+}
+
 // 确保阶段三初版自动高度场读取时被整体清理。
 func TestMapAutomaticHeightFieldDocument(t *testing.T) {
 	response := mapDocument(terrain_domain.Document{
