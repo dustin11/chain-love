@@ -163,8 +163,8 @@ func TestValidateState(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects textures on non-shape presets", func(t *testing.T) {
-		_, err := validateState(json.RawMessage(`{
+	t.Run("accepts textures on independent object presets", func(t *testing.T) {
+		state, err := validateState(json.RawMessage(`{
 			"platforms":[],
 			"objects":[{
 				"id":"o1",
@@ -179,29 +179,24 @@ func TestValidateState(t *testing.T) {
 				}
 			}]
 		}`))
-		if !bizerr.IsKind(err, bizerr.KindParameter) {
-			t.Fatalf("expected parameter error, got %v", err)
+		if err != nil {
+			t.Fatalf("validate independent object texture: %v", err)
+		}
+		if !strings.Contains(string(state), `"materialId":"marble"`) {
+			t.Fatalf("expected object texture to persist, got %s", state)
 		}
 	})
 
-	t.Run("accepts detailed presets and materials only on basic shapes", func(t *testing.T) {
+	t.Run("accepts textures on basic shapes and detailed building parts", func(t *testing.T) {
 		_, err := validateState(json.RawMessage(`{
 			"platforms":[],
 			"objects":[
 				{"id":"shape","kind":"object","presetId":"frustum","materialId":"wood","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
-				{"id":"detail","kind":"object","presetId":"pavilion-railing","variantSeed":2,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
+				{"id":"detail","kind":"object","presetId":"pavilion-railing","materialId":"steel","variantSeed":2,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
 			]
 		}`))
 		if err != nil {
 			t.Fatalf("validate detailed presets: %v", err)
-		}
-
-		_, err = validateState(json.RawMessage(`{
-			"platforms":[],
-			"objects":[{"id":"detail","kind":"object","presetId":"pavilion-railing","materialId":"steel","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]
-		}`))
-		if !bizerr.IsKind(err, bizerr.KindParameter) {
-			t.Fatalf("expected fixed preset material rejection, got %v", err)
 		}
 	})
 
@@ -307,13 +302,27 @@ func TestValidateState(t *testing.T) {
 				{"id":"b","kind":"object","presetId":"cylinder","variantSeed":2,"transform":{"position":[1,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
 			],
 			"assemblies":[{"id":"assembly-1","kind":"assembly","name":"凉亭","transform":{"position":[0.5,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"memberIds":["a","b"]}],
-			"prefabs":[{"id":"prefab-1","kind":"prefab","name":"凉亭","parts":[{"presetId":"box","materialId":"marble","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]}]
+			"prefabs":[{"id":"prefab-1","kind":"prefab","name":"凉亭","parts":[{"presetId":"pavilion-column","materialId":"jade","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}]}]
 		}`))
 		if err != nil {
 			t.Fatalf("validate assembly state: %v", err)
 		}
 		if !strings.Contains(string(state), `"assemblies":[`) || !strings.Contains(string(state), `"prefabs":[`) {
 			t.Fatalf("expected v5 collections, got %s", state)
+		}
+	})
+
+	t.Run("rejects material fields on assemblies", func(t *testing.T) {
+		_, err := validateState(json.RawMessage(`{
+			"platforms":[],
+			"objects":[
+				{"id":"a","kind":"object","presetId":"box","variantSeed":1,"transform":{"position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1]}},
+				{"id":"b","kind":"object","presetId":"arch","variantSeed":2,"transform":{"position":[1,0,0],"rotation":[0,0,0],"scale":[1,1,1]}}
+			],
+			"assemblies":[{"id":"assembly-1","kind":"assembly","name":"组合","materialId":"jade","transform":{"position":[0.5,0,0],"rotation":[0,0,0],"scale":[1,1,1]},"memberIds":["a","b"]}]
+		}`))
+		if !bizerr.IsKind(err, bizerr.KindParameter) {
+			t.Fatalf("expected assembly material rejection, got %v", err)
 		}
 	})
 

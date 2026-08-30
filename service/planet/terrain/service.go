@@ -128,19 +128,6 @@ var terrainVegetationCategoryPresetIds = map[string]map[string]struct{}{
 	"twigs":                {"twig-clump": {}},
 }
 
-// 支持单独设置纹理的基础形状预设。
-var terrainTextureableObjectPresetIds = map[string]struct{}{
-	"box":             {},
-	"sphere":          {},
-	"cylinder":        {},
-	"cone":            {},
-	"wedge":           {},
-	"frustum":         {},
-	"octagonal-prism": {},
-	"torus":           {},
-	"pyramid":         {},
-}
-
 // 允许发布的围栏模型。
 var fenceModelIds = map[string]struct{}{
 	"brick-curb":        {},
@@ -594,9 +581,6 @@ func validateState(state json.RawMessage) (json.RawMessage, error) {
 			return nil, bizerr.Parameter("地形物件预设无效")
 		}
 		if object.MaterialId != "" {
-			if _, exists := terrainTextureableObjectPresetIds[object.PresetId]; !exists {
-				return nil, bizerr.Parameter("只有基本形状可以设置纹理")
-			}
 			if !planet_surface.IsMaterialID(object.MaterialId) {
 				return nil, bizerr.Parameter("地形物件纹理无效")
 			}
@@ -747,9 +731,6 @@ func validateTerrainPrefabPart(part terrainPrefabPart, partCount int, parts []te
 		return bizerr.Parameter("地形预制体部件预设无效")
 	}
 	if part.MaterialId != "" {
-		if _, exists := terrainTextureableObjectPresetIds[part.PresetId]; !exists {
-			return bizerr.Parameter("地形预制体部件不能设置纹理")
-		}
 		if !planet_surface.IsMaterialID(part.MaterialId) {
 			return bizerr.Parameter("地形预制体部件纹理无效")
 		}
